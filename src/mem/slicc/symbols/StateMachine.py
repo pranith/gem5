@@ -829,7 +829,7 @@ $c_ident::init()
         code()
         for port in self.in_ports:
             # Set the queue consumers
-            code("${{port.code}}.setConsumer(this);")
+            code("${{port.code}}.setConsumer(this, true);")
 
         # Initialize the transition profiling
         code()
