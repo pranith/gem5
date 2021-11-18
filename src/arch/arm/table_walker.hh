@@ -1157,6 +1157,12 @@ class TableWalker : public ClockedObject
 
     bool haveLargeAsid64() const { return _haveLargeAsid64; }
     uint8_t physAddrRange() const { return _physAddrRange; }
+    bool
+    stage2() const
+    {
+        return isStage2;
+    }
+
     /** Checks if all state is cleared and if so, completes drain */
     void completeDrain();
     DrainState drain() override;
