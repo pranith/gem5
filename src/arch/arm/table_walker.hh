@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2016, 2019, 2021-2024 Arm Limited
+ * Copyright (c) 2010-2016, 2019, 2021-2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -1124,7 +1124,10 @@ class TableWalker : public ClockedObject
     struct TableWalkerStats : public statistics::Group
     {
         TableWalkerStats(statistics::Group *parent);
-        statistics::Scalar walks;
+        statistics::Scalar instructionWalksS1;
+        statistics::Scalar instructionWalksS2;
+        statistics::Scalar dataWalksS1;
+        statistics::Scalar dataWalksS2;
         statistics::Scalar walksShortDescriptor;
         statistics::Scalar walksLongDescriptor;
         statistics::Vector walksShortTerminatedAtLevel;
@@ -1137,6 +1140,8 @@ class TableWalker : public ClockedObject
         statistics::Histogram pendingWalks;
         statistics::Vector pageSizes;
         statistics::Vector2d requestOrigin;
+
+        statistics::Formula walks;
     } stats;
 
     mutable unsigned pendingReqs;
