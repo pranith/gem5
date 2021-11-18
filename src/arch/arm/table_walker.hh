@@ -1106,9 +1106,6 @@ class TableWalker : public ClockedObject
     /** TLB that is initiating these table walks */
     TLB *tlb;
 
-    /** Cached copy of the sctlr as it existed when translation began */
-    SCTLR sctlr;
-
     WalkerState *currState;
 
     /** If a timing translation is currently in progress */

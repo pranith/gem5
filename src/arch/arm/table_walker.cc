@@ -83,8 +83,6 @@ TableWalker::TableWalker(const Params &p)
       doProcessEvent([this]{ processWalkWrapper(); }, name()),
       test(nullptr)
 {
-    sctlr = 0;
-
     // Cache system-level properties
     if (FullSystem) {
         ArmSystem *arm_sys = dynamic_cast<ArmSystem *>(p.sys);
@@ -424,8 +422,6 @@ TableWalker::walk(const RequestPtr &_req, ThreadContext *_tc, uint16_t _asid,
         currState->hcr   = currState->tc->readMiscReg(MISCREG_HCR);
         currState->vtcr  = currState->tc->readMiscReg(MISCREG_VTCR);
     }
-    sctlr = currState->sctlr;
-
     currState->isFetch = (currState->mode == BaseMMU::Execute);
     currState->isWrite = (currState->mode == BaseMMU::Write);
 
