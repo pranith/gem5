@@ -1,6 +1,4 @@
-# -*- mode:python -*-
-
-# Copyright (c) 2023, 2026 Arm Limited
+# Copyright (c) 2026 Arm Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -35,19 +33,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Import('*')
+from m5.SimObject import SimObject
 
-if not env['CONF']['RUBY_PROTOCOL_CHI']:
-    Return()
 
-SimObject('CHIGeneric.py', sim_objects=['CHIGenericController'])
-SimObject(
-    'CBusy.py',
-    sim_objects=['BaseCBusy', 'CBusy', 'SnfCBusy', 'CBusyTracker']
-)
-
-DebugFlag('RubyCHIGeneric')
-DebugFlag('RubyCHIGenericVerbose')
-
-Source('CHIGenericController.cc')
-Source('CBusy.cc')
+class BackpressureTracker(SimObject):
+    type = "BackpressureTracker"
+    cxx_header = "mem/ruby/structures/BackpressureTracker.hh"
+    cxx_class = "gem5::ruby::BackpressureTracker"
+    abstract = True

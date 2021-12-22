@@ -64,6 +64,8 @@ python_class_map = {
     "DMASequencer": "DMASequencer",
     "RubyPrefetcher": "RubyPrefetcher",
     "prefetch::Base": "BasePrefetcher",
+    "BackpressureGen": "BackpressureGen",
+    "BackpressureTracker": "BackpressureTracker",
     "Cycles": "Cycles",
     "Addr": "Addr",
 }
