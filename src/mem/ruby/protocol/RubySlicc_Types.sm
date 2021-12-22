@@ -131,19 +131,24 @@ structure (Sequencer, external = "yes") {
   void readCallback(Addr, DataBlock, bool, MachineType);
   void readCallback(Addr, DataBlock, bool, MachineType,
                     Cycles, Cycles, Cycles);
+  void readCallbackCBusy(Addr, DataBlock, bool, int);
 
   void writeCallback(Addr, DataBlock);
   void writeCallback(Addr, DataBlock, bool);
   void writeCallback(Addr, DataBlock, bool, MachineType);
   void writeCallback(Addr, DataBlock, bool, MachineType,
                      Cycles, Cycles, Cycles);
+  void writeCallbackCBusy(Addr, DataBlock, bool, int);
+
   void writeUniqueCallback(Addr, DataBlock);
+  void writeUniqueCallbackCBusy(Addr, DataBlock, int);
 
   void atomicCallback(Addr, DataBlock);
   void atomicCallback(Addr, DataBlock, bool);
   void atomicCallback(Addr, DataBlock, bool, MachineType);
   void atomicCallback(Addr, DataBlock, bool, MachineType,
                       Cycles, Cycles, Cycles);
+  void atomicCallbackCBusy(Addr, DataBlock, bool, int);
 
 
   void unaddressedCallback(Addr, RubyRequestType);
