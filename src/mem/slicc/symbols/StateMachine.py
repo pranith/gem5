@@ -277,7 +277,7 @@ from m5.objects.Controller import RubyController
 class $py_ident(RubyController):
     type = '$py_ident'
     cxx_header = 'mem/ruby/protocol/${c_ident}.hh'
-    cxx_class = 'gem5::ruby::$py_ident'
+    cxx_class = 'gem5::ruby::$protocol::$py_ident'
 """
         )
         code.indent()
@@ -343,6 +343,9 @@ namespace gem5
 {
 
 namespace ruby
+{
+
+namespace ${protocol}
 {
 
 extern std::stringstream ${ident}_transitionComment;
@@ -530,6 +533,7 @@ void unset_tbe(${{self.TBEType.c_ident}}*& m_tbe_ptr);
             """
 };
 
+} // namespace ${protocol}
 } // namespace ruby
 } // namespace gem5
 
@@ -621,6 +625,9 @@ namespace gem5
 {
 
 namespace ruby
+{
+
+namespace ${protocol}
 {
 
 // for adding information to the protocol debug trace
@@ -1400,6 +1407,7 @@ $c_ident::functionalReadBuffers(PacketPtr& pkt, WriteMask &mask)
     return read;
 }
 
+} // namespace ${protocol}
 } // namespace ruby
 } // namespace gem5
 """
@@ -1466,6 +1474,9 @@ namespace gem5
 {
 
 namespace ruby
+{
+
+namespace ${protocol}
 {
 
 void
@@ -1551,6 +1562,7 @@ ${ident}_Controller::wakeup()
     }
 }
 
+} // namespace ${protocol}
 } // namespace ruby
 } // namespace gem5
 """
@@ -1589,6 +1601,9 @@ namespace gem5
 {
 
 namespace ruby
+{
+
+namespace ${protocol}
 {
 
 TransitionResult
@@ -1864,6 +1879,7 @@ if (!checkResourceAvailable({}_RequestType_{}, addr)) {{
     return TransitionResult_Valid;
 }
 
+} // namespace ${protocol}
 } // namespace ruby
 } // namespace gem5
 """
