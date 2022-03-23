@@ -7,6 +7,17 @@
   * It returns if the stride does not match, as opposed to issuing prefetching using the new stride --- the previous, incorrect behavior.
   * Returns if the new stride is 0, indicating multiple reads from the same cache line.
 
+### Multiple Ruby Protocols in a Single Build
+
+There are many developer facing / API changes to enable Ruby multiple protocols in a single build.
+The most notable changes are:
+
+* Removes the RubySlicc_interfaces.slicc file from the SLICC includes of
+every protocol.
+  * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
+
+
+
 # Version 24.0
 
 gem5 Version 24.0 is the first major release of 2024.
