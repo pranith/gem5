@@ -259,6 +259,16 @@ namespace ruby
 
 class RubySystem;
 
+""")
+        # For protocol-specific types, wrap in the protocol namespace
+        if not self.shared:
+            code("""
+namespace ${{protocol}}
+{
+""")
+
+        code("""
+
 $klass ${{self.c_ident}}$parent
 {
   public:
@@ -539,6 +549,14 @@ operator<<(::std::ostream& out, const ${{self.c_ident}}& obj)
     return out;
 }
 
+""")
+        # For protocol-specific types, close the protocol namespace
+        if not self.shared:
+            code("""
+} // namespace ${{protocol}}
+""")
+
+        code("""
 } // namespace ruby
 } // namespace gem5
 
@@ -564,6 +582,16 @@ namespace gem5
 
 namespace ruby
 {
+""")
+        # For protocol-specific types, wrap in the protocol namespace
+        if not self.shared:
+            code("""
+
+namespace ${{protocol}}
+{
+""")
+
+        code("""
 
 /** \\brief Print the state of this object */
 void
@@ -596,6 +624,14 @@ out << "${{dm.ident}} = " << printAddress(m_${{dm.ident}}, block_size_bits) << "
         # print the code for the methods in the type
         for item in self.methods:
             code(self.methods[item].generateCode())
+
+        # For protocol-specific types, close the protocol namespace
+        if not self.shared:
+            code(
+                """
+
+} // namespace ${{protocol}}
+""")
 
         code(
             """
@@ -635,8 +671,14 @@ namespace gem5
 namespace ruby
 {
 
-"""
-        )
+""")
+        # For protocol-specific types, wrap in the protocol namespace
+        if not self.shared:
+            code("""
+
+namespace ${{protocol}}
+{
+""")
 
         if self.isMachineType:
             code("struct MachineID;")
@@ -714,6 +756,15 @@ AccessPermission ${{self.c_ident}}_to_permission(const ${{self.c_ident}}& obj);
 ::std::ostream&
 operator<<(::std::ostream& out, const ${{self.c_ident}}& obj);
 
+""")
+
+        # For protocol-specific types, close the protocol namespace
+        if not self.shared:
+            code("""
+} // namespace ${{protocol}}
+""")
+
+        code("""
 } // namespace ruby
 } // namespace gem5
 """
@@ -770,6 +821,16 @@ namespace gem5
 
 namespace ruby
 {
+""")
+            # For protocol-specific types, wrap in the protocol namespace
+            if not self.shared:
+                code("""
+
+namespace ${{protocol}}
+{
+""")
+
+            code("""
 
 // Code to convert the current state to an access permission
 AccessPermission ${{self.c_ident}}_to_permission(const ${{self.c_ident}}& obj)
@@ -791,6 +852,16 @@ AccessPermission ${{self.c_ident}}_to_permission(const ${{self.c_ident}}& obj)
     // Appease the compiler since this function has a return value
     return AccessPermission_Invalid;
 }
+
+""")
+
+            # For protocol-specific types, close the protocol namespace
+            if not self.shared:
+                code("""
+} // namespace ${{protocol}}
+""")
+
+            code("""
 
 } // namespace ruby
 } // namespace gem5
@@ -814,6 +885,15 @@ namespace gem5
 
 namespace ruby
 {
+""")
+        # For protocol-specific types, wrap in the protocol namespace
+        if not self.shared:
+            code("""
+
+namespace ${{protocol}}
+{
+""")
+        code("""
 
 // Code for output operator
 ::std::ostream&
@@ -1027,8 +1107,14 @@ get${{enum.ident}}MachineID(NodeID RubyNode)
       MachineID mach = {MachineType_${{enum.ident}}, RubyNode};
       return mach;
 }
-"""
-                )
+""")
+
+        # For protocol-specific types, close the protocol namespace
+        if not self.shared:
+            code("""
+
+} // namespace ${{protocol}}
+""")
 
         code(
             """

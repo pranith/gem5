@@ -50,6 +50,9 @@ namespace gem5
 namespace ruby
 {
 
+namespace CHI
+{
+
 // Custom class only used for the CHI protocol Misc Node
 // Includes the definition of the MiscNode_TBE, because it
 // includes functions that rely on fields in the structure
@@ -62,6 +65,8 @@ class MN_TBETable : public TBETable<MiscNode_TBE>
 
     MiscNode_TBE* chooseNewDistributor();
 };
+
+} // namespace CHI
 
 } // namespace ruby
 
