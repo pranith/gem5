@@ -7,6 +7,15 @@
   * It returns if the stride does not match, as opposed to issuing prefetching using the new stride --- the previous, incorrect behavior.
   * Returns if the new stride is 0, indicating multiple reads from the same cache line.
 
+### Multiple Ruby Protocols in a Single Build
+
+There are many developer facing / API changes to enable Ruby multiple protocols in a single build.
+The most notable changes are:
+
+* Removes the RubySlicc_interfaces.slicc file from the SLICC includes of
+every protocol.
+  * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
+
 * The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
   * They now reset to zero when m5.stats.reset() is called.
   * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.
