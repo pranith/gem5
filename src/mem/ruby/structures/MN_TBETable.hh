@@ -41,7 +41,7 @@
 #include <algorithm>
 #include <vector>
 
-#include "mem/ruby/protocol/MiscNode_TBE.hh"
+#include "mem/ruby/protocol/CHI/MiscNode_TBE.hh"
 #include "mem/ruby/structures/TBETable.hh"
 
 namespace gem5
