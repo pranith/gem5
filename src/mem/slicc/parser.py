@@ -109,7 +109,7 @@ class SLICC(Grammar):
         self.symtab.writeHTMLFiles(html_path)
 
     def files(self):
-        f = {"Types.hh"}
+        f = {os.path.join(self.protocol, "Types.hh")}
 
         f |= self.decl_list.files()
 
