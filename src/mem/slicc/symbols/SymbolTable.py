@@ -157,6 +157,10 @@ class SymbolTable:
     def writeHTMLFiles(self, path):
         makeDir(path)
 
+        # Append the protocol to the path and make that directory
+        path = os.path.join(path, self.slicc.protocol)
+        makeDir(path)
+
         machines = list(self.getAllType(StateMachine))
         if len(machines) > 1:
             name = f"{machines[0].ident}_table.html"
