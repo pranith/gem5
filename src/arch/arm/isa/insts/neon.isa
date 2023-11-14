@@ -1,6 +1,6 @@
 // -*- mode:c++ -*-
 
-// Copyright (c) 2010-2011, 2015, 2019, 2024 ARM Limited
+// Copyright (c) 2010-2011, 2015, 2019, 2024-2025 Arm Limited
 // All rights reserved
 //
 // The license below extends only to copyright in the software and shall
@@ -348,14 +348,20 @@ output header {{
 
     template <template <typename T> class Base>
     StaticInstPtr
-    decodeNeonUThreeImmScFpReg(bool size, ExtMachInst machInst,
+    decodeNeonUThreeImmScFpReg(uint8_t size, ExtMachInst machInst,
                                RegIndex dest, RegIndex op1,
                                RegIndex op2, uint64_t imm)
     {
-        if (size)
+        switch (size) {
+          case 0b11:
             return new Base<uint64_t>(machInst, dest, op1, op2, imm);
-        else
+          case 0b10:
             return new Base<uint32_t>(machInst, dest, op1, op2, imm);
+          case 0b00:
+            return new Base<uint16_t>(machInst, dest, op1, op2, imm);
+          default:
+            return new Unknown(machInst);
+        }
     }
 
     template <template <typename T> class BaseD,
@@ -422,15 +428,25 @@ output header {{
                              RegIndex op2, uint64_t imm)
     {
         if (q) {
-            if (size)
+            switch (size) {
+              case 0b11:
                 return new BaseQ<uint64_t>(machInst, dest, op1, op2, imm);
-            else
+              case 0b10:
                 return new BaseQ<uint32_t>(machInst, dest, op1, op2, imm);
-        } else {
-            if (size)
+              case 0b00:
+                return new BaseQ<uint16_t>(machInst, dest, op1, op2, imm);
+              default:
                 return new Unknown(machInst);
-            else
+            }
+        } else {
+            switch (size) {
+              case 0b10:
                 return new BaseD<uint32_t>(machInst, dest, op1, op2, imm);
+              case 0b00:
+                return new BaseD<uint16_t>(machInst, dest, op1, op2, imm);
+              default:
+                return new Unknown(machInst);
+            }
         }
     }
 
@@ -682,10 +698,16 @@ output header {{
     decodeNeonUTwoShiftUFpReg(unsigned size, ExtMachInst machInst,
                               RegIndex dest, RegIndex op1, uint64_t imm)
     {
-        if (size)
+        switch (size) {
+          case 0b11:
             return new Base<uint64_t>(machInst, dest, op1, imm);
-        else
+          case 0b10:
             return new Base<uint32_t>(machInst, dest, op1, imm);
+          case 0b01:
+            return new Base<uint16_t>(machInst, dest, op1, imm);
+          default:
+            return new Unknown(machInst);
+        }
     }
 
     template <template <typename T> class BaseD,
@@ -695,15 +717,25 @@ output header {{
                              RegIndex dest, RegIndex op1, uint64_t imm)
     {
         if (q) {
-            if (size)
+            switch (size) {
+              case 0b11:
                 return new BaseQ<uint64_t>(machInst, dest, op1, imm);
-            else
+              case 0b10:
                 return new BaseQ<uint32_t>(machInst, dest, op1, imm);
-        } else {
-            if (size)
+              case 0b01:
+                return new BaseQ<uint16_t>(machInst, dest, op1, imm);
+              default:
                 return new Unknown(machInst);
-            else
+            }
+        } else {
+            switch (size) {
+              case 0b10:
                 return new BaseD<uint32_t>(machInst, dest, op1, imm);
+              case 0b01:
+                return new BaseD<uint16_t>(machInst, dest, op1, imm);
+              default:
+                return new Unknown(machInst);
+            }
         }
     }
 
@@ -900,16 +932,25 @@ output header {{
         }
     }
 
-    template <template <typename T> class BaseD,
+    template <template <typename T> class BaseS,
+              template <typename T> class BaseD,
               template <typename T> class BaseQ>
     StaticInstPtr
-    decodeNeonUTwoMiscPwiseScFpReg(unsigned size, ExtMachInst machInst,
+    decodeNeonUTwoMiscPwiseScFpReg(unsigned u, unsigned size,
+                                   ExtMachInst machInst,
                                    RegIndex dest, RegIndex op1)
     {
-        if (size)
-            return new BaseQ<uint64_t>(machInst, dest, op1);
-        else
-            return new BaseD<uint32_t>(machInst, dest, op1);
+        if (u) {
+            if (size)
+                return new BaseQ<uint64_t>(machInst, dest, op1);
+            else
+                return new BaseD<uint32_t>(machInst, dest, op1);
+        } else {
+            if (size)
+                return new Unknown64(machInst);
+            else
+                return new BaseS<uint16_t>(machInst, dest, op1);
+        }
     }
 
     template <template <typename T> class Base>
