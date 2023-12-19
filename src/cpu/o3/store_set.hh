@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/cache_lib.hh"
 #include "base/types.hh"
 #include "cpu/inst_seq.hh"
 
@@ -62,20 +63,33 @@ struct ltseqnum
 class StoreSet
 {
   public:
-    typedef unsigned SSID;
+    typedef Addr SSID;
+    typedef replacement_policy::Base BaseReplacementPolicy;
 
   public:
+    class SSITEntry : public TaggedEntry
+    {
+        SSID _ssid;
+      public:
+        SSITEntry() : TaggedEntry(), _ssid(MaxAddr) {}
+
+        void setSSID(SSID id) { _ssid = id; }
+        SSID getSSID(void) { return _ssid; }
+    };
+
     /** Default constructor.  init() must be called prior to use. */
-    StoreSet() { };
+    StoreSet() {};
 
     /** Creates store set predictor with given table sizes. */
-    StoreSet(uint64_t clear_period, int SSIT_size, int LFST_size);
+    StoreSet(uint64_t clear_period, int SSIT_size, int SSIT_assoc,
+             BaseReplacementPolicy *replPolicy, int LFST_size);
 
     /** Default destructor. */
     ~StoreSet();
 
     /** Initializes the store set predictor with the given table sizes. */
-    void init(uint64_t clear_period, int SSIT_size, int LFST_size);
+    void init(uint64_t clear_period, int SSIT_size, int SSIT_assoc,
+              BaseReplacementPolicy *_replPolicy, int LFST_size);
 
     /** Records a memory ordering violation between the younger load
      * and the older store. */
@@ -124,10 +138,11 @@ class StoreSet
     { return ((PC ^ (PC >> 10)) % LFSTSize); }
 
     /** The Store Set ID Table. */
-    std::vector<SSID> SSIT;
+    //std::vector<SSID> SSIT;
+    CacheLibrary<SSITEntry> SSIT_new;
 
     /** Bit vector to tell if the SSIT has a valid entry. */
-    std::vector<bool> validSSIT;
+    //std::vector<bool> validSSIT;
 
     /** Last Fetched Store Table. */
     std::vector<InstSeqNum> LFST;
@@ -149,6 +164,9 @@ class StoreSet
 
     /** Store Set ID Table size, in entries. */
     int SSITSize;
+    int SSITAssoc;
+
+    BaseReplacementPolicy *SSITReplPolicy;
 
     /** Last Fetched Store Table size, in entries. */
     int LFSTSize;
