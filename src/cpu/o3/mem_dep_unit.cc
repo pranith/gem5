@@ -56,8 +56,8 @@ MemDepUnit::MemDepUnit() : iqPtr(NULL), stats(nullptr) {}
 
 MemDepUnit::MemDepUnit(const BaseO3CPUParams &params)
     : _name(params.name + ".memdepunit"),
-      depPred(params.store_set_clear_period, params.SSITSize,
-              params.LFSTSize),
+      depPred(params.store_set_clear_period, params.SSITSize, params.SSITAssoc,
+              params.SSITReplPolicy, params.LFSTSize),
       iqPtr(NULL),
       stats(nullptr)
 {
@@ -97,7 +97,7 @@ MemDepUnit::init(const BaseO3CPUParams &params, ThreadID tid, CPU *cpu)
     id = tid;
 
     depPred.init(params.store_set_clear_period, params.SSITSize,
-            params.LFSTSize);
+                 params.SSITAssoc, params.SSITReplPolicy, params.LFSTSize);
 
     std::string stats_group_name = csprintf("MemDepUnit__%i", tid);
     cpu->addStatGroup(stats_group_name.c_str(), &stats);
