@@ -10,6 +10,7 @@ cscope.out
 *~
 .*.swp
 .*.swo
+.dir-locals.el
 m5out
 /src/doxygen/html
 /docs/_build
