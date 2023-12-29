@@ -41,6 +41,7 @@
 #ifndef __CPU_PRED_SIMPLE_BTB_HH__
 #define __CPU_PRED_SIMPLE_BTB_HH__
 
+#include "base/cache_lib.hh"
 #include "base/logging.hh"
 #include "base/types.hh"
 #include "cpu/pred/btb.hh"
@@ -51,6 +52,133 @@ namespace gem5
 
 namespace branch_prediction
 {
+
+class BTBEntry : public TaggedEntry
+{
+  public:
+    /** The entry's tag. */
+    Addr tag = 0;
+
+    /** The entry's target. */
+    std::unique_ptr<PCStateBase> target;
+
+    /** The entry's thread id. */
+    ThreadID tid;
+
+    /** Whether or not the entry is valid. */
+    bool valid = false;
+
+    /** Pointer to the static branch instruction at this address */
+    StaticInstPtr inst = nullptr;
+
+
+    void update(ThreadID _tid,
+                const PCStateBase &_target,
+                StaticInstPtr _inst)
+    {
+        tid = _tid;
+        set(target, _target);
+        inst = _inst;
+        valid = true;
+    }
+
+    bool matchTag(const Addr _tag, bool is_secure = false) const override
+    {
+        panic("Need a tid!");
+        return false;
+    }
+
+    bool matchTag(const Addr _tag, ThreadID _tid)
+    {
+        return (isValid() && (tag == _tag) && (tid == _tid));
+    }
+
+    void setTag(Addr _tag) override { tag = _tag; }
+};
+
+class BTBCache : public CacheLibrary<BTBEntry>
+{
+  private:
+    unsigned log2NumThreads;
+
+
+    /** Number of bits to shift when calculating set index */
+    size_t setShift;
+
+    /** Number of bits to shift to get the tag */
+    size_t tagShift;
+
+    /** Mask for the set index */
+    size_t setMask;
+
+  public:
+    BTBCache(const char *_my_name, const size_t num_entries,
+             const size_t associativity, const size_t _entry_size,
+             const size_t num_tag_bits,
+             BaseReplacementPolicy *_replPolicy,
+             BaseIndexingPolicy *_indexingPolicy)
+        : CacheLibrary(_my_name, num_entries, associativity, _entry_size,
+                       num_tag_bits, _replPolicy, _indexingPolicy)
+    {
+        size_t num_sets = num_entries / associativity;
+        setShift = log2i(_entry_size);
+        tagShift = setShift + log2i(num_sets);
+        setMask  = num_sets - 1;
+    }
+
+    size_t getIndex(const Addr instPC, ThreadID tid)
+    {
+        // Need to shift PC over by the word offset.
+        return ((instPC >> setShift)
+                ^ (tid << (tagShift - setShift - log2NumThreads)))
+            & setMask;
+    }
+
+    void setNumThreads(unsigned num_threads)
+    {
+        log2NumThreads = log2i(num_threads);
+    }
+
+    BTBEntry *findEntry(Addr instPC) override
+    {
+        panic("Need a tid!");
+
+        return nullptr;
+    }
+
+    BTBEntry *findEntry(Addr instPC, ThreadID tid)
+    {
+        auto tag = getTag(instPC);
+
+        auto entries = indexingPolicy->getPossibleEntries(instPC);
+
+        for (auto it = entries.begin(); it != entries.end(); it++) {
+            BTBEntry *entry = dynamic_cast<BTBEntry*>(*it);
+            if (entry->matchTag(tag, tid)) {
+                return entry;
+            }
+        }
+
+        return nullptr;
+    }
+
+    BTBEntry *accessEntry(Addr instPC) override
+    {
+        panic("Need a threadId.");
+        return nullptr;
+    }
+
+    BTBEntry *accessEntry(Addr instPC, ThreadID tid)
+    {
+        auto entry = findEntry(instPC, tid);
+
+        if (entry) {
+            replPolicy->touch(entry->replacementData);
+        }
+
+        return entry;
+    }
+};
 
 class SimpleBTB : public BranchTargetBuffer
 {
@@ -68,25 +196,6 @@ class SimpleBTB : public BranchTargetBuffer
 
 
   private:
-    struct BTBEntry
-    {
-        /** The entry's tag. */
-        Addr tag = 0;
-
-        /** The entry's target. */
-        std::unique_ptr<PCStateBase> target;
-
-        /** The entry's thread id. */
-        ThreadID tid;
-
-        /** Whether or not the entry is valid. */
-        bool valid = false;
-
-        /** Pointer to the static branch instruction at this address */
-        StaticInstPtr inst = nullptr;
-    };
-
-
     /** Returns the index into the BTB, based on the branch's PC.
      *  @param inst_PC The branch to look up.
      *  @return Returns the index into the BTB.
@@ -106,28 +215,7 @@ class SimpleBTB : public BranchTargetBuffer
     BTBEntry *findEntry(Addr instPC, ThreadID tid);
 
     /** The actual BTB. */
-    std::vector<BTBEntry> btb;
-
-    /** The number of entries in the BTB. */
-    unsigned numEntries;
-
-    /** The index mask. */
-    unsigned idxMask;
-
-    /** The number of tag bits per entry. */
-    unsigned tagBits;
-
-    /** The tag mask. */
-    unsigned tagMask;
-
-    /** Number of bits to shift PC when calculating index. */
-    unsigned instShiftAmt;
-
-    /** Number of bits to shift PC when calculating tag. */
-    unsigned tagShiftAmt;
-
-    /** Log2 NumThreads used for hashing threadid */
-    unsigned log2NumThreads;
+    BTBCache btb;
 };
 
 } // namespace branch_prediction
