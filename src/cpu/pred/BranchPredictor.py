@@ -38,6 +38,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects.ClockedObject import ClockedObject
+from m5.objects.ReplacementPolicies import *
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import *
@@ -92,6 +93,10 @@ class SimpleBTB(BranchTargetBuffer):
     tagBits = Param.Unsigned(16, "Size of the BTB tags, in bits")
     instShiftAmt = Param.Unsigned(
         Parent.instShiftAmt, "Number of bits to shift instructions by"
+    )
+    associativity = Param.Unsigned(4, "BTB associativity")
+    btbReplPolicy = Param.BaseReplacementPolicy(
+        LRURP(), "BTB replacement policy"
     )
 
 
