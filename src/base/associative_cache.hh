@@ -76,18 +76,7 @@ class AssociativeCache
 
   private:
 
-    void initParams(size_t _num_entries, size_t _assoc)
-    {
-        fatal_if(!isPowerOf2(_num_entries), "The number of entries of an "
-                 "AssociativeCache<> must be a power of 2");
-        fatal_if(!isPowerOf2(_assoc), "The associativity of an "
-                 "AssociativeCache<> must be a power of 2");
-        for (auto entry_idx = 0; entry_idx < _num_entries; entry_idx++) {
-            Entry *entry = &entries[entry_idx];
-            indexingPolicy->setEntry(entry, entry_idx);
-            entry->replacementData = replPolicy->instantiateEntry();
-        }
-    }
+    void initParams(size_t _num_entries, size_t _assoc);
 
   public:
 
@@ -134,32 +123,13 @@ class AssociativeCache
     /**
      * Clear the entries in the cache.
      */
-    void clear() {
-        for (auto set = 0; set < numSets; set++) {
-            for (auto way = 0; way < _associativity; way++) {
-                auto repl_entry = indexingPolicy->getEntry(set, way);
-                Entry *entry = static_cast<Entry*>(repl_entry);
-                invalidate(entry);
-            }
-        }
-    }
+    void clear();
 
     void init(const char *name, const size_t num_entries,
               const size_t associativity,
               BaseReplacementPolicy *_repl_policy,
               BaseIndexingPolicy *_indexing_policy,
-              Entry const &init_val = Entry())
-    {
-        cache_name           = std::string(name);
-        numEntries           = num_entries;
-        _associativity       = associativity;
-        replPolicy           = _repl_policy;
-        indexingPolicy       = _indexing_policy;
-        numSets              = num_entries / associativity;
-        entries.resize(num_entries, init_val);
-
-        initParams(numEntries, associativity);
-    }
+              Entry const &init_val = Entry());
 
     /**
      * Does a valid entry exist for the addr
@@ -215,37 +185,14 @@ class AssociativeCache
      * @return returns a pointer to the wanted entry or nullptr if it does not
      *  exist.
      */
-    virtual Entry* findEntry(const Addr addr) const
-    {
-        auto tag   = getTag(addr);
-
-        auto entries = indexingPolicy->getPossibleEntries(addr);
-
-        for (auto it = entries.begin(); it != entries.end(); it++) {
-            Entry *entry = static_cast<Entry*>(*it);
-            if (entry->matchTag(tag)) {
-                return entry;
-            }
-        }
-
-        return nullptr;
-    }
+    virtual Entry* findEntry(const Addr addr) const;
 
     /**
      * Find a victim to be replaced
      * @param addr key to select the possible victim
      * @result entry to be victimized
      */
-    virtual Entry* findVictim(const Addr addr)
-    {
-        auto candidates = indexingPolicy->getPossibleEntries(addr);
-
-        auto victim = static_cast<Entry*>(replPolicy->getVictim(candidates));
-
-        invalidate(victim);
-
-        return victim;
-    }
+    virtual Entry* findVictim(const Addr addr);
 
     /**
      * Invalidate an entry and its respective replacement data.
@@ -276,19 +223,7 @@ class AssociativeCache
      * @result vector of candidates matching with the provided key
      */
     std::vector<Entry *>
-    getPossibleEntries(const Addr addr) const
-    {
-        std::vector<ReplaceableEntry *> selected_entries =
-            indexingPolicy->getPossibleEntries(addr);
-        std::vector<Entry *> entries(selected_entries.size(), nullptr);
-
-        unsigned int idx = 0;
-        for (auto &entry : selected_entries) {
-            entries[idx++] = static_cast<Entry *>(entry);
-        }
-
-        return entries;
-    }
+    getPossibleEntries(const Addr addr) const;
 
     /** Iterator types */
     using const_iterator = typename std::vector<Entry>::const_iterator;
