@@ -145,7 +145,7 @@ class Stride : public Queued
         SatCounter8 confidence;
     };
     typedef AssociativeSet<StrideEntry> PCTable;
-    std::unordered_map<int, PCTable> pcTables;
+    std::unordered_map<int, PCTable*> pcTables;
 
     /**
      * Try to find a table of entries for the given context. If none is
