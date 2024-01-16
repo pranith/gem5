@@ -31,8 +31,8 @@
 
 #include <memory>
 
-#include "base/compiler.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
+#include "base/compiler.hh"
 #include "mem/packet.hh"
 #include "params/BaseReplacementPolicy.hh"
 #include "sim/sim_object.hh"

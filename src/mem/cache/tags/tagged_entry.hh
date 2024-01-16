@@ -35,7 +35,6 @@
 #include "base/cprintf.hh"
 #include "base/logging.hh"
 #include "base/types.hh"
-#include "mem/cache/replacement_policies/replaceable_entry.hh"
 
 namespace gem5
 {
