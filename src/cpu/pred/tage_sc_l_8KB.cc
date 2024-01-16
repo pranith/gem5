@@ -63,7 +63,7 @@ TAGE_SC_L_8KB_StatisticalCorrector::TAGE_SC_L_8KB_StatisticalCorrector(
 TAGE_SC_L_8KB_StatisticalCorrector::SCThreadHistory *
 TAGE_SC_L_8KB_StatisticalCorrector::makeThreadHistory()
 {
-    SC_8KB_ThreadHistory *sh = new SC_8KB_ThreadHistory();
+    SC_8KB_ThreadHistory *sh = new SC_8KB_ThreadHistory(instShiftAmt);
     sh->setNumOrdinalHistories(1);
     sh->initLocalHistory(1, numEntriesFirstLocalHistories, 2);
     return sh;

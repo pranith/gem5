@@ -99,7 +99,7 @@ StatisticalCorrector::makeBranchInfo()
 StatisticalCorrector::SCThreadHistory*
 StatisticalCorrector::makeThreadHistory()
 {
-    return new SCThreadHistory();
+    return new SCThreadHistory(instShiftAmt);
 }
 
 void

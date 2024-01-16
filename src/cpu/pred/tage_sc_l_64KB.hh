@@ -108,6 +108,9 @@ class TAGE_SC_L_64KB_StatisticalCorrector : public StatisticalCorrector
 
     struct SC_64KB_ThreadHistory : public SCThreadHistory
     {
+        SC_64KB_ThreadHistory(unsigned instShiftAmt)
+            : SCThreadHistory(instShiftAmt) {}
+
         std::vector<int64_t> imHist;
     };
 

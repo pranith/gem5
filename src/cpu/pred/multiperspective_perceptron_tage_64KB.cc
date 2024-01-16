@@ -64,7 +64,7 @@ MPP_StatisticalCorrector_64KB::MPP_StatisticalCorrector_64KB(
 MPP_StatisticalCorrector_64KB::SCThreadHistory*
 MPP_StatisticalCorrector_64KB::makeThreadHistory()
 {
-    MPP_SCThreadHistory *sh = new MPP_SCThreadHistory();
+    MPP_SCThreadHistory *sh = new MPP_SCThreadHistory(instShiftAmt);
 
     sh->setNumOrdinalHistories(3);
     sh->initLocalHistory(1, numEntriesFirstLocalHistories, 4);

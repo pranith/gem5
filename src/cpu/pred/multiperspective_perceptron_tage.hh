@@ -134,8 +134,10 @@ class MPP_StatisticalCorrector : public StatisticalCorrector
 
     struct MPP_SCThreadHistory : public StatisticalCorrector::SCThreadHistory
     {
-        MPP_SCThreadHistory() : globalHist(0), historyStack(16, 0),
-            historyStackPointer(0) {}
+        MPP_SCThreadHistory(unsigned instShiftAmt)
+            : SCThreadHistory(instShiftAmt),
+              globalHist(0), historyStack(16, 0),
+              historyStackPointer(0) {}
         int64_t globalHist; // global history
         std::vector<int64_t> historyStack;
         unsigned int historyStackPointer;

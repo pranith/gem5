@@ -75,7 +75,7 @@ TAGE_SC_L_64KB_StatisticalCorrector::TAGE_SC_L_64KB_StatisticalCorrector(
 TAGE_SC_L_64KB_StatisticalCorrector::SCThreadHistory*
 TAGE_SC_L_64KB_StatisticalCorrector::makeThreadHistory()
 {
-    SC_64KB_ThreadHistory *sh = new SC_64KB_ThreadHistory();
+    SC_64KB_ThreadHistory *sh = new SC_64KB_ThreadHistory(instShiftAmt);
 
     sh->setNumOrdinalHistories(3);
     sh->initLocalHistory(1, numEntriesFirstLocalHistories, 2);

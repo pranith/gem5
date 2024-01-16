@@ -74,11 +74,14 @@ class StatisticalCorrector : public SimObject
     // histories used for the statistical corrector
     struct SCThreadHistory
     {
-        SCThreadHistory() {
+        SCThreadHistory(unsigned instShiftAmt)
+          : instShiftAmt(instShiftAmt)
+        {
             bwHist = 0;
             numOrdinalHistories = 0;
             imliCount = 0;
         }
+        const unsigned instShiftAmt;
         int64_t bwHist;  // backward global history
         int64_t imliCount;
 

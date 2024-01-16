@@ -84,9 +84,8 @@ class TAGE_SC_L_8KB_StatisticalCorrector : public StatisticalCorrector
 
     struct SC_8KB_ThreadHistory : public SCThreadHistory
     {
-        SC_8KB_ThreadHistory() {
-            globalHist = 0;
-        }
+        SC_8KB_ThreadHistory(unsigned instShiftAmt)
+            : SCThreadHistory(instShiftAmt), globalHist(0) {}
         int64_t globalHist; // global history
     };
 

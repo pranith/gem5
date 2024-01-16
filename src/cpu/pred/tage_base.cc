@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 The University of Wisconsin
+ * Copyright (c) 2024 Technical University of Munich
  *
  * Copyright (c) 2006 INRIA (Institut National de Recherche en
  * Informatique et en Automatique  / French National Research Institute
@@ -601,7 +602,6 @@ TAGEBase::updatePathAndGlobalHistory(ThreadID tid, int brtype, bool taken,
     bi->nGhist = 1;
     // Update the global history
     updateGHist(tid, bi->ghist, bi->nGhist);
-    bi->modified = true;
 }
 
 
@@ -646,6 +646,7 @@ TAGEBase::updateHistories(ThreadID tid, Addr branch_pc, bool speculative,
     // TAGE implementations.
     updatePathAndGlobalHistory(tid, branchTypeExtra(inst), taken,
                                branch_pc, target, bi);
+    bi->modified = true;
 
     DPRINTF(Tage, "Updating global histories with branch:%lx; taken?:%d, "
             "path Hist: %x; pointer:%d\n", branch_pc, taken,
@@ -700,6 +701,15 @@ TAGEBase::restoreHistState(ThreadID tid, BranchInfo* bi)
     }
     bi->nGhist = 0;
     bi->modified = false;
+}
+
+int
+TAGEBase::calcNewPathHist(ThreadID tid, Addr pc, int cur_phist) const
+{
+    int pathbit = ((pc >> instShiftAmt) & 1);
+    cur_phist = (cur_phist << 1) + pathbit;
+    cur_phist = (cur_phist & ((1ULL << pathHistBits) - 1));
+    return cur_phist;
 }
 
 void
