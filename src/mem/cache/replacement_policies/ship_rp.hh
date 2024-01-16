@@ -39,9 +39,9 @@
 #include <cstddef>
 #include <vector>
 
+#include "mem/cache/replacement_policies/brrip_rp.hh"
 #include "base/compiler.hh"
 #include "base/sat_counter.hh"
-#include "mem/cache/replacement_policies/brrip_rp.hh"
 #include "mem/packet.hh"
 
 namespace gem5
