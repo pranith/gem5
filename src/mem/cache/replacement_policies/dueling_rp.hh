@@ -31,9 +31,9 @@
 
 #include <memory>
 
+#include "mem/cache/replacement_policies/base.hh"
 #include "base/compiler.hh"
 #include "base/statistics.hh"
-#include "mem/cache/replacement_policies/base.hh"
 #include "mem/cache/tags/dueling.hh"
 
 namespace gem5

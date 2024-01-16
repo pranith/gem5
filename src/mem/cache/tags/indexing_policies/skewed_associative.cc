@@ -34,9 +34,9 @@
 #include "mem/cache/tags/indexing_policies/skewed_associative.hh"
 
 #include "base/bitfield.hh"
+#include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "base/intmath.hh"
 #include "base/logging.hh"
-#include "mem/cache/replacement_policies/replaceable_entry.hh"
 
 namespace gem5
 {
