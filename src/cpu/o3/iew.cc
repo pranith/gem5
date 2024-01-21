@@ -546,7 +546,7 @@ IEW::instToCommit(const DynInstPtr& inst)
         }
     }
 
-    DPRINTF(IEW, "Current wb cycle: %i, width: %i, numInst: %i\nwbActual:%i\n",
+    DPRINTF(IEW, "Current wb cycle: %i, width: %i, numInst: %i, wbActual:%i\n",
             wbCycle, wbWidth, wbNumInst, wbCycle * wbWidth + wbNumInst);
     // Add finished instruction to queue to commit.
     (*iewQueue)[wbCycle].insts[wbNumInst] = inst;
