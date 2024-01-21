@@ -99,7 +99,9 @@ cpu-minor:
     status: orphaned
 
 cpu-o3:
-    status: orphaned
+    status: maintained
+    experts:
+        - Pranith Kumar <bobby.prani@gmail.com>
 
 cpu-simple:
     status: orphaned
