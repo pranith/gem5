@@ -32,6 +32,7 @@ from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3Checker import BaseO3Checker
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
 from m5.proxy import Self
 
@@ -80,6 +81,33 @@ class ArmO3CPU(BaseO3CPU, ArmCPU):
         self.checker.mmu.itb.size = self.mmu.itb.size
         self.checker.mmu.dtb.size = self.mmu.dtb.size
         self.checker.cpu_id = self.cpu_id
+
+
+class ArmPO3CPU(BasePO3CPU, ArmCPU):
+    mmu = ArmMMU()
+
+    # For x86, each CC reg is used to hold only a subset of the
+    # flags, so we need 4-5 times the number of CC regs as
+    # physical integer regs to be sure we don't run out.  In
+    # typical real machines, CC regs are not explicitly renamed
+    # (it's a side effect of int reg renaming), so they should
+    # never be the bottleneck here.
+    numPhysCCRegs = Self.numPhysIntRegs * 5
+
+    def addCheckerCpu(self):
+        self.checker = ArmPO3Checker(
+            workload=self.workload,
+            exitOnError=False,
+            updateOnError=True,
+            warnOnlyOnLoadError=True,
+        )
+        self.checker.mmu.itb.size = self.mmu.itb.size
+        self.checker.mmu.dtb.size = self.mmu.dtb.size
+        self.checker.cpu_id = self.cpu_id
+
+
+class ArmPO3Checker(BaseO3Checker, ArmCPU):
+    mmu = ArmMMU()
 
 
 class ArmMinorCPU(BaseMinorCPU, ArmCPU):
