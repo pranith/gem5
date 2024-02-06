@@ -62,10 +62,15 @@ struct ltseqnum
  */
 class StoreSet
 {
+  protected:
+  std::string _name;
+
   public:
     typedef Addr SSID;
 
   public:
+    std::string name() const { return _name; }
+
     class SSITEntry : public CacheEntry
     {
         SSID _ssid;
@@ -77,10 +82,10 @@ class StoreSet
     };
 
     /** Default constructor.  init() must be called prior to use. */
-    StoreSet() : SSIT("SSIT") {};
+    StoreSet() : _name("StoreSets"), SSIT("SSIT") {};
 
     /** Creates store set predictor with given table sizes. */
-    StoreSet(uint64_t clear_period, int SSIT_size, int SSIT_assoc,
+    StoreSet(std::string name, uint64_t clear_period, int SSIT_size, int SSIT_assoc,
              replacement_policy::Base *replPolicy,
              BaseIndexingPolicy *indexingPolicy, int LFST_size);
 
@@ -88,7 +93,7 @@ class StoreSet
     ~StoreSet();
 
     /** Initializes the store set predictor with the given table sizes. */
-    void init(uint64_t clear_period, int SSIT_size, int SSIT_assoc,
+    void init(std::string name, uint64_t clear_period, int SSIT_size, int SSIT_assoc,
               replacement_policy::Base *_replPolicy,
               BaseIndexingPolicy *_indexingPolicy, int LFST_size);
 
