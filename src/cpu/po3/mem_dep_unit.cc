@@ -56,7 +56,7 @@ MemDepUnit::MemDepUnit() : iqPtr(NULL), stats(nullptr) {}
 
 MemDepUnit::MemDepUnit(const BasePO3CPUParams &params)
     : _name(params.name + ".memdepunit"),
-      depPred(params.store_set_clear_period, params.SSITSize,
+      depPred(_name + ".storesets", params.store_set_clear_period, params.SSITSize,
               params.SSITAssoc, params.SSITReplPolicy,
               params.SSITIndexingPolicy, params.LFSTSize),
       iqPtr(NULL),
@@ -92,13 +92,14 @@ MemDepUnit::~MemDepUnit()
 void
 MemDepUnit::init(const BasePO3CPUParams &params, ThreadID tid, CPU *cpu)
 {
+    _name = csprintf("%s.memDep%d", params.name, tid);
+
     DPRINTF(MemDepUnit, "Creating MemDepUnit %i object.\n",tid);
 
-    _name = csprintf("%s.memDep%d", params.name, tid);
     id = tid;
 
-    depPred.init(params.store_set_clear_period, params.SSITSize,
-                 params.SSITAssoc, params.SSITReplPolicy,
+    depPred.init(_name + ".storesets", params.store_set_clear_period,
+		 params.SSITSize, params.SSITAssoc, params.SSITReplPolicy,
                  params.SSITIndexingPolicy, params.LFSTSize);
 
     std::string stats_group_name = csprintf("MemDepUnit__%i", tid);

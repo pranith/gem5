@@ -39,10 +39,10 @@ namespace gem5
 namespace po3
 {
 
-StoreSet::StoreSet(uint64_t clear_period, int _SSIT_size, int _SSIT_assoc,
+StoreSet::StoreSet(std::string name_, uint64_t clear_period, int _SSIT_size, int _SSIT_assoc,
                    replacement_policy::Base *_replPolicy,
                    BaseIndexingPolicy *_indexingPolicy, int _LFST_size)
-    :    SSIT("SSIT", _SSIT_size, _SSIT_assoc,
+  :    _name(std::string(name_)), SSIT("SSIT", _SSIT_size, _SSIT_assoc,
               _replPolicy, _indexingPolicy),
          clearPeriod(clear_period), SSITSize(_SSIT_size),
          LFSTSize(_LFST_size)
@@ -76,10 +76,11 @@ StoreSet::~StoreSet()
 }
 
 void
-StoreSet::init(uint64_t clear_period, int _SSIT_size, int _SSIT_assoc,
-               replacement_policy::Base *_replPolicy,
+StoreSet::init(std::string name_, uint64_t clear_period, int _SSIT_size,
+	       int _SSIT_assoc, replacement_policy::Base *_replPolicy,
                BaseIndexingPolicy *_indexingPolicy, int _LFST_size)
 {
+    _name = name_;
     SSITSize = _SSIT_size;
     LFSTSize = _LFST_size;
     clearPeriod = clear_period;

@@ -247,7 +247,7 @@ CPU::CPU(const BasePO3CPUParams &params)
 
     lastActivatedCycle = 0;
 
-    DPRINTF(PO3CPU, "Creating O3CPU object.\n");
+    DPRINTF(PO3CPU, "Creating PO3CPU object.\n");
 
     // Setup any thread state.
     thread.resize(numThreads);
@@ -294,7 +294,7 @@ CPU::CPU(const BasePO3CPUParams &params)
         threadContexts.push_back(tc);
     }
 
-    // O3CPU always requires an interrupt controller.
+    // PO3CPU always requires an interrupt controller.
     if (!params.switched_out && interrupts.empty()) {
         fatal("O3CPU %s has no interrupt controller.\n"
               "Ensure createInterruptController() is called.\n", name());
@@ -330,7 +330,7 @@ CPU::CPUStats::CPUStats(CPU *cpu)
                "Total number of cycles that CPU has spent quiesced or waiting "
                "for an interrupt")
 {
-    // Register any of the O3CPU's stats here.
+    // Register any of the PO3CPU's stats here.
     timesIdled
         .prereq(timesIdled);
 
@@ -344,7 +344,7 @@ CPU::CPUStats::CPUStats(CPU *cpu)
 void
 CPU::tick()
 {
-    DPRINTF(PO3CPU, "\n\nO3CPU: Ticking main, O3CPU.\n");
+    DPRINTF(PO3CPU, "\n\nPO3CPU: Ticking main, PO3CPU.\n");
     assert(!switchedOut());
     assert(drainState() != DrainState::Drained);
 
