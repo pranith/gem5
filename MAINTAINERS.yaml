@@ -109,6 +109,11 @@ cpu-o3:
     experts:
         - Pranith Kumar <bobby.prani@gmail.com>
 
+cpu-po3:
+    status: maintained
+    experts:
+        - Pranith Kumar <bobby.prani@gmail.com>
+
 cpu-simple:
     status: orphaned
     experts:
