@@ -3626,7 +3626,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_VOP3P__V_DOT2_F32_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -13178,6 +13178,12 @@ namespace VegaISA
     Decoder::decode_OP_VOP3P__V_DOT2_F32_F16(MachInst iFmt)
     {
         return new Inst_VOP3P__V_DOT2_F32_F16(&iFmt->iFmt_VOP3P);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP3P__V_DOT2_F32_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3P__V_DOT2_F32_BF16(&iFmt->iFmt_VOP3P);
     }
 
     GPUStaticInst*
