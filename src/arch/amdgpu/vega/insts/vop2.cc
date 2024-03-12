@@ -987,6 +987,62 @@ namespace VegaISA
 
         vdst.write();
     } // execute
+    // --- Inst_VOP2__V_DOT2C_F32_BF16 class methods ---
+
+    Inst_VOP2__V_DOT2C_F32_BF16::Inst_VOP2__V_DOT2C_F32_BF16(InFmt_VOP2 *iFmt)
+        : Inst_VOP2(iFmt, "v_dot2c_f32_bf16")
+    {
+        setFlag(ALU);
+    } // Inst_VOP2__V_DOT2C_F32_BF16
+
+    Inst_VOP2__V_DOT2C_F32_BF16::~Inst_VOP2__V_DOT2C_F32_BF16()
+    {
+    } // ~Inst_VOP2__V_DOT2C_F32_BF16
+
+    void
+    Inst_VOP2__V_DOT2C_F32_BF16::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandU32 src0(gpuDynInst, instData.SRC0);
+        VecOperandU32 src1(gpuDynInst, instData.VSRC1);
+        VecOperandF32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.read();
+        vdst.read();
+
+        fatal_if(isSDWAInst(), "SDWA not supported for V_DOT2C_F32_BF16");
+
+        VecElemU32 src0d[NumVecElemPerVecReg];
+        if (isDPPInst()) {
+            VecOperandU32 src0_dpp(gpuDynInst, extData.iFmt_VOP_DPP.SRC0);
+            src0_dpp.read();
+
+            processDPP(gpuDynInst, extData.iFmt_VOP_DPP, src0_dpp, src1);
+            for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+                src0d[lane] = src0_dpp[lane];
+            }
+        } else {
+            for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+                src0d[lane] = src0[lane];
+            }
+        }
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxbfloat16 a1, a2, b1, b2;
+                a1.data = uint16_t(bits(src0d[lane], 15, 0));
+                a2.data = uint16_t(bits(src0d[lane], 31, 16));
+                b1.data = uint16_t(bits(src1[lane], 15, 0));
+                b2.data = uint16_t(bits(src1[lane], 31, 16));
+
+                vdst[lane] += float(a1) * float(b1);
+                vdst[lane] += float(a2) * float(b2);
+            }
+        }
+
+        vdst.write();
+    } // execute
     // --- Inst_VOP2__V_MAC_F32 class methods ---
 
     Inst_VOP2__V_MAC_F32::Inst_VOP2__V_MAC_F32(InFmt_VOP2 *iFmt)

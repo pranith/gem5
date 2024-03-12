@@ -4002,6 +4002,12 @@ namespace VegaISA
     } // decode_OP_VOP2__V_XOR_B32
 
     GPUStaticInst*
+    Decoder::decode_OP_VOP2__V_DOT2C_F32_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP2__V_DOT2C_F32_BF16(&iFmt->iFmt_VOP2);
+    } // decode_OP_VOP2__V_DOT2C_F32_BF16
+
+    GPUStaticInst*
     Decoder::decode_OP_VOP2__V_MAC_F32(MachInst iFmt)
     {
         return new Inst_VOP2__V_MAC_F32(&iFmt->iFmt_VOP2);
@@ -6023,6 +6029,12 @@ namespace VegaISA
     {
         return new Inst_VOP3__V_XOR_B32(&iFmt->iFmt_VOP3A);
     } // decode_OPU_VOP3__V_XOR_B32
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_DOT2C_F32_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_DOT2C_F32_BF16(&iFmt->iFmt_VOP3A);
+    } // decode_OPU_VOP3__V_DOT2C_F32_BF16
 
     GPUStaticInst*
     Decoder::decode_OPU_VOP3__V_MAC_F32(MachInst iFmt)
