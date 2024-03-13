@@ -38080,6 +38080,44 @@ namespace VegaISA
         void execute(GPUDynInstPtr) override;
     }; // Inst_MUBUF__BUFFER_ATOMIC_DEC
 
+    class Inst_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16 : public Inst_MUBUF
+    {
+      public:
+        Inst_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16(InFmt_MUBUF*);
+        ~Inst_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return 3; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_a
+                return 8;
+              case 1: //sgpr_r
+                return 16;
+              case 2: //sgpr_o
+                return 4;
+              case 3: //vgpr_d
+                return 4;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16
+
     class Inst_MUBUF__BUFFER_ATOMIC_SWAP_X2 : public Inst_MUBUF
     {
       public:
@@ -44133,6 +44171,45 @@ namespace VegaISA
         void initiateAcc(GPUDynInstPtr) override;
         void completeAcc(GPUDynInstPtr) override;
     }; // Inst_FLAT__FLAT_ATOMIC_MAX_F64
+
+    class Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16 : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return isFlat() ? 2 : 3; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //vgpr_src
+                return 8;
+              case 2: //vgpr_dst or saddr
+                return isFlat() ? 8 : 8;
+              case 3: //vgpr_dst
+                assert(!isFlat());
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16
 
     class Inst_VOP3P__V_PK_FMA_F32 : public Inst_VOP3P
     {

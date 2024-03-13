@@ -1703,7 +1703,7 @@ namespace VegaISA
         &Decoder::decode_OP_FLAT__FLAT_ATOMIC_ADD_F64,
         &Decoder::decode_OP_FLAT__FLAT_ATOMIC_MIN_F64,
         &Decoder::decode_OP_FLAT__FLAT_ATOMIC_MAX_F64,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_FLAT__FLAT_ATOMIC_PK_ADD_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -1834,7 +1834,7 @@ namespace VegaISA
         &Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD_F64,
         &Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_MIN_F64,
         &Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_MAX_F64,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_PK_ADD_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -2115,7 +2115,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -8512,6 +8512,12 @@ namespace VegaISA
     } // decode_OP_FLAT__FLAT_ATOMIC_MAX_F64
 
     GPUStaticInst*
+    Decoder::decode_OP_FLAT__FLAT_ATOMIC_PK_ADD_BF16(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
     Decoder::decode_OP_FLAT__FLAT_ATOMIC_SWAP_X2(MachInst iFmt)
     {
         return new Inst_FLAT__FLAT_ATOMIC_SWAP_X2(&iFmt->iFmt_FLAT);
@@ -8838,6 +8844,12 @@ namespace VegaISA
     Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_MAX_F64(MachInst iFmt)
     {
         return new Inst_FLAT__FLAT_ATOMIC_MAX_F64(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_PK_ADD_BF16(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16(&iFmt->iFmt_FLAT);
     }
 
     GPUStaticInst*
@@ -9859,6 +9871,12 @@ namespace VegaISA
     {
         return new Inst_MUBUF__BUFFER_ATOMIC_DEC(&iFmt->iFmt_MUBUF);
     } // decode_OP_MUBUF__BUFFER_ATOMIC_DEC
+
+    GPUStaticInst*
+    Decoder::decode_OP_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16(MachInst iFmt)
+    {
+        return new Inst_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16(&iFmt->iFmt_MUBUF);
+    } // decode_OP_MUBUF__BUFFER_ATOMIC_PK_ADD_BF17
 
     GPUStaticInst*
     Decoder::decode_OP_MUBUF__BUFFER_ATOMIC_SWAP_X2(MachInst iFmt)

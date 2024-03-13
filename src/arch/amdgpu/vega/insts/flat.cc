@@ -2227,5 +2227,39 @@ namespace VegaISA
     {
         atomicComplete<VecOperandF64, VecElemF64>(gpuDynInst);
     } // completeAcc
+    // --- Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16 class methods ---
+
+    Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16::Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16(
+        InFmt_FLAT *iFmt)
+        : Inst_FLAT(iFmt, "flat_atomic_pk_add_bf16")
+    {
+        setFlag(AtomicPkAddBF16);
+
+        // MI300 spec: "Float atomics must set SC[0]=0 (no return value)."
+        panic_if(instData.GLC, "Saw float atomic with return set!");
+
+        setFlag(AtomicNoReturn);
+    } // Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16
+
+    Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16::~Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16()
+    {
+    } // ~Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16
+
+    void
+    Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16::execute(GPUDynInstPtr gpuDynInst)
+    {
+        atomicExecute<ConstVecOperandU32, VecElemU32>(gpuDynInst);
+    } // execute
+
+    void
+    Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16::initiateAcc(GPUDynInstPtr gpuDynInst)
+    {
+        initAtomicAccess<VecElemU32>(gpuDynInst);
+    } // initiateAcc
+
+    void
+    Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16::completeAcc(GPUDynInstPtr gpuDynInst)
+    {
+    } // completeAcc
 } // namespace VegaISA
 } // namespace gem5

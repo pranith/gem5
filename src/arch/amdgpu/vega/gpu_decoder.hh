@@ -710,6 +710,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_ADD_F64(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_MIN_F64(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_MAX_F64(MachInst);
+        GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_ADD_X2(MachInst);
@@ -763,6 +764,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD_F64(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_MIN_F64(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_MAX_F64(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD_X2(MachInst);
@@ -941,6 +943,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_XOR(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_INC(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_DEC(MachInst);
+        GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_ADD_X2(MachInst);
