@@ -649,6 +649,12 @@ namespace VegaISA
     void
     Inst_MUBUF__BUFFER_LOAD_UBYTE::completeAcc(GPUDynInstPtr gpuDynInst)
     {
+        if (instData.LDS) {
+            ldsComplete<1>(gpuDynInst);
+
+            return;
+        }
+
         VecOperandU32 vdst(gpuDynInst, extData.VDATA);
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -777,6 +783,12 @@ namespace VegaISA
     void
     Inst_MUBUF__BUFFER_LOAD_USHORT::completeAcc(GPUDynInstPtr gpuDynInst)
     {
+        if (instData.LDS) {
+            ldsComplete<1>(gpuDynInst);
+
+            return;
+        }
+
         VecOperandU32 vdst(gpuDynInst, extData.VDATA);
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1114,6 +1126,12 @@ namespace VegaISA
     void
     Inst_MUBUF__BUFFER_LOAD_DWORD::completeAcc(GPUDynInstPtr gpuDynInst)
     {
+        if (instData.LDS) {
+            ldsComplete<1>(gpuDynInst);
+
+            return;
+        }
+
         VecOperandU32 vdst(gpuDynInst, extData.VDATA);
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1137,11 +1155,9 @@ namespace VegaISA
     {
         setFlag(MemoryRef);
         setFlag(Load);
-        if (instData.LDS) {
-            setFlag(GroupSegment);
-        } else {
-            setFlag(GlobalSegment);
-        }
+        setFlag(GlobalSegment);
+
+        panic_if(instData.LDS, "Return to LDS not supported for %s", _opcode);
     } // Inst_MUBUF__BUFFER_LOAD_DWORDX2
 
     Inst_MUBUF__BUFFER_LOAD_DWORDX2::~Inst_MUBUF__BUFFER_LOAD_DWORDX2()
@@ -1309,6 +1325,12 @@ namespace VegaISA
     void
     Inst_MUBUF__BUFFER_LOAD_DWORDX3::completeAcc(GPUDynInstPtr gpuDynInst)
     {
+        if (instData.LDS) {
+            ldsComplete<4>(gpuDynInst);
+
+            return;
+        }
+
         VecOperandU32 vdst0(gpuDynInst, extData.VDATA);
         VecOperandU32 vdst1(gpuDynInst, extData.VDATA + 1);
         VecOperandU32 vdst2(gpuDynInst, extData.VDATA + 2);
@@ -1414,6 +1436,12 @@ namespace VegaISA
     void
     Inst_MUBUF__BUFFER_LOAD_DWORDX4::completeAcc(GPUDynInstPtr gpuDynInst)
     {
+        if (instData.LDS) {
+            ldsComplete<4>(gpuDynInst);
+
+            return;
+        }
+
         VecOperandU32 vdst0(gpuDynInst, extData.VDATA);
         VecOperandU32 vdst1(gpuDynInst, extData.VDATA + 1);
         VecOperandU32 vdst2(gpuDynInst, extData.VDATA + 2);

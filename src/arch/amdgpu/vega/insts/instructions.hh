@@ -42963,6 +42963,176 @@ namespace VegaISA
         void completeAcc(GPUDynInstPtr) override;
     }; // Inst_FLAT__FLAT_STORE_DWORDX4
 
+    class Inst_FLAT__FLAT_LOAD_LDS_UBYTE : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_UBYTE(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_UBYTE();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_UBYTE
+
+    class Inst_FLAT__FLAT_LOAD_LDS_SBYTE : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_SBYTE(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_SBYTE();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_SBYTE
+
+    class Inst_FLAT__FLAT_LOAD_LDS_USHORT : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_USHORT(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_USHORT();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_USHORT
+
+    class Inst_FLAT__FLAT_LOAD_LDS_SSHORT : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_SSHORT(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_SSHORT();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_SSHORT
+
+    class Inst_FLAT__FLAT_LOAD_LDS_DWORD : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_DWORD(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_DWORD();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_DWORD
+
     class Inst_FLAT__FLAT_ATOMIC_SWAP : public Inst_FLAT
     {
       public:
@@ -44210,6 +44380,74 @@ namespace VegaISA
         void initiateAcc(GPUDynInstPtr) override;
         void completeAcc(GPUDynInstPtr) override;
     }; // Inst_FLAT__FLAT_ATOMIC_PK_ADD_BF16
+
+    class Inst_FLAT__FLAT_LOAD_LDS_DWORDX3 : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_DWORDX3(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_DWORDX3();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //vgpr_dst or saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_DWORDX3
+
+    class Inst_FLAT__FLAT_LOAD_LDS_DWORDX4 : public Inst_FLAT
+    {
+      public:
+        Inst_FLAT__FLAT_LOAD_LDS_DWORDX4(InFmt_FLAT*);
+        ~Inst_FLAT__FLAT_LOAD_LDS_DWORDX4();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 0; }
+        int numSrcRegOperands() override { return 2; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_addr
+                return vgprIsOffset() ? 4 : 8;
+              case 1: //vgpr_dst or saddr
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_FLAT__FLAT_LOAD_LDS_DWORDX4
 
     class Inst_VOP3P__V_PK_FMA_F32 : public Inst_VOP3P
     {

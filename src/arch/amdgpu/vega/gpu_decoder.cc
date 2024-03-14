@@ -1790,11 +1790,11 @@ namespace VegaISA
         &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_SBYTE_D16_HI,
         &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_SHORT_D16,
         &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_SHORT_D16_HI,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_UBYTE,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SBYTE,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_USHORT,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SSHORT,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORD,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -1877,8 +1877,8 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX4,
+        &Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX3,
         &Decoder::decode_invalid
     };
 
@@ -8735,6 +8735,36 @@ namespace VegaISA
     }
 
     GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_UBYTE(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_UBYTE(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SBYTE(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_SBYTE(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_USHORT(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_USHORT(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SSHORT(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_SSHORT(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORD(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_DWORD(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
     Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_SWAP(MachInst iFmt)
     {
         return new Inst_FLAT__FLAT_ATOMIC_SWAP(&iFmt->iFmt_FLAT);
@@ -8928,6 +8958,18 @@ namespace VegaISA
     Decoder::decode_OP_GLOBAL__GLOBAL_ATOMIC_DEC_X2(MachInst iFmt)
     {
         return new Inst_FLAT__FLAT_ATOMIC_DEC_X2(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX4(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_DWORDX4(&iFmt->iFmt_FLAT);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX3(MachInst iFmt)
+    {
+        return new Inst_FLAT__FLAT_LOAD_LDS_DWORDX3(&iFmt->iFmt_FLAT);
     }
 
     GPUStaticInst*
