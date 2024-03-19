@@ -7874,6 +7874,118 @@ namespace VegaISA
     {
         panicUnimplemented();
     } // execute
+    // --- Inst_VOP3__V_ASHR_PK_I8_I32 class methods ---
+
+    Inst_VOP3__V_ASHR_PK_I8_I32::Inst_VOP3__V_ASHR_PK_I8_I32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_ashr_pk_i8_i32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_ASHR_PK_I8_I32
+
+    Inst_VOP3__V_ASHR_PK_I8_I32::~Inst_VOP3__V_ASHR_PK_I8_I32()
+    {
+    } // ~Inst_VOP3__V_ASHR_PK_I8_I32
+
+    void
+    Inst_VOP3__V_ASHR_PK_I8_I32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandI32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandI32 src1(gpuDynInst, extData.SRC1);
+        ConstVecOperandU32 src2(gpuDynInst, extData.SRC2);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        src2.readSrc();
+        vdst.read();
+
+        auto sat8 = [](int32_t n) -> uint8_t {
+            if (n <= -128) return 0x80;
+            else if (n >= 127) return 0x7f;
+            else return n & 0xff;
+        };
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x7, "Source OPSEL not supported for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                uint8_t lower = sat8(src0[lane] >> bits(src2[lane], 4, 0));
+                uint8_t upper = sat8(src0[lane] >> bits(src2[lane], 4, 0));
+
+                // Don't clobber unwritten bits according to pgm guide.
+                uint16_t result = uint16_t(upper) << 8 | uint16_t(lower);
+                if (opsel & 0x8) {
+                    replaceBits(vdst[lane], 31, 16, result);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, result);
+                }
+            }
+        }
+
+        vdst.write();
+
+    } // execute
+    // --- Inst_VOP3__V_ASHR_PK_U8_I32 class methods ---
+
+    Inst_VOP3__V_ASHR_PK_U8_I32::Inst_VOP3__V_ASHR_PK_U8_I32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_ashr_pk_u8_i32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_ASHR_PK_U8_I32
+
+    Inst_VOP3__V_ASHR_PK_U8_I32::~Inst_VOP3__V_ASHR_PK_U8_I32()
+    {
+    } // ~Inst_VOP3__V_ASHR_PK_U8_I32
+
+    void
+    Inst_VOP3__V_ASHR_PK_U8_I32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandI32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandI32 src1(gpuDynInst, extData.SRC1);
+        ConstVecOperandU32 src2(gpuDynInst, extData.SRC2);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        src2.readSrc();
+        vdst.read();
+
+        auto sat8 = [](int32_t n) -> uint8_t {
+            if (n <= 0) return 0;
+            else if (n >= 255) return 0xff;
+            else return n & 0xff;
+        };
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x7, "Source OPSEL not supported for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                uint8_t lower = sat8(src0[lane] >> bits(src2[lane], 4, 0));
+                uint8_t upper = sat8(src0[lane] >> bits(src2[lane], 4, 0));
+
+                // Don't clobber unwritten bits according to pgm guide.
+                uint16_t result = uint16_t(upper) << 8 | uint16_t(lower);
+                if (opsel & 0x8) {
+                    replaceBits(vdst[lane], 31, 16, result);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, result);
+                }
+            }
+        }
+
+        vdst.write();
+
+    } // execute
     // --- Inst_VOP3__V_INTERP_P1_F32 class methods ---
 
     Inst_VOP3__V_INTERP_P1_F32::Inst_VOP3__V_INTERP_P1_F32(InFmt_VOP3A *iFmt)
