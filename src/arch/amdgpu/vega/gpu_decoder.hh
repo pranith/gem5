@@ -405,6 +405,7 @@ namespace VegaISA
         GPUStaticInst* decode_OPU_VOP3__V_COS_F16(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_EXP_LEGACY_F32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_LOG_LEGACY_F32(MachInst);
+        GPUStaticInst *decode_OPU_VOP3__V_PRNG_B32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_CVT_F32_BF16(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_MAD_LEGACY_F32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_MAD_F32(MachInst);
@@ -1398,6 +1399,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_VOP1__V_CVT_NORM_U16_F16(MachInst);
         GPUStaticInst* decode_OP_VOP1__V_SAT_PK_U8_I16(MachInst);
         GPUStaticInst* decode_OP_VOP1__V_SWAP_B32(MachInst);
+        GPUStaticInst *decode_OP_VOP1__V_PRNG_B32(MachInst);
         GPUStaticInst* decode_OP_VOP1__V_CVT_F32_BF16(MachInst);
         GPUStaticInst* decode_OP_VOP1__V_ACCVGPR_MOV_B32(MachInst);
         GPUStaticInst* decode_OP_VOP1__V_CVT_F32_FP8(MachInst);

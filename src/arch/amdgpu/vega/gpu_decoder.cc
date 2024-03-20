@@ -999,7 +999,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_PRNG_B32,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_OPU_VOP3__V_CVT_F32_BF16,
@@ -1358,8 +1358,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid
-    };
+        &Decoder::decode_invalid};
 
     IsaDecodeMethod Decoder::tableSubDecode_OP_DS[] = {
         &Decoder::decode_OP_DS__DS_ADD_U32,
@@ -3337,8 +3336,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid
-    };
+        &Decoder::decode_invalid};
 
     IsaDecodeMethod Decoder::tableSubDecode_OP_VOPC[] = {
         &Decoder::decode_invalid,
@@ -6653,6 +6651,12 @@ namespace VegaISA
     {
         return new Inst_VOP3__V_LOG_LEGACY_F32(&iFmt->iFmt_VOP3A);
     } // decode_OPU_VOP3__V_LOG_LEGACY_F32
+
+    GPUStaticInst *
+    Decoder::decode_OPU_VOP3__V_PRNG_B32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_PRNG_B32(&iFmt->iFmt_VOP3A);
+    }
 
     GPUStaticInst*
     Decoder::decode_OPU_VOP3__V_CVT_F32_BF16(MachInst iFmt)
@@ -12269,6 +12273,12 @@ namespace VegaISA
     {
         fatal("Trying to decode instruction without a class\n");
         return nullptr;
+    }
+
+    GPUStaticInst *
+    Decoder::decode_OP_VOP1__V_PRNG_B32(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_PRNG_B32(&iFmt->iFmt_VOP1);
     }
 
     GPUStaticInst*

@@ -10697,6 +10697,46 @@ namespace VegaISA
         void execute(GPUDynInstPtr) override;
     }; // Inst_VOP1__V_ACCVGPR_MOV_B32
 
+    class Inst_VOP1__V_PRNG_B32 : public Inst_VOP1
+    {
+      public:
+        Inst_VOP1__V_PRNG_B32(InFmt_VOP1 *);
+        ~Inst_VOP1__V_PRNG_B32();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int
+        numDstRegOperands() override
+        {
+            return 1;
+        }
+        int
+        numSrcRegOperands() override
+        {
+            return 1;
+        }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+                case 0: // src
+                    return 4;
+                case 1: // vdst
+                    return 4;
+                default:
+                    fatal("op idx %i out of bounds\n", opIdx);
+                    return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+    }; // Inst_VOP1__V_PRNG_B32
+
     class Inst_VOP1__V_CVT_F32_FP8 : public Inst_VOP1
     {
       public:
@@ -28576,6 +28616,46 @@ namespace VegaISA
 
         void execute(GPUDynInstPtr) override;
     }; // Inst_VOP3__V_LOG_LEGACY_F32
+
+    class Inst_VOP3__V_PRNG_B32 : public Inst_VOP3A
+    {
+      public:
+        Inst_VOP3__V_PRNG_B32(InFmt_VOP3A *);
+        ~Inst_VOP3__V_PRNG_B32();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int
+        numDstRegOperands() override
+        {
+            return 1;
+        }
+        int
+        numSrcRegOperands() override
+        {
+            return 1;
+        }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+                case 0: // src
+                    return 4;
+                case 1: // vdst
+                    return 4;
+                default:
+                    fatal("op idx %i out of bounds\n", opIdx);
+                    return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+    }; // Inst_VOP3__V_PRNG_B32
 
     class Inst_VOP3__V_CVT_F32_BF16 : public Inst_VOP3A
     {

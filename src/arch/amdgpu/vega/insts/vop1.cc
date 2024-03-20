@@ -2885,5 +2885,50 @@ namespace VegaISA
 
         vdst.write();
     } // execute
+    // --- Inst_VOP1__V_PRNG_B32 class methods ---
+
+    Inst_VOP1__V_PRNG_B32::Inst_VOP1__V_PRNG_B32(InFmt_VOP1 *iFmt)
+        : Inst_VOP1(iFmt, "v_prng_b32")
+    {
+        setFlag(ALU);
+    } // Inst_VOP1__V_PRNG_B32
+
+    Inst_VOP1__V_PRNG_B32::~Inst_VOP1__V_PRNG_B32()
+    {} // ~Inst_VOP1__V_PRNG_B32
+
+    // Generate a pseudorandom number using an LFSR (linear feedback shift
+    // register) seeded with the vector input, then store the result into a
+    // vector register.
+    //
+    // in = S0.u32;
+    // D0.u32 = ((in << 1U) ^ (in[31] ? 197U : 0U))
+    //
+    // Notes: This function produces a sequence of pseudorandom numbers with
+    // period 2**32 - 1 unless the input is zero, in which case the period is
+    // 1.
+    void
+    Inst_VOP1__V_PRNG_B32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandU32 src(gpuDynInst, instData.SRC0);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src.readSrc();
+
+        panic_if(isSDWAInst(), "SDWA not implemented for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not implemented for %s", _opcode);
+
+        auto randFunc = [](VecElemU32 in) {
+            return ((in << 1) ^ (((in >> 31) & 1) ? 0xc5 : 0x00));
+        };
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                vdst[lane] = randFunc(src[lane]);
+            }
+        }
+
+        vdst.write();
+    } // execute
 } // namespace VegaISA
 } // namespace gem5
