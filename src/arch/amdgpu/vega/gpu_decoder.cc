@@ -1154,8 +1154,8 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_BITOP3_B16,
+        &Decoder::decode_OPU_VOP3__V_BITOP3_B32,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -7101,6 +7101,18 @@ namespace VegaISA
     Decoder::decode_OPU_VOP3__V_LSHL_ADD_U64(MachInst iFmt)
     {
         return new Inst_VOP3__V_LSHL_ADD_U64(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_BITOP3_B16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_BITOP3_B16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_BITOP3_B32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_BITOP3_B32(&iFmt->iFmt_VOP3A);
     }
 
     GPUStaticInst*

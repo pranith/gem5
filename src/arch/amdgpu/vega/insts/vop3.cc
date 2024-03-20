@@ -7874,6 +7874,131 @@ namespace VegaISA
     {
         panicUnimplemented();
     } // execute
+    // --- Inst_VOP3__V_BITOP3_B16 class methods ---
+
+    Inst_VOP3__V_BITOP3_B16::Inst_VOP3__V_BITOP3_B16(
+          InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_bitop3_b16", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_BITOP3_B16
+
+    Inst_VOP3__V_BITOP3_B16::~Inst_VOP3__V_BITOP3_B16()
+    {
+    } // ~Inst_VOP3__V_BITOP3_B16
+
+    void
+    Inst_VOP3__V_BITOP3_B16::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandU32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        ConstVecOperandU32 src2(gpuDynInst, extData.SRC2);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        src2.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "Clamp not supported for %s", _opcode);
+
+        int opsel = instData.OPSEL;
+
+        uint8_t ttbl = 0;
+        replaceBits(ttbl, 2, 0, extData.NEG & 0x7);
+        replaceBits(ttbl, 5, 3, instData.ABS & 0x7);
+        replaceBits(ttbl, 7, 6, extData.OMOD & 0x3);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                uint16_t s0 = (opsel & 1) ? bits(src0[lane], 31, 16)
+                                          : bits(src0[lane], 15, 0);
+                uint16_t s1 = (opsel & 2) ? bits(src1[lane], 31, 16)
+                                          : bits(src1[lane], 15, 0);
+                uint16_t s2 = (opsel & 4) ? bits(src2[lane], 31, 16)
+                                          : bits(src2[lane], 15, 0);
+
+                uint16_t tmp = 0;
+                tmp |= (ttbl & 0x01) ? (~s0 & ~s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x02) ? (~s0 & ~s1 &  s2) : 0;
+                tmp |= (ttbl & 0x04) ? (~s0 &  s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x08) ? (~s0 &  s1 &  s2) : 0;
+                tmp |= (ttbl & 0x10) ? ( s0 & ~s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x20) ? ( s0 & ~s1 &  s2) : 0;
+                tmp |= (ttbl & 0x40) ? ( s0 &  s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x80) ? ( s0 &  s1 &  s2) : 0;
+
+                if (opsel & 8) {
+                    replaceBits(vdst[lane], 31, 16, tmp);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, tmp);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_BITOP3_B32 class methods ---
+
+    Inst_VOP3__V_BITOP3_B32::Inst_VOP3__V_BITOP3_B32(
+          InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_bitop3_b32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_BITOP3_B32
+
+    Inst_VOP3__V_BITOP3_B32::~Inst_VOP3__V_BITOP3_B32()
+    {
+    } // ~Inst_VOP3__V_BITOP3_B32
+
+    void
+    Inst_VOP3__V_BITOP3_B32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandU32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        ConstVecOperandU32 src2(gpuDynInst, extData.SRC2);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        src2.readSrc();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "Clamp not supported for %s", _opcode);
+        panic_if(instData.OPSEL, "OP_SEL not supported for %s", _opcode);
+
+        uint8_t ttbl = 0;
+        replaceBits(ttbl, 2, 0, extData.NEG & 0x7);
+        replaceBits(ttbl, 5, 3, instData.ABS & 0x7);
+        replaceBits(ttbl, 7, 6, extData.OMOD & 0x3);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                uint32_t s0 = src0[lane];
+                uint32_t s1 = src1[lane];
+                uint32_t s2 = src2[lane];
+
+                uint16_t tmp = 0;
+                tmp |= (ttbl & 0x01) ? (~s0 & ~s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x02) ? (~s0 & ~s1 &  s2) : 0;
+                tmp |= (ttbl & 0x04) ? (~s0 &  s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x08) ? (~s0 &  s1 &  s2) : 0;
+                tmp |= (ttbl & 0x10) ? ( s0 & ~s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x20) ? ( s0 & ~s1 &  s2) : 0;
+                tmp |= (ttbl & 0x40) ? ( s0 &  s1 & ~s2) : 0;
+                tmp |= (ttbl & 0x80) ? ( s0 &  s1 &  s2) : 0;
+
+                vdst[lane] = tmp;
+            }
+        }
+
+        vdst.write();
+    } // execute
     // --- Inst_VOP3__V_ASHR_PK_I8_I32 class methods ---
 
     Inst_VOP3__V_ASHR_PK_I8_I32::Inst_VOP3__V_ASHR_PK_I8_I32(InFmt_VOP3A *iFmt)
