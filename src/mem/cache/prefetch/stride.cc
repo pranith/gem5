@@ -96,7 +96,7 @@ Stride::findTable(int context)
     // Check if table for given context exists
     auto it = pcTables.find(context);
     if (it != pcTables.end())
-        return it->second;
+        return &it->second;
 
     // If table does not exist yet, create one
     return allocateNewContext(context);
