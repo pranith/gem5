@@ -311,11 +311,11 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
      * Speculative history update
      * -----------------------------------------------
      * Now that the prediction is done the predictor
-     * may update its histories speculative. (local
+     * may update its histories speculatively. (local
      * and global path). A later squash will revert
      * the history update if needed.
-     * The actual prediction tables will updated once
-     * we know the correct direction.
+     * The actual prediction tables will be updated once
+     * we know the correct direction at commit.
      **/
     updateHistories(tid, hist->pc, hist->uncond, hist->predTaken,
                     hist->target->instAddr(), hist->bpHistory);
@@ -323,7 +323,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
 
     if (iPred) {
         // Update the indirect predictor with the direction prediction
-        iPred->update(tid, seqNum, hist->pc, false, hist->predTaken,
+        iPred->update(tid, seqNum, hist->pc, false /* squash */, hist->predTaken,
                       *hist->target, brType, hist->indirectHistory);
     }
 

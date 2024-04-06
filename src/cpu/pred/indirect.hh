@@ -117,6 +117,17 @@ class IndirectPredictor : public SimObject
      * @param i_history The pointer to the history object.
      */
     virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) = 0;
+
+    /**
+     * Is the branch type an indirect non-return branch.
+     * @param type Branch Type
+     * @return True if the branch type is an indirect non-return type.
+     */
+    bool isIndirectNoReturn(BranchType type) {
+        return (type == BranchType::CallIndirect) ||
+               (type == BranchType::IndirectUncond);
+    }
+
 };
 
 } // namespace branch_prediction
