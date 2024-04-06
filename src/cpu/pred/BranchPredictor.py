@@ -145,6 +145,20 @@ class SimpleIndirectPredictor(IndirectPredictor):
     instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
 
 
+class ITTAGE(IndirectPredictor):
+    type = "ITTAGE"
+    cxx_class = "gem5::branch_prediction::ITTAGE"
+    cxx_header = "cpu/pred/ittage.hh"
+
+    nHistoryTables = Param.Unsigned(15, "Number of history tables")
+    minHist = Param.Unsigned(8, "Minimum history size")
+    maxHist = Param.Unsigned(2000, "Maximum history size")
+    histBufferSize = Param.Unsigned(4096,
+            "A large number to track all branch histories")
+    histLengths = VectorParam.Int(
+        [0, 0, 10, 16, 27, 44, 60, 96, 109, 219, 449, 487, 714, 1313, 2146,
+         3881], "History lengths")
+
 class BranchPredictor(SimObject):
     type = "BranchPredictor"
     cxx_class = "gem5::branch_prediction::BPredUnit"
