@@ -43,6 +43,7 @@
  * Definitions of a base set associative compressed superblocks tag store.
  */
 
+#include "debug/CacheComp.hh"
 #include "mem/cache/tags/compressed_tags.hh"
 
 #include "mem/cache/tags/indexing_policies/base.hh"
