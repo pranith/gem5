@@ -174,9 +174,6 @@ class ITTAGE: public IndirectPredictor
     // as valid or not for delivering the prediction
     int8_t useAltOnNA;
 
-    // For the pseudo-random number generator
-    int seed;
-
     // For the IUM
     int ptIumRetire;
     int ptIumFetch;

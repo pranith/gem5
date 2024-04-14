@@ -13,7 +13,6 @@ ITTAGE::ITTAGE(const ITTAGEParams &params)
     : IndirectPredictor(params),
       threadHistory(params.numThreads),
       useAltOnNA(0),
-      seed(0),
       ptIumRetire(0),
       ptIumFetch(0),
       nHistoryTables(params.nHistoryTables),
