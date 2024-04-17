@@ -1695,14 +1695,15 @@ class Rancho_BTB(SimpleBTB):
 class Rancho_BP(TournamentBP):
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
-    localPredictorSize = 64
-    localCtrBits = 2
-    localHistoryTableSize = 64
-    globalPredictorSize = 1024
-    globalCtrBits = 2
-    choicePredictorSize = 1024
-    choiceCtrBits = 2
-    instShiftAmt = 2
+    localHistoryTableSize = 4096  # is 3.6 KiB but gem5 requires power of 2
+    localPredictorSize = 16384
+    globalPredictorSize = 16384
+    choicePredictorSize = 16384
+    localCtrBits = 4
+    globalCtrBits = 4
+    choiceCtrBits = 4
+    indirectBranchPred = SimpleIndirectPredictor()
+    indirectBranchPred.indirectSets = 16
 
 
 class Rancho_ICache(Cache):

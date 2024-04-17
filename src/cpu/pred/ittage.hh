@@ -74,8 +74,16 @@ class ITTAGE: public IndirectPredictor
     {
       public:
         uint64_t tag;
-        Addr pred;
-        IUMEntry() {}
+        PCStateBase* pred;
+        IUMEntry()
+        {
+            pred = new PCStateBase();
+        }
+
+        ~IUMEntry()
+        {
+            delete pred;
+        }
     };
 
     /**
@@ -127,10 +135,10 @@ class ITTAGE: public IndirectPredictor
 
     struct ITTageBranchInfo
     {
-        Addr predTarget; // Prediction
-        Addr altTarget;  // Alternate prediction
-        Addr pred;       // LTTAGE prediction
-        Addr longestMatchPredTarget;
+        PCStateBase* predTarget; // Prediction
+        PCStateBase* altTarget;  // Alternate prediction
+        PCStateBase* pred;       // LTTAGE prediction
+        PCStateBase* longestMatchPredTarget;
         int hitBank;
         int altBank;
         Addr branchPC;
@@ -151,9 +159,9 @@ class ITTAGE: public IndirectPredictor
         int * ct1;
 
         ITTageBranchInfo(int sz)
-            : predTarget(0),
-              altTarget(0),
-              pred(0),
+            : predTarget(nullptr),
+              altTarget(nullptr),
+              pred(nullptr),
               hitBank(0),
               altBank(0),
               branchPC(0),
@@ -198,6 +206,8 @@ class ITTAGE: public IndirectPredictor
 
     bool lookup(Addr br_addr, PCStateBase& br_target, ThreadID tid,
                 void *& bp_history);
+    bool lookup(ThreadID tid, Addr br_addr, PCStateBase * &br_target,
+                void *& bp_history);
     void recordIndirect(Addr br_addr, Addr tgt_addr, InstSeqNum seq_num,
                         ThreadID tid);
     void commit(InstSeqNum seq_num, ThreadID tidi, void * indirect_history);
@@ -221,7 +231,7 @@ class ITTAGE: public IndirectPredictor
     {}
 
     virtual const PCStateBase* lookup(ThreadID tid, InstSeqNum sn,
-                                      Addr pc, void * &i_history) override { return nullptr; };
+                                      Addr pc, void * &i_history);
 
     virtual void update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash,
                         bool taken, const PCStateBase& target,
