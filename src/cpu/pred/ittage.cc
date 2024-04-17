@@ -112,9 +112,9 @@ ITTAGE::ITTAGE(const ITTAGEParams &params)
     tableIndices = new int [nHistoryTables + 1];
     tableTags = new int [nHistoryTables + 1];
 }
+
 void
-ITTAGE::genIndirectInfo(ThreadID tid,
-        void* & indirect_history)
+ITTAGE::genIndirectInfo(ThreadID tid, void* & indirect_history)
 {
     // record the GHR as it was before this prediction
     // It will be used to recover the history in case this prediction is
@@ -133,15 +133,32 @@ ITTAGE::updateDirectionInfo(ThreadID tid, bool actually_taken, void * &indirect_
 }
 
 bool
-ITTAGE::lookup(Addr br_addr, PCStateBase& br_target, ThreadID tid,
-                void *& bp_history)
+ITTAGE::lookup(ThreadID tid, Addr pc, PCStateBase * &br_target,
+               void * &bp_history)
 {
     ITTageBranchInfo * bi = static_cast<ITTageBranchInfo *>(bp_history);
-    calculateIndicesAndTags(tid, br_addr, bi, true);
-    tagePredict(tid, br_addr, bi);
+    calculateIndicesAndTags(tid, pc, bi, true);
+    tagePredict(tid, pc, bi);
     // Check IUM table
-    Addr pred = predictIUM(bi);
-    return pred != 0;
+    PCStateBase* pred = predictIUM(bi);
+    return pred != nullptr;
+}
+
+const PCStateBase*
+ITTAGE::lookup(ThreadID tid, InstSeqNum sn, Addr pc, void * &i_history)
+{
+    assert(i_history==nullptr);
+
+    genIndirectInfo(tid, i_history);
+    ITTageBranchInfo * history = static_cast<ITTageBranchInfo *>(i_history);
+
+    history->branchPC = pc;
+    history->condBranch = false;
+
+    PCStateBase* target = nullptr;
+    history->taken = lookup(tid, pc, target, history);
+
+    return target;
 }
 
 void
@@ -222,7 +239,7 @@ ITTAGE::calculateIndicesAndTags(ThreadID tid, Addr branch_pc,
     }
 }
 
-Addr
+PCStateBase*
 ITTAGE::predictIUM(ITTageBranchInfo * bi)
 {
     int ium_tag = (bi->hitBank) + (tableIndices[bi->hitBank] << 4);
@@ -276,7 +293,7 @@ ITTAGE::IUMUpdate(Addr target, void * b)
     int ium_tag = (bi->hitBank) + (bi->tableIndices[bi->hitBank] << 4);
     ptIumFetch--;
     IUMTable[ptIumFetch & ((1 << LOGSPEC) - 1)].tag = ium_tag;
-    IUMTable[ptIumFetch & ((1 << LOGSPEC) - 1)].pred = target;
+    set(IUMTable[ptIumFetch & ((1 << LOGSPEC) - 1)].pred, target);
 }
 
 void
