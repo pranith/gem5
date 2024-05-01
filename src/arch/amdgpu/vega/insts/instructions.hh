@@ -36430,6 +36430,142 @@ namespace VegaISA
         void completeAcc(GPUDynInstPtr) override;
     }; // Inst_DS__DS_READ_B128
 
+    class Inst_DS__DS_READ_B64_TR_B4 : public Inst_DS
+    {
+      public:
+        Inst_DS__DS_READ_B64_TR_B4(InFmt_DS*);
+        ~Inst_DS__DS_READ_B64_TR_B4();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return 1; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_a
+                return 4;
+              case 1: //vgpr_rtn
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_DS__DS_READ_B64_TR_B4
+
+    class Inst_DS__DS_READ_B96_TR_B6 : public Inst_DS
+    {
+      public:
+        Inst_DS__DS_READ_B96_TR_B6(InFmt_DS*);
+        ~Inst_DS__DS_READ_B96_TR_B6();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return 1; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_a
+                return 4;
+              case 1: //vgpr_rtn
+                return 12;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_DS__DS_READ_B96_TR_B6
+
+    class Inst_DS__DS_READ_B64_TR_B8 : public Inst_DS
+    {
+      public:
+        Inst_DS__DS_READ_B64_TR_B8(InFmt_DS*);
+        ~Inst_DS__DS_READ_B64_TR_B8();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return 1; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_a
+                return 4;
+              case 1: //vgpr_rtn
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_DS__DS_READ_B64_TR_B8
+
+    class Inst_DS__DS_READ_B64_TR_B16 : public Inst_DS
+    {
+      public:
+        Inst_DS__DS_READ_B64_TR_B16(InFmt_DS*);
+        ~Inst_DS__DS_READ_B64_TR_B16();
+
+        int
+        getNumOperands() override
+        {
+            return numDstRegOperands() + numSrcRegOperands();
+        } // getNumOperands
+
+        int numDstRegOperands() override { return 1; }
+        int numSrcRegOperands() override { return 1; }
+
+        int
+        getOperandSize(int opIdx) override
+        {
+            switch (opIdx) {
+              case 0: //vgpr_a
+                return 4;
+              case 1: //vgpr_rtn
+                return 8;
+              default:
+                fatal("op idx %i out of bounds\n", opIdx);
+                return -1;
+            }
+        } // getOperandSize
+
+        void execute(GPUDynInstPtr) override;
+        void initiateAcc(GPUDynInstPtr) override;
+        void completeAcc(GPUDynInstPtr) override;
+    }; // Inst_DS__DS_READ_B64_TR_B16
+
     class Inst_MUBUF__BUFFER_LOAD_FORMAT_X : public Inst_MUBUF
     {
       public:

@@ -1586,10 +1586,10 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_OP_DS__DS_WRITE_B96,
         &Decoder::decode_OP_DS__DS_WRITE_B128,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_DS__DS_READ_B64_TR_B4,
+        &Decoder::decode_OP_DS__DS_READ_B96_TR_B6,
+        &Decoder::decode_OP_DS__DS_READ_B64_TR_B8,
+        &Decoder::decode_OP_DS__DS_READ_B64_TR_B16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -8287,6 +8287,30 @@ namespace VegaISA
     {
         return new Inst_DS__DS_WRITE_B128(&iFmt->iFmt_DS);
     } // decode_OP_DS__DS_WRITE_B128
+
+    GPUStaticInst*
+    Decoder::decode_OP_DS__DS_READ_B64_TR_B4(MachInst iFmt)
+    {
+        return new Inst_DS__DS_READ_B64_TR_B4(&iFmt->iFmt_DS);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_DS__DS_READ_B96_TR_B6(MachInst iFmt)
+    {
+        return new Inst_DS__DS_READ_B96_TR_B6(&iFmt->iFmt_DS);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_DS__DS_READ_B64_TR_B8(MachInst iFmt)
+    {
+        return new Inst_DS__DS_READ_B64_TR_B8(&iFmt->iFmt_DS);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_DS__DS_READ_B64_TR_B16(MachInst iFmt)
+    {
+        return new Inst_DS__DS_READ_B64_TR_B16(&iFmt->iFmt_DS);
+    }
 
     GPUStaticInst*
     Decoder::decode_OP_DS__DS_READ_B96(MachInst iFmt)

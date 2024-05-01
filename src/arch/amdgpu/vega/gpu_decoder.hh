@@ -673,6 +673,10 @@ namespace VegaISA
         GPUStaticInst* decode_OP_DS__DS_MAX_SRC2_F64(MachInst);
         GPUStaticInst* decode_OP_DS__DS_WRITE_B96(MachInst);
         GPUStaticInst* decode_OP_DS__DS_WRITE_B128(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B4(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B96_TR_B6(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B8(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B16(MachInst);
         GPUStaticInst* decode_OP_DS__DS_READ_B96(MachInst);
         GPUStaticInst* decode_OP_DS__DS_READ_B128(MachInst);
         GPUStaticInst* decode_OP_EXP(MachInst);
