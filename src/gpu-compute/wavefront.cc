@@ -1693,6 +1693,40 @@ Wavefront::printProgress()
     }
 }
 
+void
+Wavefront::setMfmaAScale(int idx, uint8_t value)
+{
+    assert(idx < VegaISA::NumVecElemPerVecReg);
+    mfmaAScale[idx] = value;
+}
+
+void
+Wavefront::setMfmaBScale(int idx, uint8_t value)
+{
+    assert(idx < VegaISA::NumVecElemPerVecReg);
+    mfmaBScale[idx] = value;
+}
+
+uint8_t
+Wavefront::getMfmaAScale(int idx)
+{
+    assert(idx < VegaISA::NumVecElemPerVecReg);
+    uint8_t rv = mfmaAScale[idx];
+    mfmaAScale[idx] = 0;
+
+    return rv;
+}
+
+uint8_t
+Wavefront::getMfmaBScale(int idx)
+{
+    assert(idx < VegaISA::NumVecElemPerVecReg);
+    uint8_t rv = mfmaBScale[idx];
+    mfmaBScale[idx] = 0;
+
+    return rv;
+}
+
 Wavefront::WavefrontStats::WavefrontStats(statistics::Group *parent)
     : statistics::Group(parent),
       ADD_STAT(numInstrExecuted,
