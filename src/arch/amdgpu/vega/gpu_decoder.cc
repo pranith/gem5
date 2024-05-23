@@ -1000,8 +1000,8 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_OPU_VOP3__V_PRNG_B32,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_PERMLANE16_SWAP_B32,
+        &Decoder::decode_OPU_VOP3__V_PERMLANE32_SWAP_B32,
         &Decoder::decode_OPU_VOP3__V_CVT_F32_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -3169,9 +3169,9 @@ namespace VegaISA
         &Decoder::decode_OP_VOP1__V_CVT_F32_BF8,
         &Decoder::decode_OP_VOP1__V_CVT_PK_F32_FP8,
         &Decoder::decode_OP_VOP1__V_CVT_PK_F32_BF8,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_VOP1__V_PRNG_B32,
+        &Decoder::decode_OP_VOP1__V_PERMLANE16_SWAP_B32,
+        &Decoder::decode_OP_VOP1__V_PERMLANE32_SWAP_B32,
         &Decoder::decode_OP_VOP1__V_CVT_F32_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -6656,6 +6656,18 @@ namespace VegaISA
     Decoder::decode_OPU_VOP3__V_PRNG_B32(MachInst iFmt)
     {
         return new Inst_VOP3__V_PRNG_B32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst *
+    Decoder::decode_OPU_VOP3__V_PERMLANE16_SWAP_B32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_PERMLANE16_SWAP_B32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst *
+    Decoder::decode_OPU_VOP3__V_PERMLANE32_SWAP_B32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_PERMLANE32_SWAP_B32(&iFmt->iFmt_VOP3A);
     }
 
     GPUStaticInst*
@@ -12279,6 +12291,18 @@ namespace VegaISA
     Decoder::decode_OP_VOP1__V_PRNG_B32(MachInst iFmt)
     {
         return new Inst_VOP1__V_PRNG_B32(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst *
+    Decoder::decode_OP_VOP1__V_PERMLANE16_SWAP_B32(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_PERMLANE16_SWAP_B32(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst *
+    Decoder::decode_OP_VOP1__V_PERMLANE32_SWAP_B32(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_PERMLANE32_SWAP_B32(&iFmt->iFmt_VOP1);
     }
 
     GPUStaticInst*
