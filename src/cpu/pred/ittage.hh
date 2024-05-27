@@ -221,11 +221,27 @@ class ITTAGE: public IndirectPredictor
 
     void update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash,
                 bool taken, const PCStateBase& target,
-                BranchType br_type, void * &i_history) override {};
+                BranchType br_type, void * &i_history) override;
 
-    virtual void squash(ThreadID tid, InstSeqNum sn, void * &i_history) override {};
+    virtual void squash(ThreadID tid, InstSeqNum sn, void * &i_history) override
+    {
+        if (i_history == nullptr) {
+            return;
+        }
 
-    virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) override {};
+        ITTageBranchInfo *history = static_cast<ITTageBranchInfo *>(i_history);
+
+        // delete history
+        delete history;
+        i_history = nullptr;
+    }
+
+    virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) override
+    {
+        // Update retire history path
+        // historyUpdate(tid, branch_pc, taken, i_history, target_addr, false);
+        squash(tid, sn, i_history);
+    }
 
   private:
 

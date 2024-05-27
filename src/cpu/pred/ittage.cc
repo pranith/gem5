@@ -2,6 +2,7 @@
 
 #include "base/random.hh"
 #include "cpu/static_inst.hh"
+#include "debug/ITTage.hh"
 
 namespace gem5
 {
@@ -295,6 +296,7 @@ ITTAGE::historyUpdate(ThreadID tid, Addr branch_pc, bool taken,
 {
     ITTageBranchInfo * bi = (ITTageBranchInfo *)(b);
     bi->taken = taken;
+
     ThreadHistory & thread_history = threadHistory[tid];
     int Y;
     FoldedHistorytmp * H;
@@ -383,19 +385,22 @@ ITTAGE::getRandom() const
 
 // Predictor update
 void
-ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
-                         Addr target, ThreadID tid, void * indirect_history)
+ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
+                bool taken, const PCStateBase& target,
+                BranchType br_type, void * &i_history)
 {
-    //ITTageBranchInfo * bi2 = (ITTageBranchInfo *)(indirect_history);
     int nrand = getRandom();
+    Addr target_addr = target.instAddr();
+    
     ptIumRetire--;
     // Recompute the prediction by the ITTAGE predictor
     ITTageBranchInfo * bi = new ITTageBranchInfo(nHistoryTables + 1);
     calculateIndicesAndTags(tid, branch_pc, bi, false);
     tagePredict(tid, branch_pc, bi);
+
     // Allocation if the Longest Matching entry does not provide the correct
     // entry
-    bool alloc = (bi->longestMatchPredTarget != target);
+    bool alloc = (bi->longestMatchPredTarget != target_addr);
 
     if ((bi->hitBank > 0) & (bi->altBank >= 0)) {
         // Manage the selection between longest matching and alternate
@@ -406,9 +411,9 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
         if (pseudoNewAlloc) {
             if (bi->altTarget) {
                 if (bi->longestMatchPredTarget != bi->altTarget) {
-                    if ((bi->altTarget == target) ||
-                            (bi->longestMatchPredTarget == target)) {
-                        if (bi->altTarget == target) {
+                    if ((bi->altTarget == target_addr) ||
+                            (bi->longestMatchPredTarget == target_addr)) {
+                        if (bi->altTarget == target_addr) {
                             if (useAltOnNA < 7) {
                                 useAltOnNA++;
                             }
@@ -425,7 +430,7 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
 
     if (alloc) {
         // Need to compute the target field (Offset + Region pointer)
-        uint64_t region = (target >> 18);
+        uint64_t region = (target_addr >> 18);
         int ptRegion = -1;
 
         // Associative search on the region table
@@ -457,7 +462,7 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
             }
         }
 
-        int indTarget = (target & ((1 << 18) - 1)) + (ptRegion << 18);
+        int indTarget = (target_addr & ((1 << 18) - 1)) + (ptRegion << 18);
         // We allocate an entry with a longer history to avoid ping-pong,
         // we do not choose systematically the next entry, but among the 2
         // next entries
@@ -508,7 +513,7 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
         }
     }
 
-    if (bi->longestMatchPredTarget == target) {
+    if (bi->longestMatchPredTarget == target_addr) {
         if (gtable[bi->hitBank][tableIndices[bi->hitBank]].ctr < 3) {
             gtable[bi->hitBank][tableIndices[bi->hitBank]].ctr++;
         }
@@ -518,7 +523,7 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
         } else {
             // Replace the target field by the new target
             // Need to compute the target field :-)
-            uint64_t region = (target >> 18);
+            uint64_t region = (target_addr >> 18);
             int ptRegion = -1;
 
             for (int i = 0; i < 128; i++) {
@@ -550,7 +555,7 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
                 }
             }
 
-            int indTarget = (target & ((1 << 18) - 1)) + (ptRegion << 18);
+            int indTarget = (target_addr & ((1 << 18) - 1)) + (ptRegion << 18);
             ITTageEntry * table =
                 static_cast<ITTageEntry *>(gtable[bi->hitBank]);
             table[tableIndices[bi->hitBank]].target = indTarget;
@@ -560,14 +565,14 @@ ITTAGE::updateBrIndirect(Addr branch_pc, uint16_t br_type, bool taken,
     // Update the u bit
     if (bi->hitBank != 0) {
         if (bi->longestMatchPredTarget != bi->altTarget) {
-            if (bi->longestMatchPredTarget == target) {
+            if (bi->longestMatchPredTarget == target_addr) {
                 gtable[bi->hitBank][tableIndices[bi->hitBank]].u = 1;
             }
         }
     }
 
     // Update retire history path
-    historyUpdate(tid, branch_pc, taken, indirect_history, target, false);
+    // historyUpdate(tid, branch_pc, taken, i_history, target_addr, false);
 }
 
 void
