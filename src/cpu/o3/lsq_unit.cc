@@ -626,15 +626,21 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
     // along to commit without the instruction completing.
     if (load_fault != NoFault || !inst->readPredicate()) {
         // Send this instruction to commit, also make sure iew stage
-        // realizes there is activity.  Mark it as executed unless it
-        // is a strictly ordered load that needs to hit the head of
-        // commit.
+        // realizes there is activity.  Mark it as executed unless
+        // 1) it is a strictly ordered load that needs to hit the head of
+        //    commit, or
+        // 2) the instruction is rescheduled for replay, e.g. due to
+        //    load-store forwarding mis-match
         if (!inst->readPredicate())
             inst->forwardOldRegs();
         DPRINTF(LSQUnit, "Load [sn:%lli] not executed from %s\n",
                 inst->seqNum,
                 (load_fault != NoFault ? "fault" : "predication"));
-        if (!(inst->hasRequest() && inst->strictlyOrdered()) ||
+        // LSQUnit clears Issued flag after calling rescheduleMemInst and
+        // CanIssue flag is cleared in the rescheduleMemInst.
+        // If either of them are set then it isn't rescheduled one.
+        if (((inst->isIssued() || inst->readyToIssue()) &&
+             !(inst->hasRequest() && inst->strictlyOrdered())) ||
             inst->isAtCommit()) {
             inst->setExecuted();
         }
