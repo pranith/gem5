@@ -56,6 +56,7 @@ from common import (
 from common.cores.arm import (
     HPI,
     O3_ARM_v7a,
+    ex5_big,
 )
 
 # Pre-defined CPU configurations. Each tuple must be ordered as : (cpu_class,
@@ -66,10 +67,14 @@ cpu_types = {
     "minor": (MinorCPU, devices.L1I, devices.L1D, devices.L2),
     "hpi": (HPI.HPI, HPI.HPI_ICache, HPI.HPI_DCache, HPI.HPI_L2),
     "o3": (
-        O3_ARM_v7a.O3_ARM_v7a_3,
-        O3_ARM_v7a.O3_ARM_v7a_ICache,
-        O3_ARM_v7a.O3_ARM_v7a_DCache,
-        O3_ARM_v7a.O3_ARM_v7aL2,
+        ex5_big.ex5_big,
+        ex5_big.L1I,
+        ex5_big.L1D,
+        ex5_big.L2,
+        #        O3_ARM_v7a.O3_ARM_v7a_3,
+        #        O3_ARM_v7a.O3_ARM_v7a_ICache,
+        #        O3_ARM_v7a.O3_ARM_v7a_DCache,
+        #        O3_ARM_v7a.O3_ARM_v7aL2,
     ),
 }
 
