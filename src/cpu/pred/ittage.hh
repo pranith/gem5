@@ -82,6 +82,7 @@ class ITTAGE: public IndirectPredictor
 
     // Class for storing speculative predictions: i.e. provided by a table
     // entry that has already provided a still speculative prediction
+    // IUM: Immediate update mimicker
     class IUMEntry
     {
       public:
@@ -223,6 +224,11 @@ class ITTAGE: public IndirectPredictor
                 bool taken, const PCStateBase& target,
                 BranchType br_type, void * &i_history) override;
 
+    void
+    updateBrIndirect(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
+                     bool taken, const Addr& target,
+                     BranchType br_type, void * &i_history);
+
     virtual void squash(ThreadID tid, InstSeqNum sn, void * &i_history) override
     {
         if (i_history == nullptr) {
@@ -236,12 +242,7 @@ class ITTAGE: public IndirectPredictor
         i_history = nullptr;
     }
 
-    virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) override
-    {
-        // Update retire history path
-        // historyUpdate(tid, branch_pc, taken, i_history, target_addr, false);
-        squash(tid, sn, i_history);
-    }
+    void commit(ThreadID tid, InstSeqNum sn, void * &i_history) override;
 
   private:
 

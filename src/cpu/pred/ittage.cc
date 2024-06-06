@@ -138,6 +138,9 @@ ITTAGE::lookup(ThreadID tid, InstSeqNum sn, Addr pc, void * &i_history)
     PCStateBase* target = nullptr;
     history->taken = lookup(tid, pc, target, history);
 
+    DPRINTF(ITTage, "ITTage lookup PC: %#x, taken: %d, target: %#x\n",
+            pc, history->taken, target ? target->instAddr() : 0);
+
     return target;
 }
 
@@ -254,19 +257,21 @@ ITTAGE::recordIndirect(Addr br_addr, Addr tgt_addr, InstSeqNum seq_num,
     HistoryEntry entry(br_addr, tgt_addr, seq_num);
     threadHistory[tid].pathHist.push_back(entry);
 }
+*/
 
 void
-ITTAGE::commit(InstSeqNum seq_num, ThreadID tid, void * indirect_history)
+ITTAGE::commit(ThreadID tid, InstSeqNum sn, void * &indirect_history)
 {
-    if (!indirect_history){
-      return;
+    if (!indirect_history) {
+        return;
     }
+
     ITTageBranchInfo * bi = static_cast<ITTageBranchInfo *>(indirect_history);
-    updateBrIndirect(bi->branchPC, 0, bi->taken, bi->pred, tid,
-                     indirect_history);
+    //updateBrIndirect(tid, sn, bi->branchPC, 0, bi->taken, bi->pred, (BranchType)(0), indirect_history);
+
     delete bi;
+    indirect_history = nullptr;
 }
-*/
 
 void
 ITTAGE::historyUpdate(ThreadID tid, Addr branch_pc, bool taken,
@@ -383,14 +388,27 @@ ITTAGE::getRandom() const
     return random_mt.random<int>();
 }
 
-// Predictor update
 void
 ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
                 bool taken, const PCStateBase& target,
                 BranchType br_type, void * &i_history)
 {
-    int nrand = getRandom();
+    if (i_history == nullptr) {
+        genIndirectInfo(tid, i_history);
+    }
+
     Addr target_addr = target.instAddr();
+    updateBrIndirect(tid, sn, branch_pc, squash,
+           taken, target_addr, br_type, i_history);
+}
+
+// Predictor update
+void
+ITTAGE::updateBrIndirect(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
+                         bool taken, const Addr &target_addr,
+                         BranchType br_type, void * &i_history)
+{
+    int nrand = getRandom();
     
     ptIumRetire--;
     // Recompute the prediction by the ITTAGE predictor
@@ -402,7 +420,7 @@ ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
     // entry
     bool alloc = (bi->longestMatchPredTarget != target_addr);
 
-    if ((bi->hitBank > 0) & (bi->altBank >= 0)) {
+    if ((bi->hitBank > 0) && (bi->altBank >= 0)) {
         // Manage the selection between longest matching and alternate
         // matching for "pseudo"-newly allocated longest matching entry
         bool pseudoNewAlloc =
@@ -572,7 +590,7 @@ ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
     }
 
     // Update retire history path
-    // historyUpdate(tid, branch_pc, taken, i_history, target_addr, false);
+    historyUpdate(tid, branch_pc, taken, i_history, target_addr, false);
 }
 
 void
