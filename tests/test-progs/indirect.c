@@ -20,8 +20,8 @@ int main()
 {
   int count = 0, calls = 0;
   int (*f_ptr)(int*);
-  for (int i = 0; i < 100; i++) {
-    if (i % 7 == 0) {
+  for (int i = 0; i < 1000; i++) {
+    if (i % 2 == 0) {
       f_ptr = func2;
     } else {
       f_ptr = func1;
