@@ -57,6 +57,8 @@ enum PrivilegeMode
 {
     PRV_U = 0,
     PRV_S = 1,
+    // NEVER SET prv = PRV_HS!
+    PRV_HS = 2, // H-extension
     PRV_M = 3
 };
 
@@ -177,6 +179,8 @@ class ISA : public BaseISA
 
     bool getEnableRvv() const { return enableRvv; }
 
+    bool isV() const;
+
     void
     clearLoadReservation(ContextID cid)
     {
@@ -207,6 +211,23 @@ class ISA : public BaseISA
         return (_rvType == RV32) ? sext<32>(addr) : addr;
     }
 };
+
+// V-bit utilities (H-extension)
+
+bool isV(ExecContext *xc);
+bool isV(ThreadContext *tc);
+
+void setV(ExecContext *xc);
+void setV(ThreadContext *tc);
+
+void resetV(ExecContext *xc);
+void resetV(ThreadContext *tc);
+
+Fault updateFPUStatus(
+    ExecContext *xc, ExtMachInst machInst, bool set_dirty);
+
+Fault updateVPUStatus(
+    ExecContext *xc, ExtMachInst machInst, bool set_dirty, bool check_vill);
 
 } // namespace RiscvISA
 } // namespace gem5
