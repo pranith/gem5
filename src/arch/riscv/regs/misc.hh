@@ -1368,7 +1368,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
         isaExtsFlags('h')}},
     {CSR_VSATP,
         {"vsatp", MISCREG_VSATP, rvTypeFlags(RV64),
-        isaExtsFlags('h')}}
+        isaExtsFlags('h')}},
 };
 
 /**
