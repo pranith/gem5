@@ -371,30 +371,15 @@ decode QUADRANT default Unknown::unknown() {
             Rc1 = rvSext(Rc1 << imm);
         }}, uint64_t);
         format CompressedLoad {
-<<<<<<< HEAD
             0x1: decode ENABLE_ZCD {
                 0x1: c_fldsp({{
                     offset = CIMM5<4:3> << 3 |
-                             CIMM1 << 5 |
-                             CIMM5<2:0> << 6;
+                            CIMM1 << 5 |
+                            CIMM5<2:0> << 6;
                 }}, {{
-                    STATUS status = xc->readMiscReg(MISCREG_STATUS);
-                    if (status.fs == FPUStatus::OFF)
-                        return std::make_shared<IllegalInstFault>("FPU is off",
-                                                                   machInst);
-
-                    status.fs = FPUStatus::DIRTY;
-                    xc->setMiscReg(MISCREG_STATUS, status);
-=======
-            0x1: c_fldsp({{
-                offset = CIMM5<4:3> << 3 |
-                         CIMM1 << 5 |
-                         CIMM5<2:0> << 6;
-            }}, {{
-                bool set_dirty = true;
-                Fault fault = updateFPUStatus(xc, machInst, set_dirty);
-                if (fault != NoFault) { return fault; }
->>>>>>> babc0bd069 (arch-riscv: V-bit utils and FPU, VPU status update)
+                    bool set_dirty = true;
+                    Fault fault = updateFPUStatus(xc, machInst, set_dirty);
+                    if (fault != NoFault) { return fault; }
 
                     Fc1_bits = Mem;
                 }}, {{
@@ -479,7 +464,6 @@ decode QUADRANT default Unknown::unknown() {
             }
         }
         format CompressedStore {
-<<<<<<< HEAD
             0x5: decode ENABLE_ZCD {
                 0x0: decode CFUNCT6LOW3 {
                     0x0: decode JTINDEX5TO7 {
@@ -508,20 +492,9 @@ decode QUADRANT default Unknown::unknown() {
                     offset = CIMM6<5:3> << 3 |
                              CIMM6<2:0> << 6;
                 }}, {{
-                    STATUS status = xc->readMiscReg(MISCREG_STATUS);
-                    if (status.fs == FPUStatus::OFF)
-                        return std::make_shared<IllegalInstFault>("FPU is off",
-                                                                   machInst);
-=======
-            0x5: c_fsdsp({{
-                offset = CIMM6<5:3> << 3 |
-                         CIMM6<2:0> << 6;
-            }}, {{
-                bool set_dirty = false;
-                Fault fault = updateFPUStatus(xc, machInst, set_dirty);
-                if (fault != NoFault) { return fault; }
->>>>>>> babc0bd069 (arch-riscv: V-bit utils and FPU, VPU status update)
-
+                    bool set_dirty = false;
+                    Fault fault = updateFPUStatus(xc, machInst, set_dirty);
+                    if (fault != NoFault) { return fault; }
                     Mem_ud = Fc2_bits;
                 }}, {{
                     EA = rvSext(sp + offset);

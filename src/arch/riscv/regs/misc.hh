@@ -53,6 +53,7 @@
 
 #include "arch/generic/vec_pred_reg.hh"
 #include "arch/generic/vec_reg.hh"
+#include "arch/riscv/fault_codes.hh"
 #include "arch/riscv/types.hh"
 #include "base/bitunion.hh"
 #include "base/types.hh"
@@ -625,10 +626,10 @@ constexpr uint64_t isaExtsFlags() {
 
 const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_USTATUS,
-        {"ustatus", MISCREG_USTATUS, rvTypeFlags(RV64, RV32),
+        {"ustatus", MISCREG_STATUS, rvTypeFlags(RV64, RV32),
          isaExtsFlags('n')}},
     {CSR_UIE,
-        {"uie", MISCREG_UIE, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
+        {"uie", MISCREG_IE, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
     {CSR_UTVEC,
         {"utvec", MISCREG_UTVEC, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
     {CSR_USCRATCH,
@@ -642,14 +643,14 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_UTVAL,
         {"utval", MISCREG_UTVAL, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
     {CSR_UIP,
-        {"uip", MISCREG_UIP, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
+        {"uip", MISCREG_IP, rvTypeFlags(RV64, RV32), isaExtsFlags('n')}},
     {CSR_FFLAGS,
         {"fflags", MISCREG_FFLAGS, rvTypeFlags(RV64, RV32),
          isaExtsFlags('f')}},
     {CSR_FRM,
         {"frm", MISCREG_FRM, rvTypeFlags(RV64, RV32), isaExtsFlags('f')}},
     {CSR_FCSR,
-        {"fcsr", MISCREG_FCSR, rvTypeFlags(RV64, RV32), isaExtsFlags('f')}},
+        {"fcsr", MISCREG_FFLAGS, rvTypeFlags(RV64, RV32), isaExtsFlags('f')}},
     {CSR_CYCLE,
         {"cycle", MISCREG_CYCLE, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_TIME,
@@ -838,7 +839,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
          isaExtsFlags()}},
 
     {CSR_SSTATUS,
-        {"sstatus", MISCREG_SSTATUS, rvTypeFlags(RV64, RV32),
+        {"sstatus", MISCREG_STATUS, rvTypeFlags(RV64, RV32),
          isaExtsFlags('s')}},
     {CSR_SEDELEG,
         {"sedeleg", MISCREG_SEDELEG, rvTypeFlags(RV64, RV32),
@@ -847,7 +848,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
         {"sideleg", MISCREG_SIDELEG, rvTypeFlags(RV64, RV32),
          isaExtsFlags('s')}},
     {CSR_SIE,
-        {"sie", MISCREG_SIE, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
+        {"sie", MISCREG_IE, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_STVEC,
         {"stvec", MISCREG_STVEC, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_SCOUNTEREN,
@@ -864,7 +865,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_STVAL,
         {"stval", MISCREG_STVAL, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_SIP,
-        {"sip", MISCREG_SIP, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
+        {"sip", MISCREG_IP, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_SATP,
         {"satp", MISCREG_SATP, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_SENVCFG,
@@ -881,7 +882,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_MHARTID,
         {"mhartid", MISCREG_HARTID, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MSTATUS,
-        {"mstatus", MISCREG_MSTATUS, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
+        {"mstatus", MISCREG_STATUS, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MISA,
         {"misa", MISCREG_ISA, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MEDELEG,
@@ -889,7 +890,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_MIDELEG,
         {"mideleg", MISCREG_MIDELEG, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MIE,
-        {"mie", MISCREG_MIE, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
+        {"mie", MISCREG_IE, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MTVEC,
         {"mtvec", MISCREG_MTVEC, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MCOUNTEREN,
@@ -907,7 +908,7 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
     {CSR_MTVAL,
         {"mtval", MISCREG_MTVAL, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_MIP,
-        {"mip", MISCREG_MIP, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
+        {"mip", MISCREG_IP, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     {CSR_PMPCFG0,
         {"pmpcfg0", MISCREG_PMPCFG0, rvTypeFlags(RV64, RV32), isaExtsFlags()}},
     // pmpcfg1 rv32 only
@@ -2036,6 +2037,211 @@ CSRMasks[enums::Num_RiscvType][enums::Num_PrivilegeModeSet] = {
             {CSR_MISA, MISA_MASKS[RV64]},
             {CSR_MIE, MI_MASK[enums::MHSU]},
             {CSR_MIP, MI_MASK[enums::MHSU]},
+        },
+    },
+};
+
+
+// Write masks are needed since some visible (readable)
+// register bits can be read-only.
+// Without using a write mask, writes are permitted to
+// bits that should be read-only.
+
+// Normal software (e.g. a linux kernel) wouldn't do this,
+// but our "hardware" shouldn't allow this to any program.
+
+// For RV32 we leave the write masks the same as the
+// "visible bits" masks that are defined above for now
+
+// Moreover, instead of writing out a write mask for
+// every register, we only specify masks for registers
+// whose write mask differs from the total visible bits.
+// This saves space and improves readability.
+// To use the map we lookup a CSR for its write-mask
+// If the mask is present it is used, otherwise the write mask
+// that should be used is the "visible bits" mask define above.
+
+const std::unordered_map<int, RegVal>
+CSRWriteMasks[enums::Num_RiscvType][enums::Num_PrivilegeModeSet] = {
+    [RV32] = {
+        [enums::M] = {},
+        [enums::MU] = {},
+        [enums::MNU] = {},
+        [enums::MSU] = {},
+        [enums::MNSU] = {},
+    },
+    [RV64] = {
+        [enums::M] = {
+            {CSR_MIDELEG, 0ULL},
+            {CSR_MEDELEG, 0ULL},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK
+            },
+            {CSR_MIP, 0ULL},
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK
+            },
+        },
+        [enums::MU] = {
+            {CSR_MIDELEG, 0ULL},
+            {CSR_MEDELEG, 0ULL},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK  |
+                STATUS_MPRV_MASK // added for U
+            },
+            {CSR_MIP, 0ULL},
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK
+            },
+        },
+        [enums::MNU] = {
+            {CSR_MIDELEG, 0ULL},
+            {CSR_MEDELEG, 0ULL},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK  |
+                STATUS_MPRV_MASK // added for U
+            },
+            {CSR_MIP, 0ULL},
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK
+            },
+        },
+        [enums::MSU] = {
+            {CSR_MIDELEG, SSI_MASK | STI_MASK | SEI_MASK},
+            {CSR_MEDELEG, DELEGABLE_EXCPS},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK  |
+                STATUS_MPRV_MASK | // added for U
+                STATUS_TSR_MASK  | STATUS_SIE_MASK | STATUS_SPIE_MASK |
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK
+                // added for S
+            },
+            {CSR_MIP,
+                SEI_MASK | SSI_MASK | STI_MASK // added for S
+            },
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK |
+                SSI_MASK | STI_MASK | SEI_MASK // added for S
+            },
+            {CSR_SSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_SIE_MASK | STATUS_SPIE_MASK | // no TSR here!
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK
+                // added for S
+            },
+            {CSR_SIP,
+                SSI_MASK // added for S
+            },
+            {CSR_SIE,
+                MSI_MASK | MTI_MASK | MEI_MASK |
+                SSI_MASK | STI_MASK | SEI_MASK // added for S
+            },
+        },
+        [enums::MNSU] = {
+            {CSR_MIDELEG, SSI_MASK | STI_MASK | SEI_MASK},
+            {CSR_MEDELEG, DELEGABLE_EXCPS},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK  |
+                STATUS_MPRV_MASK | // added for U
+                STATUS_TSR_MASK  | STATUS_SIE_MASK | STATUS_SPIE_MASK |
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK |
+                STATUS_UXL_MASK | STATUS_SXL_MASK
+                // added for S
+            },
+            {CSR_MIP,
+                SEI_MASK | SSI_MASK | STI_MASK // added for S
+            },
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK |
+                SSI_MASK | STI_MASK | SEI_MASK // added for S
+            },
+            {CSR_SSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_SIE_MASK | STATUS_SPIE_MASK | // no TSR here!
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK |
+                STATUS_UXL_MASK
+                // added for S
+            },
+            {CSR_SIP,
+                SSI_MASK // added for S
+            },
+            {CSR_SIE,
+                MSI_MASK | MTI_MASK | MEI_MASK |
+                SSI_MASK | STI_MASK | SEI_MASK // added for S
+            },
+        },
+        [enums::MHSU] = {
+            {CSR_MIDELEG, SSI_MASK | STI_MASK | SEI_MASK},
+            {CSR_MEDELEG, DELEGABLE_EXCPS_WITH_RVH},
+            {CSR_MSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_MIE_MASK | STATUS_MPIE_MASK | STATUS_MPP_MASK |
+                STATUS_TW_MASK  | STATUS_TVM_MASK  |
+                STATUS_MPRV_MASK | // added for U
+                STATUS_TSR_MASK  | STATUS_SIE_MASK | STATUS_SPIE_MASK |
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK |
+                // added for S
+                STATUS_GVA_MASK | STATUS_MPV_MASK // added for H
+            },
+            {CSR_MIP,
+                SEI_MASK | SSI_MASK | STI_MASK | // added for S
+                VSSI_MASK // added for H
+            },
+            {CSR_MIE,
+                MSI_MASK | MTI_MASK | MEI_MASK |
+                SSI_MASK | STI_MASK | SEI_MASK | // added for S
+                HS_INTERRUPTS // added for H (multiple bits)
+            },
+            {CSR_SSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_SIE_MASK | STATUS_SPIE_MASK | // no TSR here!
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK
+                // added for S
+            },
+            {CSR_SIP,
+                SSI_MASK // added for S
+            },
+            {CSR_SIE,
+                SSI_MASK | STI_MASK | SEI_MASK // added for S
+            },
+            {CSR_HSTATUS,
+                HSTATUS_VTSR_MASK | HSTATUS_VTW_MASK |
+                HSTATUS_VTVM_MASK | HSTATUS_HU_MASK |
+                HSTATUS_SPVP_MASK | HSTATUS_SPV_MASK |
+                HSTATUS_GVA_MASK    // added for H
+            },
+            {CSR_HIP,
+                VSSI_MASK // added for H
+            },
+            {CSR_HIE,
+                HS_INTERRUPTS // added for H
+            },
+            {CSR_HVIP,
+                HS_INTERRUPTS & ~SGEI_MASK // added for H
+            },
+            {CSR_VSSTATUS,
+                STATUS_XS_MASK | STATUS_FS_MASK | STATUS_VS_MASK |
+                STATUS_SIE_MASK | STATUS_SPIE_MASK | // no TSR here!
+                STATUS_SPP_MASK  | STATUS_SUM_MASK | STATUS_MXR_MASK
+                // added for H
+            },
+            {CSR_VSIP,
+                VSSI_MASK // added for H
+            },
+            {CSR_VSIE,
+                HS_INTERRUPTS & ~SGEI_MASK // added for H
+            },
+
         },
     },
 };

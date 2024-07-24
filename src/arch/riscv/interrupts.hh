@@ -62,6 +62,9 @@ class Interrupts : public BaseInterrupts
     std::bitset<NumInterruptTypes> ip;
     std::bitset<NumInterruptTypes> ie;
 
+    // added for H-extension
+    std::bitset<NumInterruptTypes> hvip;
+
     std::vector<gem5::IntSinkPin<Interrupts>*> localInterruptPins;
   protected:
     int nmi_cause;
@@ -109,8 +112,11 @@ class Interrupts : public BaseInterrupts
 
     uint64_t readIP() const { return (uint64_t)ip.to_ulong(); }
     uint64_t readIE() const { return (uint64_t)ie.to_ulong(); }
+    uint64_t readHVIP() const { return (uint64_t)hvip.to_ulong(); }
+
     void setIP(const uint64_t& val) { ip = val; }
     void setIE(const uint64_t& val) { ie = val; }
+    void setHVIP(const uint64_t& val) { hvip = val; }
 
     void serialize(CheckpointOut &cp) const override;
 
