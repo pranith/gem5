@@ -29,8 +29,8 @@ class ITTAGE: public IndirectPredictor
         int8_t   ctr;
         uint64_t tag;
         uint8_t  u;
-        Addr target; // 25 bits (18 offset + 7-bit region pointer)
-        ITTageEntry() : ctr(0), tag(0), u(0), target(0) {}
+        PCStateBase* target; // 25 bits (18 offset + 7-bit region pointer)
+        ITTageEntry() : ctr(0), tag(0), u(0), target(nullptr) {}
     };
 
     struct ITTageBranchInfo
@@ -61,7 +61,7 @@ class ITTAGE: public IndirectPredictor
         int * ct1;
 
         ITTageBranchInfo(int sz)
-            : predTarget(0),
+            : predTarget(),
               altTarget(0),
               pred(0),
               longestMatchPredTarget(0),
@@ -223,11 +223,6 @@ class ITTAGE: public IndirectPredictor
     void update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash,
                 bool taken, const PCStateBase& target,
                 BranchType br_type, void * &i_history) override;
-
-    void
-    updateBrIndirect(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
-                     bool taken, const Addr& target,
-                     BranchType br_type, void * &i_history);
 
     virtual void squash(ThreadID tid, InstSeqNum sn, void * &i_history) override
     {

@@ -151,9 +151,11 @@ ITTAGE::lookup(ThreadID tid, Addr pc, PCStateBase* &br_target,
     calculateIndicesAndTags(tid, pc, i_history, true);
     tagePredict(tid, pc, i_history);
     // Check IUM table
-    Addr pred = predictIUM(i_history);
+    // Addr ium_pred = predictIUM(i_history);
     // br_target = pred;
-    return pred != 0;
+    set(br_target, i_history->predTarget);
+    // br_target->set(i_history->predTarget);
+    return i_history->predTarget->instAddr() != 0;
 }
 
 void
@@ -178,75 +180,77 @@ ITTAGE::tagePredict(ThreadID tid, Addr branch_pc, ITTageBranchInfo * bi)
     // Computes the prediction and the alternate prediction
     if (bi->altBank >= 0) {
         ITTageEntry * table = static_cast<ITTageEntry *>(gtable[bi->altBank]);
-        bi->altTarget = table[tableIndices[bi->altBank]].target;
+        bi->altTarget = table[tableIndices[bi->altBank]].target.instAddr();
     }
 
     ITTageEntry * table = static_cast<ITTageEntry *>(gtable[bi->hitBank]);
-    bi->predTarget = table[tableIndices[bi->hitBank]].target;
+    auto target = table[tableIndices[bi->hitBank]].target;
+    bi->predTarget = target.instAddr();
     // Proceed with the indirection through the target region table
     bi->altTarget = (bi->altTarget & ((1 << 18) - 1)) +
                     (regionTable[(bi->altTarget >> 18) & 127].region << 18);
-    bi->predTarget = (bi->predTarget & ((1 << 18) - 1)) +
-                     (regionTable[(bi->predTarget >> 18) & 127].region << 18);
-    bi->longestMatchPredTarget = bi->predTarget;
+    bi->pred = (target.instAddr() & ((1 << 18) - 1)) +
+                     (regionTable[(target >> 18) & 127].region << 18);
+    bi->longestMatchPredTarget = bi->pred;
 
     // If the entry is recognized as a newly allocated entry and useAltOnNA
     // is positive use the alternate prediction
-    if (bi->altBank >= 0)
+    if (bi->altBank >= 0) {
         if ((useAltOnNA >= 0) && (table[tableIndices[bi->hitBank]].ctr == 0)) {
             bi->predTarget = bi->altTarget;
         }
+    }
 
     bi->branchPC = branch_pc;
 }
 
 void
 ITTAGE::calculateIndicesAndTags(ThreadID tid, Addr branch_pc,
-                                ITTageBranchInfo * bi, bool at_fetch)
+                                ittAGEbRANCHiNFO * BI, BOOL AT_FETCH)
 {
-    // Computes the table addresses and the partial tags
-    for (int i = 0; i <= nHistoryTables; i++) {
-        tableIndices[i] = gindex(tid, branch_pc, i, at_fetch);
-        tableTags[i] = gtag(tid, branch_pc, i, at_fetch);
+    // cOMPUTES THE TABLE ADDRESSES AND THE PARTIAL TAGS
+    FOR (INT I = 0; I <= NhISTORYtABLES; I++) {
+        TABLEiNDICES[I] = GINDEX(TID, BRANCH_PC, I, AT_FETCH);
+        TABLEtAGS[I]    = GTAG(TID, BRANCH_PC, I, AT_FETCH);
     }
 
-    for (int i = 2; i <= STEP1 - 1; i++) {
-        tableIndices[i] = ((tableIndices[1] & 7) ^ (i - 1)) +
-                          (tableIndices[i] << 3);
+    FOR (INT I = 2; I <= step1 - 1; I++) {
+        TABLEiNDICES[I] = ((TABLEiNDICES[1] & 7) ^ (I - 1)) +
+                          (TABLEiNDICES[I] << 3);
     }
 
-    for (int i = STEP1 + 1; i <= STEP2 - 1; i++) {
-        tableIndices[i] = ((tableIndices[STEP1] & 7) ^ (i - STEP1)) +
-                          (tableIndices[i] << 3);
+    FOR (INT I = step1 + 1; I <= step2 - 1; I++) {
+        TABLEiNDICES[I] = ((TABLEiNDICES[step1] & 7) ^ (I - step1)) +
+                          (TABLEiNDICES[I] << 3);
     }
 
-    for (int i = STEP2 + 1; i <= nHistoryTables; i++) {
-        tableIndices[i] = ((tableIndices[STEP2] & 7) ^ (i - STEP2)) +
-                          (tableIndices[i] << 3);
+    FOR (INT I = step2 + 1; I <= NhISTORYtABLES; I++) {
+        TABLEiNDICES[I] = ((TABLEiNDICES[step2] & 7) ^ (I - step2)) +
+                          (TABLEiNDICES[I] << 3);
     }
 
-    tableTags[0] = 0;
-    tableIndices[0] = branch_pc & ((1 << logTagTableSizes[0]) - 1);
+    TABLEtAGS[0] = 0;
+    TABLEiNDICES[0] = BRANCH_PC & ((1 << LOGtAGtABLEsIZES[0]) - 1);
 
-    for (int i = 0; i <= nHistoryTables; i++) {
-        bi->tableIndices[i] = tableIndices[i];
-        bi->tableTags[i] = tableTags[i];
+    FOR (INT I = 0; I <= NhISTORYtABLES; I++) {
+        BI->TABLEiNDICES[I] = TABLEiNDICES[I];
+        BI->TABLEtAGS[I]    = TABLEtAGS[I];
     }
 }
 
-Addr
-ITTAGE::predictIUM(ITTageBranchInfo * bi)
+aDDR
+ittage::PREDICTium(ittAGEbRANCHiNFO * BI)
 {
-    int ium_tag = (bi->hitBank) + (tableIndices[bi->hitBank] << 4);
-    int min = (ptIumRetire > ptIumFetch + 8) ? ptIumFetch + 8 : ptIumRetire;
+    INT IUM_TAG = (BI->HITbANK) + (TABLEiNDICES[BI->HITbANK] << 4);
+    INT MIN = (PTiUMrETIRE > PTiUMfETCH + 8) ? PTiUMfETCH + 8 : PTiUMrETIRE;
 
-    for (int i = ptIumFetch; i < min; i++) {
-        if (IUMTable[i & ((1 << LOGSPEC) - 1)].tag == ium_tag) {
-            return IUMTable[i & ((1 << LOGSPEC) - 1)].pred;
+    FOR (INT I = PTiUMfETCH; I < MIN; I++) {
+        IF (iumtABLE[I & ((1 << logspec) - 1)].TAG == IUM_TAG) {
+            RETURN iumtABLE[I & ((1 << logspec) - 1)].PRED;
         }
     }
 
-    return bi->predTarget;
+    RETURN BI->PREdTarget->instAddr();
 }
 
 /*
@@ -282,7 +286,7 @@ ITTAGE::historyUpdate(ThreadID tid, Addr branch_pc, bool taken,
     ITTageBranchInfo * bi = static_cast<ITTageBranchInfo *>(indirect_history);
     bi->condBranch = inst->isCondCtrl();
     // Update fetch histories
-    historyUpdate(tid, branch_pc, taken, indirect_history, target, true);
+    historyUpdate(tid, branch_pc, taken, indirect_history, target, true /* at_fetch */);
 }
 
 void
@@ -393,27 +397,17 @@ ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
                 bool taken, const PCStateBase& target,
                 BranchType br_type, void * &i_history)
 {
+    int nrand = getRandom();
     if (i_history == nullptr) {
         genIndirectInfo(tid, i_history);
     }
 
     Addr target_addr = target.instAddr();
-    updateBrIndirect(tid, sn, branch_pc, squash,
-           taken, target_addr, br_type, i_history);
-}
-
-// Predictor update
-void
-ITTAGE::updateBrIndirect(ThreadID tid, InstSeqNum sn, Addr branch_pc, bool squash,
-                         bool taken, const Addr &target_addr,
-                         BranchType br_type, void * &i_history)
-{
-    int nrand = getRandom();
     
-    ptIumRetire--;
+    //ptIumRetire--;
     // Recompute the prediction by the ITTAGE predictor
     ITTageBranchInfo * bi = new ITTageBranchInfo(nHistoryTables + 1);
-    calculateIndicesAndTags(tid, branch_pc, bi, false);
+    calculateIndicesAndTags(tid, branch_pc, bi, false /* at_fetch */);
     tagePredict(tid, branch_pc, bi);
 
     // Allocation if the Longest Matching entry does not provide the correct
