@@ -1,4 +1,3 @@
-# -*- mode:python -*-
 # Copyright (c) 2024 Arm Limited
 # All rights reserved.
 #
@@ -34,43 +33,5 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Import("*")
-
-def get_tlm_paths():
-    tlm_dir = Dir(env["CONF"]["TLM_PATH"])
-    assert tlm_dir is not None and tlm_dir != "."
-
-    include_dir = tlm_dir.Dir("include")
-    lib_dir = tlm_dir.Dir("lib")
-
-    model_lib = "libarmtlmchi.so"
-    if not lib_dir.File(model_lib).exists():
-        print(f"Error: Can't find {model_lib} in AMBA TLM directory.")
-        print(f"TLM path: {tlm_dir}")
-        Exit(1)
-
-    return include_dir, lib_dir, "armtlmchi"
-
-
-if env["CONF"]["BUILD_TLM"]:
-    include_path, lib_path, tlm_lib = get_tlm_paths()
-
-    env.Append(CPPPATH=include_path)
-    env.Append(LIBPATH=lib_path)
-    env.Append(LIBS=[tlm_lib])
-
-    SimObject(
-        "TlmController.py", sim_objects=["TlmController"], tags="arm isa"
-    )
-    Source("utils.cc", tags="arm isa")
-    Source("controller.cc", tags="arm isa")
-    Source('tlm_chi.cc', tags='arm isa')
-    PySource('m5', 'tlm_chi.py')
-    DebugFlag("TLM", tags="arm isa")
-
-    print(
-        "BUILD_TLM set: "
-        f"Building TLM integration with libarmtlmchi.so from '{lib_path}'\n"
-    )
-elif not GetOption("silent"):
-    print("BUILD_TLM not set, not building CHI-TLM integration\n")
+import _m5.tlm_chi
+from _m5.tlm_chi import *
