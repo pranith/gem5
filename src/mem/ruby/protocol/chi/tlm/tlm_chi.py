@@ -34,4 +34,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import _m5.tlm_chi
+import _m5.tlm_chi_gen
 from _m5.tlm_chi import *
+from _m5.tlm_chi_gen import *
+
+
+def expect_equal(received, expected):
+    if received != expected:
+        print(f"Comparison mismatch. Received:{received}, Expected:{expected}")
+        return False
+    else:
+        return True
