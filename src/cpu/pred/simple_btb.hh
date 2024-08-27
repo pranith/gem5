@@ -41,9 +41,13 @@
 #ifndef __CPU_PRED_SIMPLE_BTB_HH__
 #define __CPU_PRED_SIMPLE_BTB_HH__
 
+#include <memory>
+
+#include "base/cache/associative_cache.hh"
 #include "base/logging.hh"
 #include "base/types.hh"
 #include "cpu/pred/btb.hh"
+#include "cpu/pred/btb_indexing_policy.hh"
 #include "params/SimpleBTB.hh"
 
 namespace gem5
@@ -51,6 +55,76 @@ namespace gem5
 
 namespace branch_prediction
 {
+
+class BTBEntry : public CacheEntry
+{
+  public:
+    using TagExtractor = std::function<Addr(Addr)>;
+
+    /** The entry's target. */
+    std::unique_ptr<PCStateBase> target;
+
+    /** The entry's thread id. */
+    ThreadID tid;
+
+    /** Pointer to the static branch instruction at this address */
+    StaticInstPtr inst;
+
+    /** Update the entry in the BTB */
+    void update(ThreadID _tid,
+                const PCStateBase &_target,
+                StaticInstPtr _inst)
+    {
+        tid = _tid;
+        set(target, _target);
+        inst = _inst;
+    }
+
+    /** Match the tag of the BTB entry */
+    bool match(const Addr _tag, ThreadID _tid)
+    {
+        return (match(_tag) && (tid == _tid));
+    }
+
+    /** Copy constructor */
+    BTBEntry(const BTBEntry &other) : CacheEntry(other)
+    {
+        tid   = other.tid;
+        inst  = other.inst;
+    }
+
+    /** Default constructor */
+    BTBEntry(TagExtractor ext) : CacheEntry(ext), tid(0), inst(nullptr)  {}
+
+    using CacheEntry::match;
+};
+
+class BTBCache : public AssociativeCache<BTBEntry>
+{
+  private:
+    BTBIndexingPolicy *indexingPolicy;
+
+  public:
+    BTBCache(const char *_my_name, const size_t num_entries,
+             const size_t associativity,
+             replacement_policy::Base *_repl_policy,
+             BaseIndexingPolicy *_indexing_policy)
+        : AssociativeCache(_my_name, num_entries, associativity,
+                           _repl_policy, _indexing_policy,
+                           BTBEntry(genTagExtractor(_indexing_policy)))
+    {
+        indexingPolicy = static_cast<BTBIndexingPolicy*>(_indexing_policy);
+    }
+
+    BTBEntry *findEntry(const Addr instPC, ThreadID tid) const;
+    BTBEntry *accessEntry(Addr instPC, ThreadID tid);
+    BTBEntry *findVictim(const Addr addr, ThreadID tid);
+
+  private:
+    using AssociativeCache<BTBEntry>::accessEntry;
+    using AssociativeCache<BTBEntry>::findEntry;
+    using AssociativeCache<BTBEntry>::findVictim;
+};
 
 class SimpleBTB : public BranchTargetBuffer
 {
@@ -60,44 +134,18 @@ class SimpleBTB : public BranchTargetBuffer
     void memInvalidate() override;
     bool valid(ThreadID tid, Addr instPC) override;
     const PCStateBase *lookup(ThreadID tid, Addr instPC,
-                           BranchType type = BranchType::NoBranch) override;
+                              BranchType type = BranchType::NoBranch) override;
     void update(ThreadID tid, Addr instPC, const PCStateBase &target_pc,
-                           BranchType type = BranchType::NoBranch,
-                           StaticInstPtr inst = nullptr) override;
+                BranchType type = BranchType::NoBranch,
+                StaticInstPtr inst = nullptr) override;
     const StaticInstPtr getInst(ThreadID tid, Addr instPC) override;
 
-
   private:
-    struct BTBEntry
-    {
-        /** The entry's tag. */
-        Addr tag = 0;
-
-        /** The entry's target. */
-        std::unique_ptr<PCStateBase> target;
-
-        /** The entry's thread id. */
-        ThreadID tid;
-
-        /** Whether or not the entry is valid. */
-        bool valid = false;
-
-        /** Pointer to the static branch instruction at this address */
-        StaticInstPtr inst = nullptr;
-    };
-
-
     /** Returns the index into the BTB, based on the branch's PC.
      *  @param inst_PC The branch to look up.
      *  @return Returns the index into the BTB.
      */
     inline unsigned getIndex(Addr instPC, ThreadID tid);
-
-    /** Returns the tag bits of a given address.
-     *  @param inst_PC The branch's address.
-     *  @return Returns the tag bits.
-     */
-    inline Addr getTag(Addr instPC);
 
     /** Internal call to find an address in the BTB
      * @param instPC The branch's address.
@@ -106,28 +154,7 @@ class SimpleBTB : public BranchTargetBuffer
     BTBEntry *findEntry(Addr instPC, ThreadID tid);
 
     /** The actual BTB. */
-    std::vector<BTBEntry> btb;
-
-    /** The number of entries in the BTB. */
-    unsigned numEntries;
-
-    /** The index mask. */
-    unsigned idxMask;
-
-    /** The number of tag bits per entry. */
-    unsigned tagBits;
-
-    /** The tag mask. */
-    unsigned tagMask;
-
-    /** Number of bits to shift PC when calculating index. */
-    unsigned instShiftAmt;
-
-    /** Number of bits to shift PC when calculating tag. */
-    unsigned tagShiftAmt;
-
-    /** Log2 NumThreads used for hashing threadid */
-    unsigned log2NumThreads;
+    BTBCache btb;
 };
 
 } // namespace branch_prediction

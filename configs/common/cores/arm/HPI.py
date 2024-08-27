@@ -1683,6 +1683,11 @@ class HPI_MMU(ArmMMU):
 class HPI_BTB(SimpleBTB):
     numEntries = 128
     tagBits = 18
+    associativity = 1
+    btbReplPolicy = LRURP()
+    btbIndexingPolicy = SetAssociative(
+        size="384B", entry_size=3, assoc=associativity
+    )
 
 
 class HPI_BP(TournamentBP):

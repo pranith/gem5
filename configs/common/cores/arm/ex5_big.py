@@ -108,6 +108,11 @@ class ex5_big_FUP(FUPool):
 class ex5_big_BTB(SimpleBTB):
     numEntries = 4096
     tagBits = 18
+    associativity = 1
+    btbReplPolicy = LRURP()
+    btbIndexingPolicy = SetAssociative(
+        size="12288B", entry_size=3, assoc=associativity
+    )
 
 
 # Bi-Mode Branch Predictor
