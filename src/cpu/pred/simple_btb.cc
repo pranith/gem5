@@ -44,22 +44,20 @@
 #include "base/trace.hh"
 #include "debug/BTB.hh"
 
-namespace gem5
+namespace gem5::branch_prediction
 {
 
-namespace branch_prediction
-{
-
+/*
 BTBEntry*
-BTBCache::findEntry(const Addr instPC, ThreadID tid) const
+BTBCache::findEntry(const KeyType &key) const
 {
-    auto tag = indexingPolicy->extractTag(instPC);
+    // auto tag = indexingPolicy->extractTag(key.address);
 
-    auto entries = indexingPolicy->getPossibleEntries(instPC, tid);
+    auto entries = indexingPolicy->getPossibleEntries(key);
 
     for (auto it = entries.begin(); it != entries.end(); it++) {
         BTBEntry *entry = static_cast<BTBEntry*>(*it);
-        if (entry->match(tag, tid)) {
+        if (entry->match(key)) {
             return entry;
         }
     }
@@ -68,9 +66,9 @@ BTBCache::findEntry(const Addr instPC, ThreadID tid) const
 }
 
 BTBEntry*
-BTBCache::accessEntry(Addr instPC, ThreadID tid)
+BTBCache::accessEntry(const KeyType &key)
 {
-    auto entry = findEntry(instPC, tid);
+    auto entry = findEntry(key);
 
     if (entry) {
         replPolicy->touch(entry->replacementData);
@@ -80,9 +78,9 @@ BTBCache::accessEntry(Addr instPC, ThreadID tid)
 }
 
 BTBEntry *
-BTBCache::findVictim(const Addr addr, ThreadID tid)
+BTBCache::findVictim(const KeyType &key)
 {
-    auto candidates = indexingPolicy->getPossibleEntries(addr, tid);
+    auto candidates = indexingPolicy->getPossibleEntries(key);
 
     auto repl_victim = replPolicy->getVictim(candidates);
     auto victim = static_cast<BTBEntry*>(repl_victim);
@@ -91,11 +89,12 @@ BTBCache::findVictim(const Addr addr, ThreadID tid)
 
     return victim;
 }
+*/
 
 SimpleBTB::SimpleBTB(const SimpleBTBParams &p)
     : BranchTargetBuffer(p),
       btb("simpleBTB", p.numEntries, p.associativity,
-          p.btbReplPolicy, p.btbIndexingPolicy)
+          p.btbReplPolicy, p.btbIndexingPolicy, BTBEntry(genTagExtractor(p.btbIndexingPolicy)))
 {
     DPRINTF(BTB, "BTB: Creating BTB object.\n");
 
@@ -111,15 +110,15 @@ SimpleBTB::memInvalidate()
 }
 
 BTBEntry *
-SimpleBTB::findEntry(Addr instPC, ThreadID tid)
+SimpleBTB::findEntry(const KeyType &key)
 {
-    return btb.findEntry(instPC, tid);
+    return btb.findEntry(key);
 }
 
 bool
-SimpleBTB::valid(ThreadID tid, Addr instPC)
+SimpleBTB::valid(const KeyType &key)
 {
-    BTBEntry *entry = btb.findEntry(instPC, tid);
+    BTBEntry *entry = btb.findEntry(key);
 
     return entry != nullptr;
 }
@@ -128,11 +127,11 @@ SimpleBTB::valid(ThreadID tid, Addr instPC)
 // address is valid, and also the address.  For now will just use addr = 0 to
 // represent invalid entry.
 const PCStateBase *
-SimpleBTB::lookup(ThreadID tid, Addr instPC, BranchType type)
+SimpleBTB::lookup(const KeyType &key, BranchType type)
 {
     stats.lookups[type]++;
 
-    BTBEntry *entry = btb.accessEntry(instPC, tid);
+    BTBEntry *entry = btb.accessEntry(key);
 
     if (entry) {
         return entry->target.get();
@@ -143,9 +142,9 @@ SimpleBTB::lookup(ThreadID tid, Addr instPC, BranchType type)
 }
 
 const StaticInstPtr
-SimpleBTB::getInst(ThreadID tid, Addr instPC)
+SimpleBTB::getInst(const KeyType &key)
 {
-    BTBEntry *entry = btb.findEntry(instPC, tid);
+    BTBEntry *entry = btb.findEntry(key);
 
     if (entry) {
         return entry->inst;
@@ -155,18 +154,18 @@ SimpleBTB::getInst(ThreadID tid, Addr instPC)
 }
 
 void
-SimpleBTB::update(ThreadID tid, Addr instPC,
+SimpleBTB::update(const KeyType &key,
                   const PCStateBase &target,
                   BranchType type, StaticInstPtr inst)
 {
     stats.updates[type]++;
 
-    BTBEntry *victim = btb.findVictim(instPC, tid);
+    BTBEntry *victim = btb.findVictim(key);
 
-    btb.insertEntry(instPC, victim);
-    victim->update(tid, target, inst);
+    btb.insertEntry(key, victim);
+    victim->update(key.tid, target, inst);
 }
 
 
-} // namespace branch_prediction
-} // namespace gem5
+} // namespace gem5::branch_prediction
+

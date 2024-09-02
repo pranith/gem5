@@ -48,6 +48,7 @@
 #include "cpu/static_inst.hh"
 #include "params/BranchTargetBuffer.hh"
 #include "sim/clocked_object.hh"
+#include "mem/cache/tags/indexing_policies/base.hh"
 
 namespace gem5
 {
@@ -55,9 +56,23 @@ namespace gem5
 namespace branch_prediction
 {
 
+class BTBTagTypes
+{
+  public:
+    struct KeyType
+    {
+        Addr address;
+        ThreadID tid;
+    };
+    using Params = BaseIndexingPolicyParams;
+};
+
+
 class BranchTargetBuffer : public ClockedObject
 {
   public:
+    using KeyType = BTBTagTypes::KeyType;
+  
     typedef BranchTargetBufferParams Params;
     typedef enums::BranchType BranchType;
 
@@ -70,7 +85,7 @@ class BranchTargetBuffer : public ClockedObject
      *  @param inst_PC The address of the branch to look up.
      *  @return Whether or not the branch exists in the BTB.
      */
-    virtual bool valid(ThreadID tid, Addr instPC) = 0;
+    virtual bool valid(const KeyType &key) = 0;
 
     /** Looks up an address in the BTB to get the target of the branch.
      *  @param inst_PC The address of the branch to look up.
@@ -78,7 +93,7 @@ class BranchTargetBuffer : public ClockedObject
      *  @return The target of the branch or nullptr if the branch is not
      *          in the BTB.
      */
-    virtual const PCStateBase *lookup(ThreadID tid, Addr instPC,
+    virtual const PCStateBase *lookup(const KeyType &key,
                             BranchType type = BranchType::NoBranch) = 0;
 
     /** Looks up an address in the BTB and return the instruction
@@ -86,22 +101,22 @@ class BranchTargetBuffer : public ClockedObject
      *  @param inst_PC The address of the branch to look up.
      *  @return Returns the target of the branch.
      */
-    virtual const StaticInstPtr getInst(ThreadID tid, Addr instPC) = 0;
+    virtual const StaticInstPtr getInst(const KeyType &key) = 0;
 
 
     /** Updates the BTB with the target of a branch.
      *  @param inst_pc The address of the branch being updated.
      *  @param target_pc The target address of the branch.
      */
-    virtual void update(ThreadID tid, Addr inst_pc,
-                          const PCStateBase &target_pc,
-                          BranchType type = BranchType::NoBranch,
-                          StaticInstPtr inst = nullptr) = 0;
+    virtual void update(const KeyType &key,
+                        const PCStateBase &target_pc,
+                        BranchType type = BranchType::NoBranch,
+                        StaticInstPtr inst = nullptr) = 0;
 
     /** Update BTB statistics
      */
     virtual void incorrectTarget(Addr inst_pc,
-                                  BranchType type = BranchType::NoBranch)
+                                 BranchType type = BranchType::NoBranch)
     {
       stats.mispredict[type]++;
     }

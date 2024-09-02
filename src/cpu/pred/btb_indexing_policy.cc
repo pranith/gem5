@@ -55,17 +55,19 @@ BTBIndexingPolicy::BTBIndexingPolicy(const Params &p)
 }
 
 uint32_t
-BTBIndexingPolicy::extractSet(const Addr instPC, ThreadID tid) const
+BTBIndexingPolicy::extractSet(const KeyType &key) const
 {
+    auto instPC = key.address;
+    auto tid    = key.tid;
     return ((instPC >> setShift)
             ^ (tid << (tagShift - setShift - log2NumThreads)))
         & setMask;
 }
 
 std::vector<ReplaceableEntry*>
-BTBIndexingPolicy::getPossibleEntries(const Addr instPC, ThreadID tid) const
+BTBIndexingPolicy::getPossibleEntries(const KeyType &key) const
 {
-    return sets[extractSet(instPC, tid)];
+    return sets[extractSet(key)];
 }
 
 void BTBIndexingPolicy::setNumThreads(unsigned num_threads)
