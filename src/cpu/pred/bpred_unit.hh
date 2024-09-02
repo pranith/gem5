@@ -196,7 +196,7 @@ class BPredUnit : public SimObject
      */
     bool BTBValid(ThreadID tid, Addr instPC)
     {
-        return btb->valid(tid, instPC);
+        return btb->valid({instPC, tid});
     }
 
     /**
@@ -210,7 +210,7 @@ class BPredUnit : public SimObject
     const PCStateBase *
     BTBLookup(ThreadID tid, PCStateBase &instPC)
     {
-        return btb->lookup(tid, instPC.instAddr());
+        return btb->lookup({instPC.instAddr(), tid});
     }
 
     /**
@@ -226,7 +226,7 @@ class BPredUnit : public SimObject
     const StaticInstPtr
     BTBGetInst(ThreadID tid, Addr instPC)
     {
-        return btb->getInst(tid, instPC);
+        return btb->getInst({instPC, tid});
     }
 
     /**
@@ -238,7 +238,7 @@ class BPredUnit : public SimObject
     BTBUpdate(ThreadID tid, Addr instPC, const PCStateBase &target)
     {
         ++stats.BTBUpdates;
-        return btb->update(tid, instPC, target);
+        return btb->update({instPC, tid}, target);
     }
 
 

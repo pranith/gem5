@@ -48,27 +48,31 @@
 #include "base/types.hh"
 #include "cpu/pred/btb.hh"
 #include "cpu/pred/btb_indexing_policy.hh"
+#include "mem/cache/replacement_policies/replaceable_entry.hh"
+#include "mem/cache/tags/indexing_policies/base.hh"
 #include "params/SimpleBTB.hh"
+#include "params/BTBIndexingPolicy.hh"
 
 namespace gem5
 {
 
+using BTBIndexingPolicy = IndexingPolicyTemplate<branch_prediction::BTBTagTypes>;
+template class IndexingPolicyTemplate<branch_prediction::BTBTagTypes>;
+
 namespace branch_prediction
 {
 
-class BTBEntry : public CacheEntry
+class BTBEntry : public ReplaceableEntry
 {
   public:
+    using IndexingPolicy = BTBIndexingPolicy;
+    using KeyType = BTBTagTypes::KeyType;
     using TagExtractor = std::function<Addr(Addr)>;
 
-    /** The entry's target. */
-    std::unique_ptr<PCStateBase> target;
-
-    /** The entry's thread id. */
-    ThreadID tid;
-
-    /** Pointer to the static branch instruction at this address */
-    StaticInstPtr inst;
+    /** Default constructor */
+    BTBEntry(TagExtractor ext)
+        : inst(nullptr), tid(0), extractTag(ext), valid(false), tag(MaxAddr)
+    {}
 
     /** Update the entry in the BTB */
     void update(ThreadID _tid,
@@ -81,83 +85,165 @@ class BTBEntry : public CacheEntry
     }
 
     /** Match the tag of the BTB entry */
-    bool match(const Addr _tag, ThreadID _tid)
+    bool match(const KeyType &key)
     {
-        return (match(_tag) && (tid == _tid));
+        return (match(key.address) && (tid == key.tid));
     }
 
     /** Copy constructor */
-    BTBEntry(const BTBEntry &other) : CacheEntry(other)
+    BTBEntry(const BTBEntry &other) : ReplaceableEntry(other)
     {
         tid   = other.tid;
         inst  = other.inst;
+        set(target, other.target);
+        valid = other.valid;
+        tag = other.tag;
+        extractTag = other.extractTag;
     }
 
-    /** Default constructor */
-    BTBEntry(TagExtractor ext) : CacheEntry(ext), tid(0), inst(nullptr)  {}
+    /**
+     * Checks if the entry is valid.
+     *
+     * @return True if the entry is valid.
+     */
+    virtual bool isValid() const { return valid; }
 
-    using CacheEntry::match;
-};
+    /**
+     * Get tag associated to this block.
+     *
+     * @return The tag value.
+     */
+    virtual Addr getTag() const { return tag; }
 
-class BTBCache : public AssociativeCache<BTBEntry>
-{
-  private:
-    BTBIndexingPolicy *indexingPolicy;
-
-  public:
-    BTBCache(const char *_my_name, const size_t num_entries,
-             const size_t associativity,
-             replacement_policy::Base *_repl_policy,
-             BaseIndexingPolicy *_indexing_policy)
-        : AssociativeCache(_my_name, num_entries, associativity,
-                           _repl_policy, _indexing_policy,
-                           BTBEntry(genTagExtractor(_indexing_policy)))
+    /**
+     * Checks if the given tag information corresponds to this entry's.
+     *
+     * @param addr The address value to be compared before tag is extracted
+     * @return True if the tag information match this entry's.
+     */
+    virtual bool
+    match(const Addr addr) const
     {
-        indexingPolicy = static_cast<BTBIndexingPolicy*>(_indexing_policy);
+        return isValid() && (getTag() == extractTag(addr));
     }
 
-    BTBEntry *findEntry(const Addr instPC, ThreadID tid) const;
-    BTBEntry *accessEntry(Addr instPC, ThreadID tid);
-    BTBEntry *findVictim(const Addr addr, ThreadID tid);
+    /**
+     * Insert the block by assigning it a tag and marking it valid. Touches
+     * block if it hadn't been touched previously.
+     *
+     * @param addr The address value.
+     */
+    virtual void
+    insert(const KeyType &key)
+    {
+        setValid();
+        setTag(extractTag(key.address));
+    }
+
+    /** Invalidate the block. Its contents are no longer valid. */
+    virtual void
+    invalidate()
+    {
+        valid = false;
+        setTag(MaxAddr);
+    }
+
+    std::string
+    print() const override
+    {
+        return csprintf("tag: %#x valid: %d | %s", getTag(),
+                        isValid(), ReplaceableEntry::print());
+    }
+
+    /** The entry's target. */
+    std::unique_ptr<PCStateBase> target;
+
+    /** Pointer to the static branch instruction at this address */
+    StaticInstPtr inst;
+
+  protected:
+    /**
+     * Set tag associated to this block.
+     *
+     * @param tag The tag value.
+     */
+    virtual void setTag(Addr _tag) { tag = _tag; }
+
+    /** Set valid bit. The block must be invalid beforehand. */
+    virtual void
+    setValid()
+    {
+        assert(!isValid());
+        valid = true;
+    }
 
   private:
-    using AssociativeCache<BTBEntry>::accessEntry;
-    using AssociativeCache<BTBEntry>::findEntry;
-    using AssociativeCache<BTBEntry>::findVictim;
+    /** The entry's thread id. */
+    ThreadID tid;
+
+    /** Callback used to extract the tag from the entry */
+    TagExtractor extractTag;
+
+    /**
+     * Valid bit. The contents of this entry are only valid if this bit is set.
+     * @sa invalidate()
+     * @sa insert()
+     */
+    bool valid;
+
+    /** The entry's tag. */
+    Addr tag;
+
 };
+
+/**
+ * This helper generates an a tag extractor function object
+ * which will be typically used by Replaceable entries indexed
+ * with the BaseIndexingPolicy.
+ * It allows to "decouple" indexing from tagging. Those entries
+ * would call the functor without directly holding a pointer
+ * to the indexing policy which should reside in the cache.
+ */
+static constexpr auto
+genTagExtractor(BTBIndexingPolicy *ip)
+{
+    return [ip] (Addr addr) { return ip->extractTag(addr); };
+}
 
 class SimpleBTB : public BranchTargetBuffer
 {
   public:
+    using KeyType = BTBTagTypes::KeyType;
     SimpleBTB(const SimpleBTBParams &params);
 
     void memInvalidate() override;
-    bool valid(ThreadID tid, Addr instPC) override;
-    const PCStateBase *lookup(ThreadID tid, Addr instPC,
+    bool valid(const KeyType &key) override;
+    const PCStateBase *lookup(const KeyType &key,
                               BranchType type = BranchType::NoBranch) override;
-    void update(ThreadID tid, Addr instPC, const PCStateBase &target_pc,
+    void update(const KeyType &key, const PCStateBase &target_pc,
                 BranchType type = BranchType::NoBranch,
                 StaticInstPtr inst = nullptr) override;
-    const StaticInstPtr getInst(ThreadID tid, Addr instPC) override;
+    const StaticInstPtr getInst(const KeyType &key) override;
 
   private:
     /** Returns the index into the BTB, based on the branch's PC.
      *  @param inst_PC The branch to look up.
      *  @return Returns the index into the BTB.
      */
-    inline unsigned getIndex(Addr instPC, ThreadID tid);
+    inline unsigned getIndex(const KeyType &key);
 
     /** Internal call to find an address in the BTB
      * @param instPC The branch's address.
      * @return Returns a pointer to the BTB entry if found, nullptr otherwise.
     */
-    BTBEntry *findEntry(Addr instPC, ThreadID tid);
+    BTBEntry *findEntry(const KeyType &key);
 
     /** The actual BTB. */
-    BTBCache btb;
+    AssociativeCache<BTBEntry> btb;
 };
 
-} // namespace branch_prediction
-} // namespace gem5
+} // namespace gem5::branch_prediction
+
+}
 
 #endif // __CPU_PRED_SIMPLE_BTB_HH__

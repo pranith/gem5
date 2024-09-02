@@ -177,7 +177,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
      * chance to detect a branch without a BTB hit.
      */
     stats.BTBLookups++;
-    const PCStateBase * btb_target = btb->lookup(tid, pc.instAddr(), brType);
+    const PCStateBase * btb_target = btb->lookup({pc.instAddr(), tid}, brType);
     if (btb_target) {
         stats.BTBHits++;
         hist->btbHit = true;
@@ -591,10 +591,10 @@ BPredUnit::squash(const InstSeqNum &squashed_sn,
                         hist->seqNum, hist->pc, hist->target->instAddr());
 
             stats.BTBUpdates++;
-            btb->update(tid, hist->pc,
-                            *hist->target,
-                            hist->type,
-                            hist->inst);
+            btb->update({hist->pc, tid},
+			*hist->target,
+			hist->type,
+			hist->inst);
             btb->incorrectTarget(hist->pc, hist->type);
         }
 

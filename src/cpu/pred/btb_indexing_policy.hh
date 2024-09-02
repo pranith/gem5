@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "base/intmath.hh"
+#include "cpu/pred/btb.hh"
 #include "mem/cache/tags/indexing_policies/set_associative.hh"
 #include "params/BTBIndexingPolicy.hh"
 
@@ -58,6 +59,7 @@ namespace gem5::branch_prediction
 class BTBIndexingPolicy : public SetAssociative
 {
   public:
+    using KeyType = BTBTagTypes::KeyType;
     /**
      * Convenience typedef.
      */
@@ -80,7 +82,7 @@ class BTBIndexingPolicy : public SetAssociative
      * @param tid The thread id executing the instruction
      * @return the index of the set
      */
-    uint32_t extractSet(const Addr instPC, ThreadID tid) const;
+    uint32_t extractSet(const KeyType &key) const;
 
   public:
     /**
@@ -91,7 +93,7 @@ class BTBIndexingPolicy : public SetAssociative
      * @return The possible entries.
      */
     std::vector<ReplaceableEntry*>
-    getPossibleEntries(const Addr instPC, ThreadID tid) const;
+    getPossibleEntries(const KeyType &key) const;
 
     /**
      * Set number of threads sharing the BTB

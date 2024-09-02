@@ -107,8 +107,8 @@ class SimpleBTB(BranchTargetBuffer):
     btbReplPolicy = Param.BaseReplacementPolicy(
         LRURP(), "BTB replacement policy"
     )
-    btbIndexingPolicy = Param.BaseIndexingPolicy(
-        BTBIndexingPolicy(), "BTB indexing policy"
+    btbIndexingPolicy = Param.BTBIndexingPolicy(
+        "BTB indexing policy"
     )
 
 
