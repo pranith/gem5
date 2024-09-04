@@ -38,6 +38,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects.ClockedObject import ClockedObject
+from m5.objects.IndexingPolicies import *
+from m5.objects.ReplacementPolicies import *
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import *
@@ -83,6 +85,31 @@ class BranchTargetBuffer(ClockedObject):
     numThreads = Param.Unsigned(Parent.numThreads, "Number of threads")
 
 
+class BTBIndexingPolicy(SimObject):
+    type = "BTBIndexingPolicy"
+    abstract = True
+    cxx_class = "gem5::IndexingPolicyTemplate<gem5::BTBTagTypes>"
+    cxx_header = "cpu/pred/btb_entry.hh"
+    cxx_template_params = ["class Types"]
+
+    # Get the size from the parent (cache)
+    size = Param.MemorySize(Parent.size, "capacity in bytes")
+
+    # Get the entry size from the parent (tags)
+    entry_size = Param.Int(Parent.entry_size, "entry size in bytes")
+
+    # Get the associativity
+    assoc = Param.Int(Parent.assoc, "associativity")
+
+
+class BTBSetAssociative(BTBIndexingPolicy):
+    type = "BTBSetAssociative"
+    cxx_class = "gem5::BTBSetAssociative"
+    cxx_header = "cpu/pred/btb_entry.hh"
+
+    numThreads = Param.Unsigned(Parent.numThreads, "Number of threads")
+
+
 class SimpleBTB(BranchTargetBuffer):
     type = "SimpleBTB"
     cxx_class = "gem5::branch_prediction::SimpleBTB"
@@ -92,6 +119,19 @@ class SimpleBTB(BranchTargetBuffer):
     tagBits = Param.Unsigned(16, "Size of the BTB tags, in bits")
     instShiftAmt = Param.Unsigned(
         Parent.instShiftAmt, "Number of bits to shift instructions by"
+    )
+    associativity = Param.Unsigned(1, "BTB associativity")
+    btbReplPolicy = Param.BaseReplacementPolicy(
+        LRURP(), "BTB replacement policy"
+    )
+    btbIndexingPolicy = Param.BTBIndexingPolicy(
+        BTBSetAssociative(
+            entry_size=2,
+            assoc=Self.associativity,
+            size=Self.numEntries,
+            numThreads=1,
+        ),
+        "BTB indexing policy",
     )
 
 
