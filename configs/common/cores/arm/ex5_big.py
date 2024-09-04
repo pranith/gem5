@@ -115,7 +115,6 @@ class ex5_big_BTB(SimpleBTB):
         num_entries=Parent.numEntries,
         set_shift=Parent.instShiftAmt,
         assoc=Parent.associativity,
-        tag_bits=Parent.tagBits,
     )
 
 

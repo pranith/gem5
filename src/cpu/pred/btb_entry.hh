@@ -56,7 +56,7 @@
 
 namespace gem5 {
 
-class BTBTagType
+class BTBTagTypes
 {
   public:
     struct KeyType
@@ -67,18 +67,16 @@ class BTBTagType
     using Params = BTBIndexingPolicyParams;
 };
 
-using BTBIndexingPolicy = IndexingPolicyTemplate<BTBTagType>;
-template class IndexingPolicyTemplate<BTBTagType>;
+using BTBIndexingPolicy = IndexingPolicyTemplate<BTBTagTypes>;
+template class IndexingPolicyTemplate<BTBTagTypes>;
 
 class BTBSetAssociative : public BTBIndexingPolicy
 {
   public:
     PARAMS(BTBSetAssociative);
-    using KeyType = BTBTagType::KeyType;
+    using KeyType = BTBTagTypes::KeyType;
 
-    BTBSetAssociative(const Params &p)
-        : BTBIndexingPolicy(p, p.num_entries, p.set_shift),
-          tagMask(mask(p.tag_bits))
+    BTBSetAssociative(const Params &p) : BTBIndexingPolicy(p, p.num_entries, p.set_shift)
     {
         setNumThreads(p.numThreads);
     }
@@ -118,24 +116,13 @@ class BTBSetAssociative : public BTBIndexingPolicy
         log2NumThreads = log2i(num_threads);
     }
 
-    /**
-     * Generate the tag from the given address.
-     */
-    Addr
-    extractTag(const Addr addr) const override
-    {
-        return (addr >> tagShift) & tagMask;
-    }
-
     Addr regenerateAddr(const KeyType &key,
                         const ReplaceableEntry* entry) const override
     {
-        panic("Not implemented!");
-        return 0;
+        return (key.address << tagShift) | (entry->getSet() << setShift);
     }
 
   private:
-    const uint64_t tagMask;
     unsigned log2NumThreads;
 };
 
@@ -146,7 +133,7 @@ class BTBEntry : public ReplaceableEntry
 {
   public:
     using IndexingPolicy = gem5::BTBIndexingPolicy;
-    using KeyType = gem5::BTBTagType::KeyType;
+    using KeyType = gem5::BTBTagTypes::KeyType;
     using TagExtractor = std::function<Addr(Addr)>;
 
     /** Default constructor */
@@ -169,7 +156,7 @@ class BTBEntry : public ReplaceableEntry
      * Checks if the given tag information corresponds to this entry's.
      */
     bool
-    match(const KeyType &key) const
+    match(const KeyType &key)
     {
         return isValid() && (tag.address == extractTag(key.address))
             && (tag.tid == key.tid);

@@ -88,7 +88,7 @@ class BranchTargetBuffer(ClockedObject):
 class BTBIndexingPolicy(SimObject):
     type = "BTBIndexingPolicy"
     abstract = True
-    cxx_class = "gem5::IndexingPolicyTemplate<gem5::BTBTagType>"
+    cxx_class = "gem5::IndexingPolicyTemplate<gem5::BTBTagTypes>"
     cxx_header = "cpu/pred/btb_entry.hh"
     cxx_template_params = ["class Types"]
 
@@ -109,11 +109,6 @@ class BTBSetAssociative(BTBIndexingPolicy):
     # Set shift for the index. Ignore lower 2 bits for a 4 byte instruction.
     set_shift = Param.Unsigned(2, "Number of bits to shift PC to get index")
 
-    # Total number of bits in the tag.
-    # This is above the index and offset bit
-    tag_bits = Param.Unsigned(64, "number of bits in the tag")
-
-    # Number of threads sharing the BTB
     numThreads = Param.Unsigned(Parent.numThreads, "Number of threads")
 
 
@@ -128,6 +123,7 @@ class SimpleBTB(BranchTargetBuffer):
         Parent.instShiftAmt, "Number of bits to shift instructions by"
     )
     associativity = Param.Unsigned(1, "BTB associativity")
+    size = Param.MemorySize("16384", "Size of BTB")
     btbReplPolicy = Param.BaseReplacementPolicy(
         LRURP(), "BTB replacement policy"
     )
