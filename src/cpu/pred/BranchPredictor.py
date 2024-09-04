@@ -88,7 +88,7 @@ class BranchTargetBuffer(ClockedObject):
 class BTBIndexingPolicy(SetAssociative):
     type = "BTBIndexingPolicy"
     cxx_class = "gem5::branch_prediction::BTBIndexingPolicy"
-    cxx_header = "cpu/pred/btb_indexing_policy.hh"
+    cxx_header = "cpu/pred/btb_entry.hh"
 
     numThreads = Param.Unsigned(Parent.numThreads, "Number of threads")
 

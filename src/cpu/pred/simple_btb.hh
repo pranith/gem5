@@ -47,7 +47,7 @@
 #include "base/logging.hh"
 #include "base/types.hh"
 #include "cpu/pred/btb.hh"
-#include "cpu/pred/btb_indexing_policy.hh"
+#include "cpu/pred/btb_entry.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
 #include "params/SimpleBTB.hh"
