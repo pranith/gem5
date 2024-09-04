@@ -45,6 +45,7 @@
 #include "arch/generic/pcstate.hh"
 #include "base/statistics.hh"
 #include "cpu/pred/branch_type.hh"
+#include "cpu/pred/btb_entry.hh"
 #include "cpu/static_inst.hh"
 #include "params/BranchTargetBuffer.hh"
 #include "sim/clocked_object.hh"
@@ -55,18 +56,6 @@ namespace gem5
 
 namespace branch_prediction
 {
-
-class BTBTagTypes
-{
-  public:
-    struct KeyType
-    {
-        Addr address;
-        ThreadID tid;
-    };
-    using Params = BaseIndexingPolicyParams;
-};
-
 
 class BranchTargetBuffer : public ClockedObject
 {
