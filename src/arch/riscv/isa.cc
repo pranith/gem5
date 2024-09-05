@@ -68,7 +68,8 @@ namespace gem5
 namespace RiscvISA
 {
 
-[[maybe_unused]] const std::array<const char *, NUM_MISCREGS> MiscRegNames = {{
+[[maybe_unused]]
+const std::array<const char *, NUM_MISC_AND_HELPER_REGS> MiscRegNames = {{
     [MISCREG_PRV]           = "PRV",
     [MISCREG_ISA]           = "ISA",
     [MISCREG_VENDORID]      = "VENDORID",
@@ -281,7 +282,7 @@ namespace RiscvISA
 
     [MISCREG_JVT] = "JVT",
 
-    [MISCREG_FFLAGS_EXE]    = "FFLAGS_EXE",
+    [HELPER_FFLAGS_EXE]    = "FFLAGS_EXE",
 }};
 
 namespace
@@ -523,17 +524,6 @@ ISA::readMiscReg(RegIndex idx)
                     tc->getCpuPtr()->getInterruptController(tc->threadId()));
             return ic->readHVIP();
         }
-      case MISCREG_UIP:
-        {
-            RegVal mask = readMiscRegNoEffect(MISCREG_SIDELEG);
-            mask &= readMiscRegNoEffect(MISCREG_MIDELEG);
-            return readMiscReg(MISCREG_IP) & mask;
-        }
-      case MISCREG_SIP:
-        {
-            RegVal mask = readMiscRegNoEffect(MISCREG_MIDELEG);
-            return readMiscReg(MISCREG_IP) & mask;
-        }
       case MISCREG_IE:
         {
             auto ic = dynamic_cast<RiscvISA::Interrupts *>(
@@ -553,17 +543,6 @@ ISA::readMiscReg(RegIndex idx)
             return misa.rvh ? mideleg_val : mideleg_val;
             //return misa.rvh ? mideleg_val | HS_INTERRUPTS : mideleg_val;
 
-        }
-      case MISCREG_UIE:
-        {
-            RegVal mask = readMiscRegNoEffect(MISCREG_SIDELEG);
-            mask &= readMiscRegNoEffect(MISCREG_MIDELEG);
-            return readMiscReg(MISCREG_IE) & mask;
-        }
-      case MISCREG_SIE:
-        {
-            RegVal mask = readMiscRegNoEffect(MISCREG_MIDELEG);
-            return readMiscReg(MISCREG_IE) & mask;
         }
       case MISCREG_SEPC:
       case MISCREG_MEPC:
@@ -692,6 +671,11 @@ ISA::readMiscReg(RegIndex idx)
                     nstatus.mnpp = (misa.rvu) ? PRV_U : PRV_M;
             }
             return nstatus;
+        }
+
+      case HELPER_FFLAGS_EXE:
+        {
+            return readMiscRegNoEffect(MISCREG_FFLAGS) & FFLAGS_MASK;
         }
 
       default:
@@ -824,41 +808,12 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                 ic->setHVIP(val);
             }
             break;
-          case MISCREG_UIP:
-            {
-                RegVal mask = UI_MASK[getPrivilegeModeSet()];
-                val = (val & mask) | (readMiscReg(MISCREG_IP) & ~mask);
-                setMiscReg(MISCREG_IP, val);
-            }
-            break;
-          case MISCREG_SIP:
-            {
-                RegVal mask = SI_MASK[getPrivilegeModeSet()];
-                val = (val & mask) | (readMiscReg(MISCREG_IP) & ~mask);
-                setMiscReg(MISCREG_IP, val);
-            }
-            break;
           case MISCREG_IE:
             {
                 val = val & MI_MASK[getPrivilegeModeSet()];
                 auto ic = dynamic_cast<RiscvISA::Interrupts *>(
                     tc->getCpuPtr()->getInterruptController(tc->threadId()));
                 ic->setIE(val);
-            }
-            break;
-          case MISCREG_UIE:
-            {
-                RegVal mask = readMiscRegNoEffect(MISCREG_SIDELEG);
-                mask &= readMiscRegNoEffect(MISCREG_MIDELEG);
-                val = (val & mask) | (readMiscReg(MISCREG_IE) & ~mask);
-                setMiscReg(MISCREG_IE, val);
-            }
-            break;
-          case MISCREG_SIE:
-            {
-                RegVal mask = readMiscRegNoEffect(MISCREG_MIDELEG);
-                val = (val & mask) | (readMiscReg(MISCREG_IE) & ~mask);
-                setMiscReg(MISCREG_IE, val);
             }
             break;
           case MISCREG_SATP:
@@ -1027,6 +982,14 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
           case MISCREG_JVT:
             {
                 setMiscRegNoEffect(idx, rvSext(val));
+            }
+            break;
+
+          case HELPER_FFLAGS_EXE:
+            {
+                RegVal new_val = readMiscRegNoEffect(MISCREG_FFLAGS);
+                new_val |= (val & FFLAGS_MASK);
+                setMiscRegNoEffect(MISCREG_FFLAGS, new_val);
             }
             break;
           default:
