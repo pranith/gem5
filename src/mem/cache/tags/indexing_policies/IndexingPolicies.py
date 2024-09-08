@@ -58,6 +58,10 @@ class BaseIndexingPolicy(SimObject):
     # Get the associativity
     assoc = Param.Int(Parent.assoc, "associativity")
 
+    # Total number of bits in the tag.
+    # This is above the index and offset bit
+    tag_bits = Param.Unsigned(64, "number of bits in the tag")
+
 
 class SetAssociative(BaseIndexingPolicy):
     type = "SetAssociative"

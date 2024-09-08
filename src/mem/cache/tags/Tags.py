@@ -55,6 +55,8 @@ class TaggedIndexingPolicy(SimObject):
     # Get the associativity
     assoc = Param.Int(Parent.assoc, "associativity")
 
+    tag_bits = Param.Int(Parent.tag_bits, "Size of the tag in bits")
+
 
 class TaggedSetAssociative(TaggedIndexingPolicy):
     type = "TaggedSetAssociative"
