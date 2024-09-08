@@ -105,6 +105,11 @@ class IndexingPolicyTemplate : public SimObject
      */
     const int tagShift;
 
+    /**
+     * The mask to be used to limit the bits in the tag.
+     */
+    const int tagMask;
+
   public:
     /**
      * Construct and initialize this policy.
@@ -115,7 +120,8 @@ class IndexingPolicyTemplate : public SimObject
       : SimObject(p), assoc(p.assoc),
         numSets(num_entries / assoc),
         setShift(set_shift), setMask(numSets - 1), sets(numSets),
-        tagShift(setShift + floorLog2(numSets))
+        tagShift(setShift + floorLog2(numSets)),
+        tagMask(mask(p.tag_bits))
     {
         fatal_if(!isPowerOf2(numSets),
             "# of sets must be non-zero and a power of 2");
@@ -179,7 +185,7 @@ class IndexingPolicyTemplate : public SimObject
     virtual Addr
     extractTag(const Addr addr) const
     {
-        return (addr >> tagShift);
+        return (addr >> tagShift) & tagMask;
     }
 
 
