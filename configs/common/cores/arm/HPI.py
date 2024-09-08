@@ -1686,7 +1686,7 @@ class HPI_BTB(SimpleBTB):
     associativity = 1
     btbReplPolicy = LRURP()
     btbIndexingPolicy = BTBSetAssociative(
-        size="512B", entry_size=4, assoc=associativity
+        size="512B", entry_size=4, assoc=associativity, tag_bits=TagBits
     )
 
 

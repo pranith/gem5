@@ -111,7 +111,7 @@ class ex5_big_BTB(SimpleBTB):
     associativity = 1
     btbReplPolicy = LRURP()
     btbIndexingPolicy = BTBSetAssociative(
-        size="16384B", entry_size=4, assoc=associativity
+        size="16384B", entry_size=4, assoc=associativity, tag_bits=tagBits
     )
 
 

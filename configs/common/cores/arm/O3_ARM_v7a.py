@@ -114,7 +114,7 @@ class O3_ARM_v7a_BTB(SimpleBTB):
     associativity = 1
     btbReplPolicy = LRURP()
     btbIndexingPolicy = BTBSetAssociative(
-        size="8192B", entry_size=4, assoc=numEntries
+        size="8192B", entry_size=4, assoc=numEntries, tag_bits=tagBits
     )
 
 
