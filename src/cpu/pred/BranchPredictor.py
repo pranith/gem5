@@ -95,6 +95,9 @@ class BTBIndexingPolicy(SimObject):
     # Get the associativity
     assoc = Param.Int(Parent.assoc, "associativity")
 
+    # Get the tag width
+    tag_bits = Param.Int(Parent.tagBits, "bits in the tag")
+
 
 class BTBSetAssociative(BTBIndexingPolicy):
     type = "BTBSetAssociative"
