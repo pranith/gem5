@@ -88,7 +88,7 @@ class BranchTargetBuffer(ClockedObject):
 class BTBIndexingPolicy(SimObject):
     type = "BTBIndexingPolicy"
     abstract = True
-    cxx_class = "gem5::IndexingPolicyTemplate<gem5::BTBTagTypes>"
+    cxx_class = "gem5::IndexingPolicyTemplate<gem5::BTBTagType>"
     cxx_header = "cpu/pred/btb_entry.hh"
     cxx_template_params = ["class Types"]
 

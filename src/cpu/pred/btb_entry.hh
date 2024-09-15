@@ -56,7 +56,7 @@
 
 namespace gem5 {
 
-class BTBTagTypes
+class BTBTagType
 {
   public:
     struct KeyType
@@ -67,16 +67,17 @@ class BTBTagTypes
     using Params = BTBIndexingPolicyParams;
 };
 
-using BTBIndexingPolicy = IndexingPolicyTemplate<BTBTagTypes>;
-template class IndexingPolicyTemplate<BTBTagTypes>;
+using BTBIndexingPolicy = IndexingPolicyTemplate<BTBTagType>;
+template class IndexingPolicyTemplate<BTBTagType>;
 
 class BTBSetAssociative : public BTBIndexingPolicy
 {
   public:
     PARAMS(BTBSetAssociative);
-    using KeyType = BTBTagTypes::KeyType;
+    using KeyType = BTBTagType::KeyType;
 
-    BTBSetAssociative(const Params &p) : BTBIndexingPolicy(p, p.num_entries, p.set_shift)
+    BTBSetAssociative(const Params &p)
+        : BTBIndexingPolicy(p, p.num_entries, p.set_shift)
     {
         setNumThreads(p.numThreads);
     }
@@ -119,7 +120,8 @@ class BTBSetAssociative : public BTBIndexingPolicy
     Addr regenerateAddr(const KeyType &key,
                         const ReplaceableEntry* entry) const override
     {
-        return (key.address << tagShift) | (entry->getSet() << setShift);
+        assert(false);
+        return 0;
     }
 
   private:
@@ -133,7 +135,7 @@ class BTBEntry : public ReplaceableEntry
 {
   public:
     using IndexingPolicy = gem5::BTBIndexingPolicy;
-    using KeyType = gem5::BTBTagTypes::KeyType;
+    using KeyType = gem5::BTBTagType::KeyType;
     using TagExtractor = std::function<Addr(Addr)>;
 
     /** Default constructor */
@@ -156,7 +158,7 @@ class BTBEntry : public ReplaceableEntry
      * Checks if the given tag information corresponds to this entry's.
      */
     bool
-    match(const KeyType &key)
+    match(const KeyType &key) const
     {
         return isValid() && (tag.address == extractTag(key.address))
             && (tag.tid == key.tid);
