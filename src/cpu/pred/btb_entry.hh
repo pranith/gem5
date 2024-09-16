@@ -120,7 +120,7 @@ class BTBSetAssociative : public BTBIndexingPolicy
     Addr regenerateAddr(const KeyType &key,
                         const ReplaceableEntry* entry) const override
     {
-        assert(false);
+        panic("Not implemented!");
         return 0;
     }
 
