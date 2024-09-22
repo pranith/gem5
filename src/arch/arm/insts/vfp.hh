@@ -264,6 +264,9 @@ setFPExceptions(int exceptions) {
     feraiseexcept(exceptions);
 }
 
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+
 template <typename T>
 uint64_t
 vfpFpToFixed(T val, bool isSigned, uint8_t width, uint8_t imm, bool
@@ -547,6 +550,7 @@ vfpFpRint(T val, bool exact, bool defaultNan, bool useRmode = true,
     return val;
 };
 
+#pragma GCC pop_options
 
 float vfpUFixedToFpS(bool flush, bool defaultNan,
         uint64_t val, uint8_t width, uint8_t imm);
