@@ -174,6 +174,7 @@ class Simulator:
         self.set_max_ticks(max_ticks)
 
         if id:
+            print(id)
             self.set_id(id)
 
         self._instantiated = False
@@ -218,6 +219,11 @@ class Simulator:
         """
         return ExitHandler.get_handler_map()
 
+
+    def set_on_exit_event(self, exit_event_dict) -> None:
+        self._on_exit_event = exit_event_dict
+
+
     def set_id(self, id: str) -> None:
         """Set the ID of the simulator.
 
@@ -230,6 +236,7 @@ class Simulator:
 
         :param id: The ID of the simulator.
         """
+        print(f"Id is {id}\n")
 
         if not id:
             raise ValueError("ID cannot be an empty string.")

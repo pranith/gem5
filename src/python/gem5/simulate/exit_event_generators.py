@@ -110,6 +110,7 @@ def save_checkpoint_generator(checkpoint_dir: Optional[Path] = None):
 
         checkpoint_dir = Path(options.outdir)
     while True:
+        print(checkpoint_dir)
         m5.checkpoint((checkpoint_dir / f"cpt.{str(m5.curTick())}").as_posix())
         yield False
 
