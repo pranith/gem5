@@ -1687,22 +1687,26 @@ class Rancho_BTB(SimpleBTB):
     associativity = 1
     tagBits = 18
     btbReplPolicy = NRURP()
-    btbIndexingPolicy = BTBSetAssociative(
-        size="512B", entry_size=4, assoc=associativity, tag_bits=tagBits
-    )
+    confInit = 1
+    confidenceBits = 2
 
 
-class Rancho_BP(TournamentBP):
+#class Rancho_BP(TournamentBP):
+#    btb = Rancho_BTB()
+#    ras = ReturnAddrStack(numEntries=8)
+#    localPredictorSize = 64
+#    localCtrBits = 2
+#    localHistoryTableSize = 64
+#    globalPredictorSize = 1024
+#    globalCtrBits = 2
+#    choicePredictorSize = 1024
+#    choiceCtrBits = 2
+#    instShiftAmt = 2
+
+class Rancho_BP(TAGE_SC_L_64KB):
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
-    localPredictorSize = 64
-    localCtrBits = 2
-    localHistoryTableSize = 64
-    globalPredictorSize = 1024
-    globalCtrBits = 2
-    choicePredictorSize = 1024
-    choiceCtrBits = 2
-    instShiftAmt = 2
+    delayedBranchPred = True
 
 
 class Rancho_ICache(Cache):
@@ -1779,8 +1783,8 @@ class Rancho(ArmO3CPU):
     trapLatency = 13
     fetchTrapLatency = 1
 
-    backComSize = 8
-    forwardComSize = 8
+    backComSize = 5
+    forwardComSize = 5
     LQEntries = 128
     SQEntries = 128
     LSQDepCheckShift = 4
