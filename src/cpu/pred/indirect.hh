@@ -114,9 +114,10 @@ class IndirectPredictor : public SimObject
      * the indirect predictor (counter and target information).
      * @param tid Thread ID
      * @param sn The sequence number of the branch.
+     * @param mispredict Was this indirect branch mispredicted?
      * @param i_history The pointer to the history object.
      */
-    virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) = 0;
+    virtual void commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history) = 0;
 };
 
 } // namespace branch_prediction

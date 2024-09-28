@@ -213,6 +213,12 @@ class TLBSetAssociative : public TLBIndexingPolicy
       : TLBIndexingPolicy(p, p.num_entries, 0)
     {}
 
+    TLBSetAssociative* clone() const override { assert(0); return nullptr; }
+    /*
+    TLBSetAssociative(const TLBSetAssociative &other)
+      : TLBIndexingPolicy(other) {}
+    */
+
     std::vector<ReplaceableEntry*>
     getPossibleEntries(const KeyType &key) const override
     {

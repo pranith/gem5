@@ -147,6 +147,11 @@ class SkewedAssociative : public BaseIndexingPolicy
      */
     SkewedAssociative(const Params &p);
 
+    SkewedAssociative(const SkewedAssociative &other)
+        : BaseIndexingPolicy(other),
+          msbShift(other.msbShift)
+    {}
+
     /**
      * Destructor.
      */
@@ -173,6 +178,12 @@ class SkewedAssociative : public BaseIndexingPolicy
      */
     Addr regenerateAddr(const Addr &tag,
                         const ReplaceableEntry* entry) const override;
+
+    SkewedAssociative*
+    clone() const
+    {
+        return new SkewedAssociative(*this);
+    }
 };
 
 } // namespace gem5

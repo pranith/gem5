@@ -53,6 +53,7 @@
 #include "mem/cache/replacement_policies/base.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
+#include "debug/ITTAGE.hh"
 
 namespace gem5
 {
@@ -88,8 +89,11 @@ class AssociativeCache : public Named
     void
     initParams(size_t _num_entries, size_t _assoc)
     {
+        fatal_if((_num_entries < _assoc), "The number of entries of an "
+                 "AssociativeCache<> must be a greater than its associativity");
         fatal_if((_num_entries % _assoc) != 0, "The number of entries of an "
                  "AssociativeCache<> must be a multiple of its associativity");
+
         for (auto entry_idx = 0; entry_idx < _num_entries; entry_idx++) {
             Entry *entry = &entries[entry_idx];
             indexingPolicy->setEntry(entry, entry_idx);
@@ -263,14 +267,14 @@ class AssociativeCache : public Named
     virtual void
     insertEntry(const KeyType &key, Entry *entry)
     {
+        entry->insert(key);
+        replPolicy->reset(entry->replacementData);
+
         if (debugFlag && debugFlag->tracing()) {
             ::gem5::trace::getDebugLogger()->dprintf_flag(
                 curTick(), name(), debugFlag->name(),
                 "Inserting entry: %s\n", entry->print());
         }
-
-        entry->insert(key);
-        replPolicy->reset(entry->replacementData);
     }
 
     /**

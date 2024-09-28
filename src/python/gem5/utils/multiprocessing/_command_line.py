@@ -67,10 +67,7 @@ def _gem5_args_for_multiprocessing(name):
     # --allow-remote-connections, --listener-mode, --dump-config, --json-config
     # --dot-config, --dot-dvfs-config, --debug-file, --remote-gdb-port, -c
 
-    debug_flag_str = ",".join(options.debug_flags)
     arguments = [
-        # Keep the debug flags.
-        f"--debug-flags={debug_flag_str}",
         # Keep the original outdir. This will be overridden by multisim
         f"--outdir={options.outdir}",
         # Update the stdout and stderr names so we can see them. These will be
@@ -80,6 +77,11 @@ def _gem5_args_for_multiprocessing(name):
         # Keep the stats file name. It will be in the new outdir
         f"--stats-file={options.stats_file}",
     ]
+    if options.debug_flags:
+        debug_flag_str = ",".join(options.debug_flags)
+        # Keep the debug flags.
+        arguments.append(f"--debug-flags={debug_flag_str}")
+
     if options.redirect_stdout:
         arguments.append("--redirect-stdout")
     if options.redirect_stderr:

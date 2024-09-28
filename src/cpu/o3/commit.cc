@@ -59,6 +59,7 @@
 #include "debug/Activity.hh"
 #include "debug/Commit.hh"
 #include "debug/CommitRate.hh"
+#include "debug/CommitTrace.hh"
 #include "debug/Drain.hh"
 #include "debug/ExecFaulting.hh"
 #include "debug/HtmCpu.hh"
@@ -1248,6 +1249,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     updateComInstStats(head_inst);
 
     DPRINTF(Commit,
+            "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
+            tid, head_inst->seqNum, head_inst->pcState());
+    DPRINTF(CommitTrace,
             "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
             tid, head_inst->seqNum, head_inst->pcState());
     if (head_inst->traceData) {

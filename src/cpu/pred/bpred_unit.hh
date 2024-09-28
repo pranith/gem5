@@ -52,6 +52,7 @@
 #include "cpu/pred/indirect.hh"
 #include "cpu/pred/ras.hh"
 #include "cpu/static_inst.hh"
+#include "cpu/timebuf.hh"
 #include "enums/TargetProvider.hh"
 #include "params/BranchPredictor.hh"
 #include "sim/probe/pmu.hh"
@@ -62,6 +63,17 @@ namespace gem5
 
 namespace branch_prediction
 {
+
+struct BPVerifStruct {
+    bool squash;
+    std::unique_ptr<PCStateBase> pc;
+    InstSeqNum seqNum;
+    bool branchTaken;
+    // StaticInstPtr inst;
+    ThreadID tid;
+};
+
+// using BPVerifStruct = gem5::o3::BPVerifStruct;
 
 /**
  * Basically a wrapper class to hold both the branch predictor
@@ -87,6 +99,15 @@ class BPredUnit : public SimObject
     /** Perform sanity checks after a drain. */
     void drainSanityCheck() const;
 
+    TimeBuffer<BPVerifStruct> *timeBuffer;
+    TimeBuffer<BPVerifStruct>::wire toFetchBPVerif;
+    void registerBPVerifBuffer(TimeBuffer<BPVerifStruct> *time_buffer)
+    {
+        timeBuffer = time_buffer;
+
+        toFetchBPVerif = timeBuffer->getWire(0);
+    }
+
     /**
      * Predicts whether or not the instruction is a taken branch, and the
      * target of the branch if it is taken.
@@ -97,6 +118,8 @@ class BPredUnit : public SimObject
      */
     bool predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
                  PCStateBase &pc, ThreadID tid);
+    bool verifyPrediction(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+                          PCStateBase &pc, ThreadID tid);
 
     /**
      * Tells the branch predictor to commit any updates until the given
@@ -146,7 +169,7 @@ class BPredUnit : public SimObject
     virtual bool lookup(ThreadID tid, Addr pc, void * &bp_history) = 0;
 
     /**
-     * Ones done with the prediction this function updates the
+     * Once done with the prediction this function updates the
      * path and global history. All branches call this function
      * including unconditional once.
      * @param tid The thread id.
@@ -257,8 +280,9 @@ class BPredUnit : public SimObject
               inst(inst), type(getBranchType(inst)),
               call(inst->isCall()), uncond(inst->isUncondCtrl()),
               predTaken(false), actuallyTaken(false), condPred(false),
+              indirectPred(false),
               btbHit(false), targetProvider(TargetProvider::NoTarget),
-              resteered(false), mispredict(false), target(nullptr),
+              resteered(false), mispredict(false), target(nullptr), itarget(nullptr),
               bpHistory(nullptr),
               indirectHistory(nullptr), rasHistory(nullptr)
         { }
@@ -309,6 +333,9 @@ class BPredUnit : public SimObject
         /** The prediction of the conditional predictor */
         bool condPred;
 
+        /** The prediction of the indirect predictor */
+        bool indirectPred;
+
         /** Was BTB hit at prediction time */
         bool btbHit;
 
@@ -323,6 +350,9 @@ class BPredUnit : public SimObject
 
         /** The predicted target */
         std::unique_ptr<PCStateBase> target;
+
+        /** Target predicted by indirect predictor */
+        std::unique_ptr<PCStateBase> itarget;
 
         /**
          * Pointer to the history objects passed back from the branch
@@ -345,6 +375,14 @@ class BPredUnit : public SimObject
      * Internal prediction function.
     */
     bool predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+               PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
+    void predictCondBranch(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+               PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
+    void predictIndirectBranch(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+               PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
+    void predictBTB(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+               PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
+    void updateRAS(const StaticInstPtr &inst, const InstSeqNum &seqNum,
                PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
 
     /**
@@ -375,6 +413,9 @@ class BPredUnit : public SimObject
      * This info is only available from the BTB.
      * Low-end CPUs predecoding might be used to identify branches. */
     const bool requiresBTBHit;
+
+    /** The conditional branch predictor has a multi-cycle lookup */
+    const bool delayedBranchPred;
 
     /** Number of bits to shift instructions by for predictor addresses. */
     const unsigned instShiftAmt;

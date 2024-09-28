@@ -78,22 +78,22 @@ class IndexingPolicyTemplate : public SimObject
     /**
      * The associativity.
      */
-    const unsigned assoc;
+    unsigned assoc;
 
     /**
      * The number of sets in the cache.
      */
-    const uint32_t numSets;
+    uint32_t numSets;
 
     /**
      * The amount to shift the address to get the set.
      */
-    const int setShift;
+    int setShift;
 
     /**
      * Mask out all bits that aren't part of the set index.
      */
-    const unsigned setMask;
+    unsigned setMask;
 
     /**
      * The cache sets.
@@ -103,7 +103,9 @@ class IndexingPolicyTemplate : public SimObject
     /**
      * The amount to shift the address to get the tag.
      */
-    const int tagShift;
+    int tagShift;
+
+    bool initialized;
 
   public:
     /**
@@ -125,7 +127,46 @@ class IndexingPolicyTemplate : public SimObject
         for (uint32_t i = 0; i < numSets; ++i) {
             sets[i].resize(assoc);
         }
+
+        initialized = true;
     }
+
+    IndexingPolicyTemplate(const Params &p) : SimObject(p)
+    {
+        initialized = false;
+    }
+
+    void initialize(const uint32_t num_entries, const uint32_t set_shift, const uint32_t associativity)
+    {
+        if (initialized) {
+            assert(0);
+        }
+
+        assoc = associativity;
+        numSets = num_entries / associativity;
+        setShift = set_shift;
+        setMask = numSets - 1;
+
+        sets.resize(numSets);
+        tagShift = setShift + floorLog2(numSets);
+
+        // Make space for the entries
+        for (uint32_t i = 0; i < numSets; ++i) {
+            sets[i].resize(assoc);
+        }
+
+        initialized = true;
+    }
+
+    /**
+     * Copy constructor
+     */
+    IndexingPolicyTemplate(const IndexingPolicyTemplate &other)
+        : SimObject(other.params()), assoc(other.assoc),
+          numSets(other.numSets),
+          setShift(other.setShift), setMask(other.setMask), sets(other.sets),
+          tagShift(other.tagShift)
+    {}
 
     /**
      * Destructor.
@@ -203,6 +244,8 @@ class IndexingPolicyTemplate : public SimObject
      */
     virtual Addr regenerateAddr(const KeyType &key,
                                 const ReplaceableEntry* entry) const = 0;
+
+    virtual IndexingPolicyTemplate* clone() const = 0;
 };
 
 class AddrTypes

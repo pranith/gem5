@@ -101,6 +101,8 @@ class SetAssociative : public BaseIndexingPolicy
      */
     SetAssociative(const Params &p);
 
+    SetAssociative(const SetAssociative &other) : BaseIndexingPolicy(other) {}
+
     /**
      * Destructor.
      */
@@ -127,6 +129,12 @@ class SetAssociative : public BaseIndexingPolicy
      */
     Addr regenerateAddr(const Addr &tag,
                         const ReplaceableEntry* entry) const override;
+
+    SetAssociative*
+    clone() const override
+    {
+        return new SetAssociative(*this);
+    }
 };
 
 } // namespace gem5

@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014 ARM Limited
- * Copyright (c) 2022-2023 The University of Edinburgh
+ * Copyright (c) 2025 - Pranith Kumar
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -36,10 +35,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "cpu/pred/simple_indirect.hh"
+#include "cpu/pred/ittage.hh"
 
 #include "base/intmath.hh"
 #include "debug/Indirect.hh"
+#include "debug/ITTAGE.hh"
 
 namespace gem5
 {
@@ -47,25 +47,35 @@ namespace gem5
 namespace branch_prediction
 {
 
-SimpleIndirectPredictor::SimpleIndirectPredictor(
-        const SimpleIndirectPredictorParams &params)
+ITTAGE::ITTAGE(const ITTAGEParams &params)
     : IndirectPredictor(params),
+      numPredTables(params.numPredTables),
+      predTableEntries(params.predTableEntries),
+      predTableTagBits(params.predTableTagBits),
+      predTableAssociativity(params.predTableAssociativity),
+      predTableHistLengths(params.predTableHistLengths),
+      pathLength(params.indirectPathLength),
+      speculativePathLength(params.speculativePathLength),
+      instShift(params.instShiftAmt),
+      replPolicy(params.tableReplPolicy),
       hashGHR(params.indirectHashGHR),
       hashTargets(params.indirectHashTargets),
       numSets(params.indirectSets),
       numWays(params.indirectWays),
       tagBits(params.indirectTagSize),
-      pathLength(params.indirectPathLength),
-      speculativePathLength(params.speculativePathLength),
-      instShift(params.instShiftAmt),
       ghrNumBits(params.indirectGHRBits),
-      ghrMask((1 << params.indirectGHRBits)-1),
+      ghrMask(mask(params.indirectGHRBits)),
+      tableCtrBits(params.tableCtrBits),
+      tableCtrInit(params.tableCtrInit),
       stats(this)
 {
     if (!isPowerOf2(numSets)) {
         panic("Indirect predictor requires power of 2 number of sets");
     }
 
+    // we reuse the same tableIndexingPolicy, so create a new
+    // indexing policy object by copying it
+    indexingPolicy = params.tableIndexingPolicy->clone();
     threadInfo.resize(params.numThreads);
 
     targetCache.resize(numSets);
@@ -73,14 +83,32 @@ SimpleIndirectPredictor::SimpleIndirectPredictor(
         targetCache[i].resize(numWays);
     }
 
+    std::string table_name_prefix(".table_");
+
+    for (unsigned i = 0; i < numPredTables; i++) {
+        std::string table_name = name() + table_name_prefix + std::to_string(i);
+        auto predTable =
+            new AssociativeCache<NewIPredEntry>(
+                table_name.c_str(), predTableEntries,
+                predTableEntries, replPolicy,
+                indexingPolicy->clone(),
+                NewIPredEntry(genTagExtractor(indexingPolicy),
+                              tableCtrBits,tableCtrInit));
+
+        predTable->setDebugFlag(::gem5::debug::ITTAGE);
+        predTables.push_back(predTable);
+    }
+
     fatal_if(ghrNumBits > (sizeof(ThreadInfo::ghr)*8), "ghr_size is too big");
+
+    stats.tableHits.init(numPredTables);
+    stats.tableInserts.init(numPredTables);
 }
 
-
 void
-SimpleIndirectPredictor::reset()
+ITTAGE::reset()
 {
-    DPRINTF(Indirect, "Reset Indirect predictor\n");
+    DPRINTF(Indirect, "ITTAGE: Reset Indirect predictor\n");
 
     for (auto& ti : threadInfo) {
         ti.ghr = 0;
@@ -92,11 +120,14 @@ SimpleIndirectPredictor::reset()
             targetCache[i][j].tag = 0;
         }
     }
+
+    for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
+        predTables[table_idx]->clear();
+    }
 }
 
-
 void
-SimpleIndirectPredictor::genIndirectInfo(ThreadID tid, void* &i_history)
+ITTAGE::genIndirectInfo(ThreadID tid, void* &i_history)
 {
     // Record the GHR as it was before this prediction
     // It will be used to recover the history in case this prediction is
@@ -107,8 +138,8 @@ SimpleIndirectPredictor::genIndirectInfo(ThreadID tid, void* &i_history)
 }
 
 void
-SimpleIndirectPredictor::updateDirectionInfo(ThreadID tid, bool taken,
-                                             Addr pc, Addr target)
+ITTAGE::updateDirectionInfo(ThreadID tid, bool taken,
+                            Addr pc, Addr target)
 {
     // Direction history
     threadInfo[tid].ghr <<= 1;
@@ -116,12 +147,9 @@ SimpleIndirectPredictor::updateDirectionInfo(ThreadID tid, bool taken,
     threadInfo[tid].ghr &= ghrMask;
 }
 
-
-
 // Interface methods ------------------------------
 const PCStateBase *
-SimpleIndirectPredictor::lookup(ThreadID tid, InstSeqNum sn,
-                                Addr pc, void * &i_history)
+ITTAGE::lookup(ThreadID tid, InstSeqNum sn, Addr pc, void * &i_history)
 {
     assert(i_history==nullptr);
 
@@ -137,52 +165,93 @@ SimpleIndirectPredictor::lookup(ThreadID tid, InstSeqNum sn,
     return target;
 }
 
-bool
-SimpleIndirectPredictor::lookup(ThreadID tid, Addr br_addr,
-                                PCStateBase * &target,
-                                IndirectHistory * &history)
+uint64_t
+ITTAGE::getTableTag(Addr pc, uint64_t ghr, unsigned table_idx)
 {
+    return (pc >> instShift) ^ (ghr & mask(predTableHistLengths[table_idx]));
+}
+
+bool
+ITTAGE::lookup(ThreadID tid, Addr br_addr,
+	       PCStateBase * &target,
+	       IndirectHistory * &history)
+{
+    history->hit = false;
+
+    for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
+        uint64_t table_tag = getTableTag(br_addr, history->ghr, table_idx);
+        DPRINTF(Indirect, "ITTAGE: Looking up tag: %#x in table %d\n", table_tag, table_idx);
+        auto entry = predTables[table_idx]->findEntry(table_tag);
+        if (entry && entry->ctr) {
+            history->entry_table_idx = table_idx;
+            history->table_tag = table_tag;
+            history->hit = true;
+            stats.tableHits[table_idx]++;
+            DPRINTF(Indirect, "ITTAGE: Hit PC:%#x found in table %d entry ctr %d\n", br_addr, table_idx, (int)entry->ctr);
+            set(target, entry->target);
+            break;
+        }
+    }
 
     history->set_index = getSetIndex(br_addr, tid);
     history->tag = getTag(br_addr);
     assert(history->set_index < numSets);
     stats.lookups++;
 
-    DPRINTF(Indirect, "Looking up PC:%#x, (set:%d, tag:%d), "
-                    "ghr:%#x, pathHist sz:%#x\n",
+    DPRINTF(Indirect, "ITTAGE: Looking up PC:%#x, (set:%d, tag:%#x), "
+                    "ghr:%#x, pathHist sz:%d\n",
                     history->pcAddr, history->set_index, history->tag,
                     history->ghr, threadInfo[tid].pathHist.size());
 
-    const auto &iset = targetCache[history->set_index];
-    for (auto way = iset.begin(); way != iset.end(); ++way) {
-        // tag may be 0 and match the default in way->tag, so we also have to
-        // check that way->target has been initialized.
-        if (way->tag == history->tag && way->target) {
-            DPRINTF(Indirect, "Hit %x (target:%s)\n", br_addr, *way->target);
-            set(target, *way->target);
-            history->hit = true;
-            stats.hits++;
-            return history->hit;
+    if (!history->hit) {
+        stats.tableMisses++;
+        // Try the base predictor
+        DPRINTF(Indirect, "ITTAGE: Lookup PC %#x in base predictor tag %#x\n", br_addr, history->tag);
+
+        const auto &iset = targetCache[history->set_index];
+        for (auto way = iset.begin(); way != iset.end(); ++way) {
+            // tag may be 0 and match the default in way->tag, so we also have to
+            // check that way->target has been initialized.
+            if (way->tag == history->tag && way->target) {
+                DPRINTF(Indirect, "ITTAGE: Hit base predictor PC:%#x (target:%s)\n", br_addr, *way->target);
+                set(target, *way->target);
+                history->hit = true;
+		history->using_base_pred = true;
+                stats.hits++;
+                return history->hit;
+            }
         }
+        DPRINTF(Indirect, "ITTAGE: Miss ITTAGE and base predictor %#x\n", br_addr);
+        history->hit = false;
+        stats.misses++;
     }
-    DPRINTF(Indirect, "Miss %x\n", br_addr);
-    history->hit = false;
-    stats.misses++;
+
     return history->hit;
 }
 
-
 void
-SimpleIndirectPredictor::commit(ThreadID tid, InstSeqNum sn,
-				bool mispredict, void * &i_history)
+ITTAGE::commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history)
 {
     if (i_history == nullptr) return;
     // we do not need to recover the GHR, so delete the information
     IndirectHistory *history = static_cast<IndirectHistory*>(i_history);
 
-    DPRINTF(Indirect, "Committing seq:%d, PC:%#x, ghr:%#x, pathHist sz:%lu\n",
-            sn, history->pcAddr, history->ghr,
-            threadInfo[tid].pathHist.size());
+    DPRINTF(Indirect, "ITTAGE: Committing [sn:%lu], PC:%#x, ghr:%#x, pathHist sz:%lu base_pred:%s\n",
+	    sn, history->pcAddr, history->ghr,
+	    threadInfo[tid].pathHist.size(), history->using_base_pred ? "true" : "false");
+
+    if (history->was_indirect && history->hit && !history->using_base_pred && !mispredict) {
+
+        // prediction was correct, increase confidence
+        auto entry = predTables[history->entry_table_idx]->findEntry(history->table_tag);
+        if (entry) {
+            entry->ctr++;
+
+            DPRINTF(Indirect,
+                    "ITTAGE: Correct prediction, increasing confidence %d table:%d\n",
+                    (int)entry->ctr, history->entry_table_idx);
+        }
+    }
 
     delete history;
     i_history = nullptr;
@@ -190,15 +259,14 @@ SimpleIndirectPredictor::commit(ThreadID tid, InstSeqNum sn,
     /** Delete histories if the history grows to much */
     while (threadInfo[tid].pathHist.size()
             >= (pathLength + speculativePathLength)) {
-
         threadInfo[tid].pathHist.pop_front();
     }
 }
 
 void
-SimpleIndirectPredictor::update(ThreadID tid, InstSeqNum sn, Addr pc,
-                           bool squash, bool taken, const PCStateBase& target,
-                           BranchType br_type, void * &i_history)
+ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr pc,
+               bool squash, bool taken, const PCStateBase& target,
+               BranchType br_type, void * &i_history)
 {
     // If there is no history we did not use the indirect predictor yet.
     // Create one
@@ -208,14 +276,14 @@ SimpleIndirectPredictor::update(ThreadID tid, InstSeqNum sn, Addr pc,
     IndirectHistory *history = static_cast<IndirectHistory*>(i_history);
     assert(history!=nullptr);
 
-    DPRINTF(Indirect, "Update sn:%i PC:%#x, squash:%i, ghr:%#x,path sz:%i\n",
+    DPRINTF(Indirect, "ITTAGE: Update [sn:%lu] PC:%#x, squash:%i, ghr:%#x,path sz:%i\n",
                sn, pc, squash, history->ghr, threadInfo[tid].pathHist.size());
 
     /** If update was called during squash we need to fix the indirect
      * path history and the global path history.
      * We restore the state before this branch incorrectly updated it
      * and perform the update afterwards again.
-    */
+     */
     history->was_indirect = isIndirectNoReturn(br_type);
     if (squash) {
 
@@ -228,10 +296,24 @@ SimpleIndirectPredictor::update(ThreadID tid, InstSeqNum sn, Addr pc,
                 threadInfo[tid].pathHist.pop_back();
             }
 
-            history->set_index = getSetIndex(history->pcAddr, tid);
-            history->tag = getTag(history->pcAddr);
+            /*
+             * Why are we doing this?
+            for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
+                auto entry = predTables[table_idx]->findEntry(tag);
+                if (entry) {
+                    history->entry_table_idx = table_idx;
+                    DPRINTF(Indirect, "ITTAGE: PC:%#x, BR:%#x\n",
+                            history->pcAddr, entry->tag);
+                    break;
+                }
+            }
+            */
 
-            DPRINTF(Indirect, "Record Target seq:%d, PC:%#x, TGT:%#x, "
+            auto tag = getTag(history->pcAddr);
+            history->set_index = getSetIndex(history->pcAddr, tid);
+            history->tag = tag;
+
+            DPRINTF(Indirect, "ITTAGE: Record Target [sn:%lu], PC:%#x, TGT:%#x, "
                         "ghr:%#x, (set:%x, tag:%x)\n",
                         sn, history->pcAddr, target, history->ghr,
                         history->set_index, history->tag);
@@ -240,8 +322,8 @@ SimpleIndirectPredictor::update(ThreadID tid, InstSeqNum sn, Addr pc,
 
     // Only indirect branches are recorded in the path history
     if (history->was_indirect) {
-
-        DPRINTF(Indirect, "Recording %x seq:%d\n", history->pcAddr, sn);
+        DPRINTF(Indirect, "ITTAGE: Recording PC:%#x [sn:%lu] in path history\n",
+                history->pcAddr, sn);
         threadInfo[tid].pathHist.emplace_back(
                                     history->pcAddr, target.instAddr(), sn);
 
@@ -254,21 +336,20 @@ SimpleIndirectPredictor::update(ThreadID tid, InstSeqNum sn, Addr pc,
     // Finally if update is called during at squash we know the target
     // we predicted was wrong therefore we update the target.
     // We only record the target if the branch was indirect and taken
-    if (squash && history->was_indirect && taken)
+    if (squash && history->was_indirect && taken) {
         recordTarget(tid, sn, target, history);
+    }
 }
 
-
-
 void
-SimpleIndirectPredictor::squash(ThreadID tid, InstSeqNum sn, void * &i_history)
+ITTAGE::squash(ThreadID tid, InstSeqNum sn, void * &i_history)
 {
     if (i_history == nullptr) return;
 
     // we do not need to recover the GHR, so delete the information
     IndirectHistory *history = static_cast<IndirectHistory*>(i_history);
 
-    DPRINTF(Indirect, "Squashing seq:%d, PC:%#x, indirect:%i, "
+    DPRINTF(Indirect, "ITTAGE: Squashing [sn:%lu], PC:%#x, indirect:%i, "
                     "ghr:%#x, pathHist sz:%#x\n",
                     sn, history->pcAddr, history->was_indirect,
                     history->ghr,
@@ -297,16 +378,10 @@ SimpleIndirectPredictor::squash(ThreadID tid, InstSeqNum sn, void * &i_history)
     i_history = nullptr;
 }
 
-
-
-
 // Internal functions ------------------------------
-
-
-
 void
-SimpleIndirectPredictor::recordTarget(ThreadID tid, InstSeqNum sn,
-                      const PCStateBase& target, IndirectHistory * &history)
+ITTAGE::recordTarget(ThreadID tid, InstSeqNum sn,
+                     const PCStateBase& target, IndirectHistory * &history)
 {
     // Should have just squashed so this branch should be the oldest
     // and it should be predicted as indirect.
@@ -314,12 +389,13 @@ SimpleIndirectPredictor::recordTarget(ThreadID tid, InstSeqNum sn,
     assert(history->was_indirect);
 
     if (threadInfo[tid].pathHist.rbegin()->pcAddr != history->pcAddr) {
-        DPRINTF(Indirect, "History seems to be corrupted. %#x != %#x\n",
+        DPRINTF(Indirect, "ITTAGE: History seems to be corrupted. %#x != %#x\n",
                     history->pcAddr,
                     threadInfo[tid].pathHist.rbegin()->pcAddr);
+	assert(0);
     }
 
-    DPRINTF(Indirect, "Record Target seq:%d, PC:%#x, TGT:%#x, "
+    DPRINTF(Indirect, "ITTAGE: Record Target [sn:%lu], PC:%#x, TGT:%#x, "
                       "ghr:%#x, (set:%x, tag:%x)\n",
                 sn, history->pcAddr, target.instAddr(), history->ghr,
                 history->set_index, history->tag);
@@ -327,20 +403,73 @@ SimpleIndirectPredictor::recordTarget(ThreadID tid, InstSeqNum sn,
     assert(history->set_index < numSets);
     stats.targetRecords++;
 
+    // update the tables
+    // if entry already exists, decrement the counter
+    auto table_idx = history->entry_table_idx;
+    auto nxt_table_idx = 0;
+    bool alloc = true;
+    if (history->hit && !history->using_base_pred) {
+        // get the next table that we need to alloc into
+        nxt_table_idx = (table_idx < (numPredTables - 1)) ? table_idx + 1 : table_idx;
+        if (nxt_table_idx == table_idx) {
+            alloc = false;
+        }
+        // update confidence of the entry in the highest table for this PC
+        auto entry = predTables[table_idx]->findEntry(history->table_tag);
+        if (entry) {
+            assert(entry->tag == history->table_tag);
+            assert(table_idx < numPredTables);
+
+            if (!entry->target->equals(target)) {
+                // check confidence and reduce it
+                entry->ctr--;
+                DPRINTF(Indirect, "ITTAGE: Decrementing confidence PC: %#x ctr: %d table:%d\n",
+                        history->pcAddr, (int)entry->ctr, table_idx);
+            }
+            if (entry->ctr == 0) {
+                // invalidate the older entry
+                if (!entry->target) {
+                    delete entry->target;
+                }
+                predTables[table_idx]->invalidate(entry);
+                DPRINTF(Indirect, "ITTAGE: Invalidating entry PC: %#x ctr: %d table:%d\n",
+                        history->pcAddr, (int)entry->ctr, table_idx);
+
+                // allocate an entry as old one is invalidated
+                alloc = true;
+            }
+        }
+    }
+
+    if (alloc) {
+        auto table_tag = getTableTag(history->pcAddr, history->ghr, nxt_table_idx);
+        auto victim = predTables[nxt_table_idx]->findVictim(table_tag);
+
+        DPRINTF(Indirect,
+                "ITTAGE: Inserting Target ([sn:%lu] PC:%#x set:%d target:%s tag:%#x) in table %d\n",
+                sn, history->pcAddr, history->set_index, target, table_tag, nxt_table_idx);
+
+        victim->tag = table_tag;
+        victim->resetCtr();
+        set(victim->target, target);
+        predTables[nxt_table_idx]->insertEntry({history->table_tag}, victim);
+
+        // does this get used at commit?
+        history->table_tag = table_tag;
+        history->entry_table_idx = nxt_table_idx;
+    }
+
     // Update the target cache
     auto &iset = targetCache[history->set_index];
     for (auto way = iset.begin(); way != iset.end(); ++way) {
         if (way->tag == history->tag) {
             DPRINTF(Indirect,
-                    "Updating Target (seq: %d br:%x set:%d target:%s)\n",
-                    sn, history->pcAddr, history->set_index, target);
+                    "ITTAGE: Updating target cache ([sn:%lu] br:%#x set:%d target:%s tag:%#x)\n",
+                    sn, history->pcAddr, history->set_index, target, history->tag);
             set(way->target, target);
             return;
         }
     }
-
-    DPRINTF(Indirect, "Allocating Target (seq: %d br:%x set:%d target:%s)\n",
-            sn, history->pcAddr, history->set_index, target);
 
     // Did not find entry, random replacement
     auto &way = iset[rand() % numWays];
@@ -348,11 +477,8 @@ SimpleIndirectPredictor::recordTarget(ThreadID tid, InstSeqNum sn,
     set(way.target, target);
 }
 
-
-
-
 inline Addr
-SimpleIndirectPredictor::getSetIndex(Addr br_addr, ThreadID tid)
+ITTAGE::getSetIndex(Addr br_addr, ThreadID tid)
 {
     Addr hash = br_addr >> instShift;
     if (hashGHR) {
@@ -370,15 +496,18 @@ SimpleIndirectPredictor::getSetIndex(Addr br_addr, ThreadID tid)
 }
 
 inline Addr
-SimpleIndirectPredictor::getTag(Addr br_addr)
+ITTAGE::getTag(Addr br_addr)
 {
     return (br_addr >> instShift) & ((0x1<<tagBits)-1);
 }
 
 
-SimpleIndirectPredictor::IndirectStats::IndirectStats(
-                                        statistics::Group *parent)
+ITTAGE::IndirectStats::IndirectStats(statistics::Group *parent)
     : statistics::Group(parent),
+    ADD_STAT(tableHits,
+             "Number of hits in the ITTAGE tables"),
+    ADD_STAT(tableMisses, statistics::units::Count::get(),
+             "Number of misses in the ITTAGE tables"),
     ADD_STAT(lookups, statistics::units::Count::get(),
              "Number of lookups"),
     ADD_STAT(hits, statistics::units::Count::get(),

@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014 ARM Limited
- * Copyright (c) 2022-2023 The University of Edinburgh
+ * Copyright (c) 2025 - Pranith Kumar
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -42,9 +41,18 @@
 #include <deque>
 
 #include "base/statistics.hh"
+#include "base/cache/associative_cache.hh"
+#include "base/cache/cache_entry.hh"
+#include "base/sat_counter.hh"
 #include "cpu/inst_seq.hh"
 #include "cpu/pred/indirect.hh"
-#include "params/SimpleIndirectPredictor.hh"
+#include "params/ITTAGE.hh"
+
+class BaseIndexingPolicy;
+
+namespace replacement_policy {
+class Base;
+}
 
 namespace gem5
 {
@@ -52,10 +60,10 @@ namespace gem5
 namespace branch_prediction
 {
 
-class SimpleIndirectPredictor : public IndirectPredictor
+class ITTAGE : public IndirectPredictor
 {
   public:
-    SimpleIndirectPredictor(const SimpleIndirectPredictorParams &params);
+    ITTAGE(const ITTAGEParams &params);
 
     /** Indirect predictor interface */
     void reset() override;
@@ -66,8 +74,8 @@ class SimpleIndirectPredictor : public IndirectPredictor
                 bool taken, const PCStateBase& target,
                 BranchType br_type, void * &iHistory) override;
     void squash(ThreadID tid, InstSeqNum sn, void * &iHistory) override;
-    void commit(ThreadID tid, InstSeqNum sn, bool mispredict,
-                void * &iHistory) override;
+    void commit(ThreadID tid, InstSeqNum sn,
+                bool mispredict, void * &iHistory) override;
 
 
 
@@ -76,16 +84,26 @@ class SimpleIndirectPredictor : public IndirectPredictor
      * -------------------
      * */
   private:
+    const unsigned numPredTables;
+    const unsigned predTableEntries;
+    const unsigned predTableTagBits;
+    const unsigned predTableAssociativity;
+    const std::vector<unsigned> predTableHistLengths;
+    const unsigned pathLength;
+    const unsigned speculativePathLength;
+    const unsigned instShift;
+    replacement_policy::Base *replPolicy;
+    BaseIndexingPolicy *indexingPolicy;
+
     const bool hashGHR;
     const bool hashTargets;
     const unsigned numSets;
     const unsigned numWays;
     const unsigned tagBits;
-    const unsigned pathLength;
-    const unsigned speculativePathLength;
-    const unsigned instShift;
     const unsigned ghrNumBits;
     const unsigned ghrMask;
+    const unsigned tableCtrBits;
+    const unsigned tableCtrInit;
 
     struct IPredEntry
     {
@@ -93,9 +111,27 @@ class SimpleIndirectPredictor : public IndirectPredictor
         std::unique_ptr<PCStateBase> target;
     };
 
-    std::vector<std::vector<IPredEntry> > targetCache;
+    std::vector<std::vector<IPredEntry>> targetCache;
 
+    class NewIPredEntry : public CacheEntry
+    {
+      public:
+        using TagExtractor = std::function<Addr(Addr)>;
 
+        Addr tag;
+        PCStateBase* target;
+
+        SatCounter8 ctr;
+
+        NewIPredEntry(TagExtractor ext, unsigned ctr_bits, unsigned ctr_init)
+            : CacheEntry(ext),
+              tag(0), target(nullptr),
+              ctr(ctr_bits, ctr_init) {}
+
+        void resetCtr(void) { ctr.reset(); }
+    };
+
+    std::vector<AssociativeCache<NewIPredEntry>*> predTables;
 
     struct HistoryEntry
     {
@@ -117,17 +153,24 @@ class SimpleIndirectPredictor : public IndirectPredictor
         Addr targetAddr;
         InstSeqNum seqNum;
 
+        // NewIPredEntry *entry;
+        unsigned int entry_table_idx;
+
         Addr set_index;
         Addr tag;
+        Addr table_tag;
         bool hit;
-        unsigned ghr;
+        uint64_t ghr;
         uint64_t pathHist;
 
         bool was_indirect;
+        bool using_base_pred;
 
         IndirectHistory()
             : pcAddr(MaxAddr),
-              targetAddr(MaxAddr),
+	      targetAddr(MaxAddr),
+	      // entry(nullptr),
+	      entry_table_idx(0),
               was_indirect(false)
         {}
     };
@@ -138,7 +181,7 @@ class SimpleIndirectPredictor : public IndirectPredictor
         // Path history register
         std::deque<HistoryEntry> pathHist;
         // Global direction history register
-        unsigned ghr = 0;
+        uint64_t ghr = 0;
     };
 
     std::vector<ThreadInfo> threadInfo;
@@ -158,6 +201,7 @@ class SimpleIndirectPredictor : public IndirectPredictor
     // Helper to compute set and tag
     inline Addr getSetIndex(Addr br_addr, ThreadID tid);
     inline Addr getTag(Addr br_addr);
+    inline Addr getTableTag(Addr pc, uint64_t ghr, unsigned table_idx);
 
     inline bool isIndirectNoReturn(BranchType type) {
         return (type == BranchType::CallIndirect) ||
@@ -169,7 +213,12 @@ class SimpleIndirectPredictor : public IndirectPredictor
     struct IndirectStats : public statistics::Group
     {
         IndirectStats(statistics::Group *parent);
-        // STATS
+        // Main Predictor stats
+        statistics::Vector tableHits;
+        statistics::Vector tableInserts;
+        statistics::Scalar tableMisses;
+
+        // Base Predictor Stats
         statistics::Scalar lookups;
         statistics::Scalar hits;
         statistics::Scalar misses;

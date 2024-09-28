@@ -60,7 +60,6 @@ from m5.objects import *
 from m5.objects import ArmO3CPU
 from m5.objects.IndexingPolicies import *
 from m5.objects.ReplacementPolicies import *
-
 from m5.util import addToPath
 
 m5.util.addToPath("../../..")
@@ -75,11 +74,9 @@ from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_h
     PrivateL1PrivateL2WalkCacheHierarchy,
 )
 from gem5.components.memory import DualChannelDDR4_2400
-from gem5.components.processors.cpu_types import CPUTypes
-
 from gem5.components.processors.base_cpu_core import BaseCPUCore
 from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
-
+from gem5.components.processors.cpu_types import CPUTypes
 from gem5.isas import ISA
 from gem5.resources.resource import (
     BinaryResource,
@@ -147,14 +144,14 @@ class Rancho_BTB(SimpleBTB):
     tagBits = 18
     btbReplPolicy = NRURP()
     btbIndexingPolicy = BTBSetAssociative(
-        num_entries = Parent.numEntries,
-        set_shift = Parent.instShiftAmt,
+        num_entries=Parent.numEntries,
+        set_shift=Parent.instShiftAmt,
         assoc=Parent.associativity,
-        tag_bits=Parent.tagBits
+        tag_bits=Parent.tagBits,
     )
 
 
-#class Rancho_BP(TournamentBP):
+# class Rancho_BP(TournamentBP):
 #    btb = Rancho_BTB()
 #    ras = ReturnAddrStack(numEntries=8)
 #    localPredictorSize = 64
@@ -166,9 +163,20 @@ class Rancho_BTB(SimpleBTB):
 #    choiceCtrBits = 2
 #    instShiftAmt = 2
 
+
+class Rancho_ITTAGE(ITTAGE):
+    tableCtrBits = 2
+    tableCtrInit = 2
+    indirectHashGHR = False
+    indirectHashTargets = False
+    predTableEntries="1024"
+
+
 class Rancho_BP(TAGE):
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
+    indirectBranchPred = Rancho_ITTAGE()
+
 
 class CustomCore(BaseCPUCore):
     def __init__(self):

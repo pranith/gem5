@@ -140,6 +140,10 @@ class SimpleBTB(BranchTargetBuffer):
         ),
         "BTB indexing policy",
     )
+    confidenceBits = Param.Unsigned(
+        2, "Number of bits in the confidence counter"
+    )
+    confInit = Param.Unsigned(1, "Initial value of the confidence counter")
 
 
 class IndirectPredictor(SimObject):
@@ -175,6 +179,84 @@ class SimpleIndirectPredictor(IndirectPredictor):
     instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
 
 
+class ITTAGE(IndirectPredictor):
+    type = "ITTAGE"
+    cxx_class = "gem5::branch_prediction::ITTAGE"
+    cxx_header = "cpu/pred/ittage.hh"
+
+    numPredTables = Param.Unsigned(6, "Number of predictor tables")
+    predTableEntries = Param.MemorySize(
+        "1024", "Number of predictor table entries"
+    )
+    predTableTagBits = Param.Unsigned(16, "Size of the tag in bits")
+    predTableHistLengths = VectorParam.Unsigned(
+        [0, 2, 4, 8, 16, 32], "History lengths in each table"
+    )
+    predTableAssociativity = Param.Unsigned(
+        1024, "Associativity of the pred tables"
+    )
+    tableReplPolicy = Param.BaseReplacementPolicy(
+        LRURP(), "Tag Table replacement policy"
+    )
+    tableIndexingPolicy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            size=Parent.predTableEntries,
+            assoc=Parent.predTableAssociativity,
+            entry_size=1,
+        ),
+        "Tag Table indexing policy",
+    )
+    tableCtrBits = Param.Unsigned(
+        4, "Number of bits in the table entry counter"
+    )
+    tableCtrInit = Param.Unsigned(
+        8, "Initial value of the table entry counter"
+    )
+
+    indirectHashGHR = Param.Bool(True, "Hash branch predictor GHR")
+    indirectHashTargets = Param.Bool(True, "Hash path history targets")
+    indirectSets = Param.Unsigned(256, "Cache sets for indirect predictor")
+    indirectWays = Param.Unsigned(2, "Ways for indirect predictor")
+    indirectTagSize = Param.Unsigned(16, "Indirect target cache tag bits")
+    indirectPathLength = Param.Unsigned(
+        3, "Previous indirect targets to use for path history"
+    )
+    speculativePathLength = Param.Unsigned(
+        256,
+        "Additional buffer space to store speculative path history. "
+        "If there are more speculative branches in flight the history cannot "
+        "be recovered. Set this to an appropriate value respective the CPU"
+        "pipeline depth or a high value e.g. 256 to make it 'unlimited'.",
+    )
+    indirectGHRBits = Param.Unsigned(13, "Indirect GHR number of bits")
+    instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
+
+
+# class ITTAGE(IndirectPredictor):
+#     type = "ITTAGE"
+#     cxx_class = "gem5::branch_prediction::ITTAGE"
+#     cxx_header = "cpu/pred/ittage.hh"
+#
+#     indirectPathLength = Param.Unsigned(
+#         3, "Previous indirect targets to use for path history"
+#     )
+#     numPredictors = Param.Unsigned(11, "Number of TAGE predictors")
+#     tableSizes = VectorParam.Int([256] * 15, "the ITTAGE T1~Tn length")
+#     TTagBitSizes = VectorParam.Int(
+#         [9, 9, 13, 13, 13, 13, 13, 13, 13, 13, 15, 15, 15, 15, 15],
+#         "the T1~Tn entry's tag bit size",
+#     )
+#     TTagPcShifts = VectorParam.Int(
+#         [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+#         "when the T1~Tn entry's tag generating, PC right shift",
+#     )
+#     histLengths = VectorParam.Int(
+#         [4, 10, 16, 27, 44, 60, 96, 109, 219, 449, 487],
+#         "the ITTAGE T1~Tn history length",
+#     )
+#     simpleBTBSize = Param.Unsigned(512, "size of base predictor")
+
+
 class BranchPredictor(SimObject):
     type = "BranchPredictor"
     cxx_class = "gem5::branch_prediction::BPredUnit"
@@ -202,6 +284,8 @@ class BranchPredictor(SimObject):
         "Indirect branch predictor, set to NULL to disable "
         "indirect predictions",
     )
+    delayedBranchPred = Param.Bool(False, "Branch predictor output is delayed")
+    bpDelayCycles = Param.Unsigned(1, "Cycles to lookup branch pred")
 
 
 class LocalBP(BranchPredictor):
@@ -269,7 +353,7 @@ class TAGEBase(SimObject):
 
     histBufferSize = Param.Unsigned(
         2097152,
-        "A large number to track all branch histories(2MEntries default)",
+        "A large number to track all branch histories(2M Entries default)",
     )
 
     pathHistBits = Param.Unsigned(16, "Path history size")
