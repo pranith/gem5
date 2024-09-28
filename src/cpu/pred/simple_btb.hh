@@ -66,6 +66,9 @@ class SimpleBTB : public BranchTargetBuffer
                 BranchType type = BranchType::NoBranch,
                 StaticInstPtr inst = nullptr) override;
     const StaticInstPtr getInst(ThreadID tid, Addr instPC) override;
+    void incorrectTarget(ThreadID tid, Addr inst_pc,
+                         const std::unique_ptr<PCStateBase>& target,
+                         BranchType type) override;
 
   private:
 

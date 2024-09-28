@@ -94,16 +94,17 @@ class BranchTargetBuffer : public ClockedObject
      *  @param target_pc The target address of the branch.
      */
     virtual void update(ThreadID tid, Addr inst_pc,
-                          const PCStateBase &target_pc,
-                          BranchType type = BranchType::NoBranch,
-                          StaticInstPtr inst = nullptr) = 0;
+			const PCStateBase &target_pc,
+			BranchType type = BranchType::NoBranch,
+			StaticInstPtr inst = nullptr) = 0;
 
     /** Update BTB statistics
      */
-    virtual void incorrectTarget(Addr inst_pc,
-                                  BranchType type = BranchType::NoBranch)
+    virtual void incorrectTarget(ThreadID tid, Addr inst_pc,
+                                 const std::unique_ptr<PCStateBase>& target,
+                                 BranchType type = BranchType::NoBranch)
     {
-      stats.mispredict[type]++;
+        stats.mispredict[type]++;
     }
 
   protected:

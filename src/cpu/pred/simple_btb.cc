@@ -51,7 +51,8 @@ SimpleBTB::SimpleBTB(const SimpleBTBParams &p)
     : BranchTargetBuffer(p),
       btb("simpleBTB", p.numEntries, p.associativity,
           p.btbReplPolicy, p.btbIndexingPolicy,
-          BTBEntry(genTagExtractor(p.btbIndexingPolicy)))
+          BTBEntry(genTagExtractor(p.btbIndexingPolicy),
+		   p.confidenceBits, p.confInit))
 {
     DPRINTF(BTB, "BTB: Creating BTB object.\n");
 
@@ -117,10 +118,48 @@ SimpleBTB::update(ThreadID tid, Addr instPC,
 {
     stats.updates[type]++;
 
-    BTBEntry *victim = btb.findVictim({instPC, tid});
+    BTBEntry *entry = btb.findEntry({instPC, tid});
 
+    if (entry) {
+        btb.accessEntry(entry);
+        auto conf = entry->getConfidence();
+        int val = conf;
+
+        DPRINTF(BTB, "BTB PC: %#x, T: %#x, NT: %#x\n",
+                instPC, entry->target->instAddr(), target.instAddr());
+
+        if (entry->target->instAddr() != target.instAddr()) {
+            if (val == 0) {
+                entry->update(target, inst);
+                entry->setBranchType(type);
+                entry->resetConfidence();
+            } else {
+                entry->decConfidence();
+            }
+        } else {
+            entry->incConfidence();
+        }
+
+        return;
+    }
+
+    // create new entry
+    BTBEntry *victim = btb.findVictim({instPC, tid});
     btb.insertEntry({instPC, tid}, victim);
     victim->update(target, inst);
+    victim->setBranchType(type);
+}
+
+void
+SimpleBTB::incorrectTarget(ThreadID tid, Addr inst_pc,
+                           const std::unique_ptr<PCStateBase>& target,
+                           BranchType type)
+{
+    auto entry = btb.findEntry({inst_pc, tid});
+
+    if (!entry || entry->target->instAddr() != target->instAddr()) {
+        stats.mispredict[type]++;
+    }
 }
 
 

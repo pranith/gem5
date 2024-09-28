@@ -60,7 +60,7 @@ from common.cores.arm import Rancho
 # the cache class may be 'None' if the particular cache is not present.
 cpu_types = {
     "atomic": (AtomicSimpleCPU, None, None, None),
-    #    "minor": (MinorCPU, devices.L1I, devices.L1D, devices.L2),
+    "minor" : (MinorCPU, devices.L1I, devices.L1D, devices.L2),
     "rancho": (
         Rancho.Rancho,
         Rancho.Rancho_ICache,
