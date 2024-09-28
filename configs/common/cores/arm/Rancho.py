@@ -1687,6 +1687,8 @@ class Rancho_BTB(SimpleBTB):
     associativity = 4
     tagBits = 18
     btbReplPolicy = NRURP()
+    confInit = 1
+    confidenceBits = 2
 
 
 #class Rancho_BP(TournamentBP):
@@ -1701,7 +1703,7 @@ class Rancho_BTB(SimpleBTB):
 #    choiceCtrBits = 2
 #    instShiftAmt = 2
 
-class Rancho_BP(TAGE):
+class Rancho_BP(TAGE_SC_L_64KB):
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
 
@@ -1780,8 +1782,8 @@ class Rancho(ArmO3CPU):
     trapLatency = 13
     fetchTrapLatency = 1
 
-    backComSize = 8
-    forwardComSize = 8
+    backComSize = 5
+    forwardComSize = 5
     LQEntries = 128
     SQEntries = 128
     LSQDepCheckShift = 4

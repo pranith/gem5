@@ -47,7 +47,9 @@
 
 #include "arch/generic/pcstate.hh"
 #include "base/intmath.hh"
+#include "base/sat_counter.hh"
 #include "base/types.hh"
+#include "cpu/pred/branch_type.hh"
 #include "cpu/static_inst.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
@@ -137,18 +139,22 @@ class BTBEntry : public ReplaceableEntry
     using IndexingPolicy = gem5::BTBIndexingPolicy;
     using KeyType = gem5::BTBTagType::KeyType;
     using TagExtractor = std::function<Addr(Addr)>;
+    using BranchType = enums::BranchType;
 
     /** Default constructor */
-    BTBEntry(TagExtractor ext)
-        : inst(nullptr), extractTag(ext), valid(false), tag({MaxAddr, -1})
-    {}
+    BTBEntry(TagExtractor ext, uint8_t conf_bits, uint8_t conf_init)
+        : inst(nullptr), extractTag(ext), valid(false), tag({MaxAddr, -1}),
+          confBits(conf_bits), confidence(conf_bits, conf_init)
+    {
+        confThreshold = (1 << conf_bits) - 1;
+        confInit      = conf_init;
+    }
 
     /** Update the target and instruction in the BTB entry.
      *  During insertion, only the tag (key) is updated.
      */
     void
-    update(const PCStateBase &_target,
-           StaticInstPtr _inst)
+    update(const PCStateBase &_target, StaticInstPtr _inst)
     {
         set(target, _target);
         inst = _inst;
@@ -173,15 +179,19 @@ class BTBEntry : public ReplaceableEntry
     {
         setValid();
         setTag({extractTag(key.address), key.tid});
+        resetConfidence();
     }
 
     /** Copy constructor */
     BTBEntry(const BTBEntry &other)
+        : confidence(other.confidence)
     {
         valid      = other.valid;
         tag        = other.tag;
         inst       = other.inst;
         extractTag = other.extractTag;
+        confInit   = other.confInit;
+        confBits   = other.confBits;
         set(target, other.target);
     }
 
@@ -192,10 +202,21 @@ class BTBEntry : public ReplaceableEntry
         tag        = other.tag;
         inst       = other.inst;
         extractTag = other.extractTag;
+        confidence = other.confidence;
+        confInit   = other.confInit;
+        confBits   = other.confBits;
         set(target, other.target);
 
         return *this;
     }
+
+    void setConfidence(uint8_t conf) { confidence = SatCounter8(confBits, conf); }
+    void resetConfidence() { confidence = SatCounter8(confBits, confInit); }
+    void incConfidence(void) { confidence++; }
+    void decConfidence(void) { confidence--; }
+    SatCounter8 getConfidence() { return confidence; }
+
+    void setBranchType(BranchType type) { btype = type; }
 
     /**
      * Checks if the entry is valid.
@@ -255,6 +276,31 @@ class BTBEntry : public ReplaceableEntry
 
     /** The entry's tag. */
     KeyType tag;
+
+    /**
+     * Number of bits in the confidence counter
+     */
+    uint8_t confBits;
+
+    /**
+     * Confidence of the entry in the BTB
+     */
+    SatCounter8 confidence;
+
+    /**
+     * Maximum confidence of the entry
+     */
+    uint8_t confThreshold;
+
+    /**
+     * Initial confidence of the entry
+     */
+    uint8_t confInit;
+
+    /**
+     * Type of the branch for this BTB entry
+     */
+    BranchType btype;
 };
 
 } // namespace gem5::branch_prediction

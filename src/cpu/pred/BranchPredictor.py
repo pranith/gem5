@@ -138,6 +138,8 @@ class SimpleBTB(BranchTargetBuffer):
         ),
         "BTB indexing policy",
     )
+    confidenceBits = Param.Unsigned(2, "Number of bits in the confidence counter")
+    confInit = Param.Unsigned(1, "Initial value of the confidence counter")
 
 
 class IndirectPredictor(SimObject):
@@ -200,6 +202,9 @@ class BranchPredictor(SimObject):
         "Indirect branch predictor, set to NULL to disable "
         "indirect predictions",
     )
+    delayedBranchPred = Param.Bool(True,
+                                   "Branch predictor output is delayed")
+    bpDelayCycles = Param.Unsigned(1, "Cycles to lookup branch pred")
 
 
 class LocalBP(BranchPredictor):
@@ -267,7 +272,7 @@ class TAGEBase(SimObject):
 
     histBufferSize = Param.Unsigned(
         2097152,
-        "A large number to track all branch histories(2MEntries default)",
+        "A large number to track all branch histories(2M Entries default)",
     )
 
     pathHistBits = Param.Unsigned(16, "Path history size")

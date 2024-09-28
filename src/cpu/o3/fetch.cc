@@ -83,6 +83,7 @@ Fetch::IcachePort::IcachePort(Fetch *_fetch, CPU *_cpu) :
 Fetch::Fetch(CPU *_cpu, const BaseO3CPUParams &params)
     : fetchPolicy(params.smtFetchPolicy),
       cpu(_cpu),
+      delayedBPLookupQueue(params.branchPredictorDelay, 0),
       branchPred(nullptr),
       decodeToFetchDelay(params.decodeToFetchDelay),
       renameToFetchDelay(params.renameToFetchDelay),
@@ -143,6 +144,9 @@ Fetch::Fetch(CPU *_cpu, const BaseO3CPUParams &params)
 
     // Get the size of an instruction.
     instSize = decoder[0]->moreBytesSize();
+
+    delayedBPLookupQueueRead  = delayedBPLookupQueue.getWire(-2);
+    delayedBPLookupQueueWrite = delayedBPLookupQueue.getWire(0);
 }
 
 std::string Fetch::name() const { return cpu->name() + ".fetch"; }
@@ -234,6 +238,7 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
         idleRate
             .prereq(idleRate);
 }
+
 void
 Fetch::setTimeBuffer(TimeBuffer<TimeStruct> *time_buffer)
 {
@@ -514,6 +519,7 @@ Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
     DPRINTF(Fetch, "[tid:%i] [sn:%llu] Branch at PC %#x "
             "predicted to go to %s\n",
             tid, inst->seqNum, inst->pcState().instAddr(), next_pc);
+
     inst->setPredTarg(next_pc);
     inst->setPredTaken(predict_taken);
 

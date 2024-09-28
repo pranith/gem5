@@ -405,6 +405,16 @@ class Fetch
     /** Wire to get commit's information from backwards time buffer. */
     TimeBuffer<TimeStruct>::wire fromCommit;
 
+    struct BPStruct {
+        Addr pc;
+    };
+    /** Queue to store delayed branch predictor lookups */
+    TimeBuffer<BPStruct> delayedBPLookupQueue;
+
+    /** Wire to read and write delayed branch predictor lookup queue */
+    TimeBuffer<BPStruct>::wire delayedBPLookupQueueRead;
+    TimeBuffer<BPStruct>::wire delayedBPLookupQueueWrite;
+
     //Might be annoying how this name is different than the queue.
     /** Wire used to write any information heading to decode. */
     TimeBuffer<FetchStruct>::wire toDecode;
