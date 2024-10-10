@@ -191,7 +191,8 @@ class BaseO3CPU(BaseCPU):
             num_entries=Parent.SSITSize,
             assoc=Parent.SSITAssoc,
             set_shift=2,
-        ), "SSIT indexing policy"
+        ),
+        "SSIT indexing policy",
     )
 
     numRobs = Param.Unsigned(1, "Number of Reorder Buffers")
