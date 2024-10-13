@@ -64,7 +64,7 @@ class CommitPolicy(ScopedEnum):
 class SSITIndexingPolicy(SimObject):
     type = "SSITIndexingPolicy"
     abstract = True
-    cxx_class = "gem5::IndexingPolicyTemplate<gem5::SSITTagTypes>"
+    cxx_class = "gem5::IndexingPolicyTemplate<gem5::AddrTypes>"
     cxx_header = "cpu/o3/store_set.hh"
     cxx_template_params = ["class Types"]
 
