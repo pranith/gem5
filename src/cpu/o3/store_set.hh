@@ -45,25 +45,13 @@
 namespace gem5
 {
 
-class SSITTagTypes
-{
-  public:
-    struct KeyType
-    {
-        Addr address;
-    };
-
-    using Params = SSITIndexingPolicyParams;
-};
-
-using SSITIndexingPolicy = IndexingPolicyTemplate<SSITTagTypes>;
-template class IndexingPolicyTemplate<SSITTagTypes>;
+using SSITIndexingPolicy = IndexingPolicyTemplate<AddrTypes>;
 
 class SSITSetAssociative : public SSITIndexingPolicy
 {
   public:
     PARAMS(SSITSetAssociative);
-    using KeyType = SSITTagTypes::KeyType;
+    using KeyType = AddrTypes::KeyType;
 
     SSITSetAssociative(const Params &p)
         : SSITIndexingPolicy(p, p.num_entries, p.set_shift)
@@ -75,9 +63,9 @@ class SSITSetAssociative : public SSITIndexingPolicy
      * Extract the set index for the instruction PC based on tid.
      */
     uint32_t
-    extractSet(const KeyType &key) const
+    extractSet(const KeyType &addr) const
     {
-        return ((key.address >> setShift) & setMask);
+        return ((addr >> setShift) & setMask);
     }
 
   public:
@@ -132,19 +120,13 @@ class StoreSet : public Named
         SSID _ssid;
       public:
         using IndexingPolicy = gem5::SSITIndexingPolicy;
-        using KeyType = SSITTagTypes::KeyType;
+        using KeyType = AddrTypes::KeyType;
         using TagExtractor = std::function<Addr(Addr)>;
 
         SSITEntry(TagExtractor ext) : CacheEntry(ext), _ssid(MaxAddr) {}
 
-        bool match(const KeyType &key) { return match(key.address); }
-        void insert(const KeyType &key) { return insert(key.address); }
-
         void setSSID(SSID id) { _ssid = id; }
         SSID getSSID(void) const { return _ssid; }
-      private:
-        using CacheEntry::match;
-        using CacheEntry::insert;
     };
 
     /** Default constructor.  init() must be called prior to use. */
@@ -247,12 +229,12 @@ class StoreSet : public Named
  * It allows to "decouple" indexing from tagging. Those entries
  * would call the functor without directly holding a pointer
  * to the indexing policy which should reside in the cache.
- */
 static constexpr auto
 genTagExtractor(SSITIndexingPolicy *ip)
 {
     return [ip] (Addr addr) { return ip->extractTag(addr); };
 }
+*/
 
 } // namespace gem5
 
