@@ -121,16 +121,10 @@ struct ltseqnum
  * stands for Store Set ID, SSIT stands for Store Set ID Table, and
  * LFST is Last Fetched Store Table.
  */
-class StoreSet
+class StoreSet : public Named
 {
-  protected:
-  std::string _name;
-
   public:
     typedef Addr SSID;
-
-  public:
-    std::string name() const { return _name; }
 
     class SSITEntry : public CacheEntry
     {
@@ -153,7 +147,7 @@ class StoreSet
     };
 
     /** Default constructor.  init() must be called prior to use. */
-    StoreSet() : _name("StoreSets"), SSIT("SSIT") {};
+    StoreSet() : Named("StoreSets"), SSIT("SSIT") {};
 
     /** Creates store set predictor with given table sizes. */
     StoreSet(std::string name, uint64_t clear_period,
@@ -165,7 +159,7 @@ class StoreSet
     ~StoreSet();
 
     /** Initializes the store set predictor with the given table sizes. */
-    void init(std::string name, uint64_t clear_period,
+    void init(uint64_t clear_period,
               size_t SSIT_entries, int SSIT_assoc,
               replacement_policy::Base *_replPolicy,
               SSITIndexingPolicy *_indexingPolicy, int LFST_size);
