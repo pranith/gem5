@@ -42,7 +42,7 @@ StoreSet::StoreSet(std::string name_, uint64_t clear_period,
                    size_t _SSIT_entries, int _SSIT_assoc,
                    replacement_policy::Base *_replPolicy,
                    SSITIndexingPolicy *_indexingPolicy, int _LFST_size)
-  : _name(std::string(name_)),
+  : Named(std::string(name_)),
     SSIT("SSIT", _SSIT_entries, _SSIT_assoc,
 	 _replPolicy, _indexingPolicy,
 	 SSITEntry(genTagExtractor(_indexingPolicy))),
@@ -78,11 +78,10 @@ StoreSet::~StoreSet()
 }
 
 void
-StoreSet::init(std::string name_, uint64_t clear_period, size_t _SSIT_entries,
+StoreSet::init(uint64_t clear_period, size_t _SSIT_entries,
                int _SSIT_assoc, replacement_policy::Base *_replPolicy,
                SSITIndexingPolicy *_indexingPolicy, int _LFST_size)
 {
-    _name = name_;
     SSITSize = _SSIT_entries;
     LFSTSize = _LFST_size;
     clearPeriod = clear_period;

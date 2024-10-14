@@ -99,7 +99,7 @@ MemDepUnit::init(const BaseO3CPUParams &params, ThreadID tid, CPU *cpu)
 
     id = tid;
 
-    depPred.init(_name + ".storesets", params.store_set_clear_period,
+    depPred.init(params.store_set_clear_period,
                  params.SSITSize, params.SSITAssoc, params.SSITReplPolicy,
                  params.SSITIndexingPolicy, params.LFSTSize);
 
