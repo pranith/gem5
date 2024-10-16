@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "base/cache/associative_cache.hh"
+#include "base/named.hh"
 #include "base/types.hh"
 #include "cpu/inst_seq.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
