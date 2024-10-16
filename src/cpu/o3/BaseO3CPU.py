@@ -79,7 +79,7 @@ class SSITSetAssociative(SSITIndexingPolicy):
 
     # Get the number of entries in the SSIT from the parent
     num_entries = Param.Unsigned(
-        Parent.numEntries, "Number of entries in the SSIT"
+        Parent.SSITSize, "Number of entries in the SSIT"
     )
 
     # Set shift for the index. Ignore lower 2 bits for a 4 byte instruction.
