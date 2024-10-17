@@ -83,7 +83,7 @@ Fetch::IcachePort::IcachePort(Fetch *_fetch, CPU *_cpu) :
 Fetch::Fetch(CPU *_cpu, const BaseO3CPUParams &params)
     : fetchPolicy(params.smtFetchPolicy),
       cpu(_cpu),
-      delayedBPLookupQueue(params.branchPredictorDelay, 0),
+      branchPredVerifQueue(params.branchPredictorDelay, 0),
       branchPred(nullptr),
       decodeToFetchDelay(params.decodeToFetchDelay),
       renameToFetchDelay(params.renameToFetchDelay),
@@ -145,8 +145,8 @@ Fetch::Fetch(CPU *_cpu, const BaseO3CPUParams &params)
     // Get the size of an instruction.
     instSize = decoder[0]->moreBytesSize();
 
-    delayedBPLookupQueueRead  = delayedBPLookupQueue.getWire(-2);
-    delayedBPLookupQueueWrite = delayedBPLookupQueue.getWire(0);
+    branchPred->registerBPVerifBuffer(&branchPredVerifQueue);
+    branchPredVerifRead = branchPredVerifQueue.getWire(-2);
 }
 
 std::string Fetch::name() const { return cpu->name() + ".fetch"; }
@@ -741,6 +741,19 @@ Fetch::doSquash(const PCStateBase &new_pc, const DynInstPtr squashInst,
 }
 
 void
+Fetch::squashFromBP(const PCStateBase &new_pc, const DynInstPtr squashInst,
+                    const InstSeqNum seq_num, ThreadID tid)
+{
+    DPRINTF(Fetch, "[tid:%i] Squashing from branch predictor.\n", tid);
+
+    doSquash(new_pc, squashInst, tid);
+
+    // Tell the CPU to remove any instructions that are in flight between
+    // fetch and decode.
+    cpu->removeInstsUntil(seq_num, tid);
+}
+
+void
 Fetch::squashFromDecode(const PCStateBase &new_pc, const DynInstPtr squashInst,
         const InstSeqNum seq_num, ThreadID tid)
 {
@@ -748,8 +761,7 @@ Fetch::squashFromDecode(const PCStateBase &new_pc, const DynInstPtr squashInst,
 
     doSquash(new_pc, squashInst, tid);
 
-    // Tell the CPU to remove any instructions that are in flight between
-    // fetch and decode.
+    // Tell the CPU to remove any instructions that are in flight
     cpu->removeInstsUntil(seq_num, tid);
 }
 
@@ -918,6 +930,9 @@ Fetch::tick()
 
     // Reset the number of the instruction we've fetched.
     numInst = 0;
+
+    // advance the delayed branch prediction verification queue
+    branchPredVerifQueue.advance();
 }
 
 bool
@@ -988,6 +1003,26 @@ Fetch::checkSignalsAndUpdate(ThreadID tid)
                              fromDecode->decodeInfo[tid].squashInst,
                              fromDecode->decodeInfo[tid].doneSeqNum,
                              tid);
+
+            return true;
+        }
+    }
+
+    // Verify BTB prediction using branch predictor
+    if (branchPredVerifRead->squash) {
+        DPRINTF(Fetch, "[tid:%i] Squashing instructions due to squash "
+                "from BP.\n",tid);
+
+        branchPred->squash(branchPredVerifRead->seqNum, tid);
+        if (fetchStatus[tid] != Squashing) {
+
+            DPRINTF(Fetch, "Squashing from decode with PC = %s\n",
+                *branchPredVerifRead->pc);
+            // Squash unless we're already squashing
+            squashFromBP(*branchPredVerifRead->pc,
+                         nullptr, //branchPredVerifRead->inst,
+                         branchPredVerifRead->seqNum,
+                         tid);
 
             return true;
         }
@@ -1329,11 +1364,11 @@ Fetch::fetch(bool &status_change)
     fetchAddr = (this_pc.instAddr() + pcOffset) & pc_mask;
     Addr fetchBufferBlockPC = fetchBufferAlignPC(fetchAddr);
     issuePipelinedIfetch[tid] = fetchBufferBlockPC != fetchBufferPC[tid] &&
-        fetchStatus[tid] != IcacheWaitResponse &&
-        fetchStatus[tid] != ItlbWait &&
-        fetchStatus[tid] != IcacheWaitRetry &&
-        fetchStatus[tid] != QuiescePending &&
-        !curMacroop;
+                                fetchStatus[tid]   != IcacheWaitResponse &&
+                                fetchStatus[tid]   != ItlbWait &&
+                                fetchStatus[tid]   != IcacheWaitRetry &&
+                                fetchStatus[tid]   != QuiescePending &&
+                                !curMacroop;
 }
 
 void

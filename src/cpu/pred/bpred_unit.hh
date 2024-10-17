@@ -64,6 +64,16 @@ namespace gem5
 namespace branch_prediction
 {
 
+struct BPVerifStruct {
+    bool squash;
+    std::unique_ptr<PCStateBase> pc;
+    InstSeqNum seqNum;
+    // StaticInstPtr inst;
+    ThreadID tid;
+};
+
+// using BPVerifStruct = gem5::o3::BPVerifStruct;
+
 /**
  * Basically a wrapper class to hold both the branch predictor
  * and the BTB.
@@ -87,6 +97,15 @@ class BPredUnit : public SimObject
 
     /** Perform sanity checks after a drain. */
     void drainSanityCheck() const;
+
+    TimeBuffer<BPVerifStruct> *timeBuffer;
+    TimeBuffer<BPVerifStruct>::wire toFetchBPVerif;
+    void registerBPVerifBuffer(TimeBuffer<BPVerifStruct> *time_buffer)
+    {
+        timeBuffer = time_buffer;
+
+        toFetchBPVerif = timeBuffer->getWire(0);
+    }
 
     /**
      * Predicts whether or not the instruction is a taken branch, and the
@@ -354,7 +373,7 @@ class BPredUnit : public SimObject
     */
     bool predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
                PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
-    void predictDirectBranch(const StaticInstPtr &inst, const InstSeqNum &seqNum,
+    void predictCondBranch(const StaticInstPtr &inst, const InstSeqNum &seqNum,
                PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);
     void predictIndirectBranch(const StaticInstPtr &inst, const InstSeqNum &seqNum,
                PCStateBase &pc, ThreadID tid, PredictorHistory* &bpu_history);

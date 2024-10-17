@@ -126,7 +126,7 @@ BPredUnit::predictTarget(const StaticInstPtr &inst, const InstSeqNum &seqNum,
 */
 
 void
-BPredUnit::predictDirectBranch(const StaticInstPtr &inst,
+BPredUnit::predictCondBranch(const StaticInstPtr &inst,
                                const InstSeqNum &seqNum,
                                PCStateBase &pc, ThreadID tid,
                                PredictorHistory *&hist)
@@ -137,6 +137,9 @@ BPredUnit::predictDirectBranch(const StaticInstPtr &inst,
     if (hist->condPred) {
         ++stats.condPredictedTaken;
     }
+
+    DPRINTF(Branch, "[tid:%i][sn:%llu] Instruction %s, PC:%#x predicted %s\n",
+            tid, seqNum, pc, pc.instAddr(), hist->condPred ? "T" : "NT");
 
     return;
 }
@@ -267,7 +270,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
         hist->condPred = true;
     } else {
         // Conditional branches -------
-        predictDirectBranch(inst, seqNum, pc, tid, hist);
+        predictCondBranch(inst, seqNum, pc, tid, hist);
     }
 
     if (!delayedBranchPred) {
@@ -359,6 +362,33 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
     // at commit the prediction was correct.
     hist->actuallyTaken = hist->predTaken;
     set(pc, *hist->target);
+
+    if (delayedBranchPred && hist->btbHit) {
+        // verify the BTB prediction and squash based on delay
+        bool squash = false;
+        std::unique_ptr<PCStateBase> new_pc;
+        set(new_pc, pc);
+        if (inst->isDirectCtrl() && !hist->condPred) {
+            // conditional predictor disagrees that this is a taken branch
+            squash = true;
+        }
+        if (inst->isIndirectCtrl() && hist->indirectPred) {
+            if (hist->target != hist->itarget) {
+                // indirect predictor disagress on target
+                squash = true;
+            }
+        }
+
+        if (squash) {
+            DPRINTF(Branch, "BTB verification failed for sn:%i, PC:%#x\n", seqNum, hist->pc);
+            inst->advancePC(*new_pc);
+            toFetchBPVerif->squash = true;
+            set(toFetchBPVerif->pc, new_pc);
+            toFetchBPVerif->seqNum = seqNum;
+            // toFetchBPVerif->inst = inst;
+            toFetchBPVerif->tid = tid;
+        }
+    }
 
     DPRINTF(Branch, "%s(tid:%i, sn:%i, PC:%#x, %s) -> taken:%i, target:%s "
             "provider:%s\n", __func__, tid, seqNum, hist->pc,

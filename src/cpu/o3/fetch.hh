@@ -67,6 +67,8 @@ namespace o3
 
 class CPU;
 
+using BPVerifStruct = gem5::branch_prediction::BPVerifStruct;
+
 /**
  * Fetch class handles both single threaded and SMT fetch. Its
  * width is specified by the parameters; each cycle it tries to fetch
@@ -316,6 +318,9 @@ class Fetch
                           const DynInstPtr squashInst,
                           const InstSeqNum seq_num, ThreadID tid);
 
+    void squashFromBP(const PCStateBase &new_pc, const DynInstPtr squashInst,
+                      const InstSeqNum seq_num, ThreadID tid);
+    
     /** Checks if a thread is stalled. */
     bool checkStall(ThreadID tid) const;
 
@@ -405,15 +410,11 @@ class Fetch
     /** Wire to get commit's information from backwards time buffer. */
     TimeBuffer<TimeStruct>::wire fromCommit;
 
-    struct BPStruct {
-        Addr pc;
-    };
     /** Queue to store delayed branch predictor lookups */
-    TimeBuffer<BPStruct> delayedBPLookupQueue;
+    TimeBuffer<BPVerifStruct> branchPredVerifQueue;
 
     /** Wire to read and write delayed branch predictor lookup queue */
-    TimeBuffer<BPStruct>::wire delayedBPLookupQueueRead;
-    TimeBuffer<BPStruct>::wire delayedBPLookupQueueWrite;
+    TimeBuffer<BPVerifStruct>::wire branchPredVerifRead;
 
     //Might be annoying how this name is different than the queue.
     /** Wire used to write any information heading to decode. */
