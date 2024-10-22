@@ -82,6 +82,7 @@ def createGPU(system, args):
                 mem_resp_latency=args.mem_resp_latency,
                 scalar_mem_req_latency=args.scalar_mem_req_latency,
                 scalar_mem_resp_latency=args.scalar_mem_resp_latency,
+                mfma_scale=args.mfma_scale,
                 localDataStore=LdsState(
                     banks=args.numLdsBanks,
                     bankConflictPenalty=args.ldsBankConflictPenalty,
