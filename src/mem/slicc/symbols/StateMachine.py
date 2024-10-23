@@ -266,7 +266,7 @@ class StateMachine(Symbol):
         ident = self.ident
 
         protocol = self.symtab.slicc.protocol
-        py_ident = f"{ident}_Controller"
+        py_ident = f"{protocol}_{ident}_Controller"
         c_ident = f"{self.ident}_Controller"
         gen_filename = f"{protocol}/{py_ident}"
 
@@ -304,6 +304,29 @@ class $py_ident(RubyController):
                 )
 
         code.dedent()
+
+        # Needed for backwards compatibility. If you have exactly 1 protocol
+        # (i.e., buildEnv["PROTOCOL"] is not MULTIPLE), then for the one
+        # type of machine that matches this (sole) protocol, you can create an
+        # alias to the new name. This is only needed if using script that
+        # reference Ruby.py. When that is deprecated, this code can be removed
+        code(
+            """
+
+from m5.defines import buildEnv
+from m5.util import warn
+
+if buildEnv["PROTOCOL"] == "${protocol}":
+    class ${c_ident}(${py_ident}):
+        def __init__(self, *args, **kwargs):
+            warn(
+                "${c_ident} is deprecated. Use %s_${c_ident} instead",
+                buildEnv['PROTOCOL']
+            )
+            super().__init__(*args, **kwargs)
+"""
+        )
+
         code.write(path, f"{gen_filename}.py")
 
     def printControllerHH(self, path):
@@ -311,8 +334,11 @@ class $py_ident(RubyController):
         code = self.symtab.codeFormatter()
         ident = self.ident
         c_ident = f"{self.ident}_Controller"
-        header_string = self.symtab.slicc.protocol + '_' + self.ident
-        gen_filename = f"{self.symtab.slicc.protocol}/{c_ident}"
+
+        protocol = self.symtab.slicc.protocol
+        header_string = protocol + "_" + self.ident
+        gen_filename = f"{protocol}/{c_ident}"
+        py_ident = f"{protocol}_{ident}_Controller"
 
         code(
             """
@@ -329,7 +355,7 @@ class $py_ident(RubyController):
 #include "mem/ruby/protocol/TransitionResult.hh"
 #include "mem/ruby/protocol/${protocol}/Types.hh"
 #include "mem/ruby/slicc_interface/AbstractController.hh"
-#include "params/$c_ident.hh"
+#include "params/$py_ident.hh"
 
 """
         )
@@ -338,13 +364,17 @@ class $py_ident(RubyController):
         for var in self.objects:
             if var.type.ident not in seen_types and not var.type.isPrimitive:
                 if var.type.shared or var.type.isExternal:
-                    code('''
+                    code(
+                        """
 #include "mem/ruby/protocol/${{var.type.c_ident}}.hh"
-''')
+"""
+                    )
                 else:
-                    code('''
+                    code(
+                        """
 #include "mem/ruby/protocol/${{protocol}}/${{var.type.c_ident}}.hh"
-''')
+"""
+                    )
                 seen_types.add(var.type.ident)
 
         # for adding information to the protocol debug trace
@@ -364,7 +394,7 @@ extern std::stringstream ${ident}_transitionComment;
 class $c_ident : public AbstractController
 {
   public:
-    typedef ${c_ident}Params Params;
+    typedef ${py_ident}Params Params;
     $c_ident(const Params &p);
     void init();
 
@@ -627,13 +657,17 @@ void unset_tbe(${{self.TBEType.c_ident}}*& m_tbe_ptr);
         for var in self.objects:
             if var.type.ident not in seen_types and not var.type.isPrimitive:
                 if var.type.shared or var.type.isExternal:
-                    code('''
+                    code(
+                        """
 #include "mem/ruby/protocol/${{var.type.c_ident}}.hh"
-''')
+"""
+                    )
                 else:
-                    code('''
+                    code(
+                        """
 #include "mem/ruby/protocol/${{protocol}}/${{var.type.c_ident}}.hh"
-''')
+"""
+                    )
             seen_types.add(var.type.ident)
 
         num_in_ports = len(self.in_ports)
@@ -1473,9 +1507,11 @@ $c_ident::functionalReadBuffers(PacketPtr& pkt, WriteMask &mask)
         )
 
         if outputRequest_types:
-            code('''
+            code(
+                """
 #include "mem/ruby/protocol/${protocol}/${ident}_RequestType.hh"
-''')
+"""
+            )
 
         code(
             """
