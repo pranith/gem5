@@ -5033,6 +5033,8 @@ decode QUADRANT default Unknown::unknown() {
                         xc->tcBase()->getMMUPtr()->demapPage(Rs1, Rs2);
                     }}, IsNonSpeculative, IsSerializeAfter, No_OpClass);
                     0x18: mret({{
+                        auto isa = dynamic_cast<RiscvISA::ISA*>(
+                            xc->tcBase()->getIsaPtr());
                         if (xc->readMiscReg(MISCREG_PRV) != PRV_M) {
                             return std::make_shared<IllegalInstFault>(
                                         "mret at lower privilege", machInst);
@@ -5040,12 +5042,42 @@ decode QUADRANT default Unknown::unknown() {
                         } else {
                             STATUS status = xc->readMiscReg(MISCREG_STATUS);
                             xc->setMiscReg(MISCREG_PRV, status.mpp);
-                            xc->setMiscReg(MISCREG_NMIE, 1);
+                            // Always enable NMIE if smrnmi is not enabled
+                            if (!isa->enableSmrnmi()) {
+                                xc->setMiscReg(MISCREG_NMIE, 1);
+                            }
                             status.mie = status.mpie;
                             status.mpie = 1;
                             status.mpp = PRV_U;
                             xc->setMiscReg(MISCREG_STATUS, status);
                             NPC = rvSext(xc->readMiscReg(MISCREG_MEPC));
+                        }
+                    }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
+                    0x38: mnret({{
+                        auto isa = dynamic_cast<RiscvISA::ISA*>(
+                            xc->tcBase()->getIsaPtr());
+                        if (!isa->enableSmrnmi()) {
+                            return std::make_shared<IllegalInstFault>(
+                                        "mnret requires smrnmi enabled.",
+                                        machInst);
+                        }
+                        if (xc->readMiscReg(MISCREG_PRV) != PRV_M) {
+                            return std::make_shared<IllegalInstFault>(
+                                        "mnret at lower privilege", machInst);
+                            NPC = NPC;
+                        } else {
+                            NSTATUS nstatus = xc->readMiscReg(
+                                MISCREG_MNSTATUS);
+                            STATUS status = xc->readMiscReg(MISCREG_STATUS);
+                            xc->setMiscReg(MISCREG_PRV, nstatus.mnpp);
+                            if (nstatus.mnpp != PRV_M) {
+                                status.mprv = 0;
+                            }
+                            nstatus.nmie = 1;
+                            nstatus.mnpp = PRV_U;
+                            xc->setMiscReg(MISCREG_MNSTATUS, nstatus);
+                            xc->setMiscReg(MISCREG_STATUS, status);
+                            NPC = rvSext(xc->readMiscReg(MISCREG_MNEPC));
                         }
                     }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
                 }
