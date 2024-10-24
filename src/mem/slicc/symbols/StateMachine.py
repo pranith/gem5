@@ -699,7 +699,7 @@ $c_ident::$c_ident(const Params &p)
     m_machineID.type = MachineType_${ident};
     m_machineID.num = m_version;
     p.ruby_system->m_num_controllers[MachineType_${ident}]++;
-    p.ruby_system->registerAbstractController(this);
+    p.ruby_system->registerAbstractController(this, std::make_unique<${protocol}ProtocolInfo>());
     m_ruby_system = p.ruby_system;
 
     m_in_ports = $num_in_ports;

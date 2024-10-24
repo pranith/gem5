@@ -72,6 +72,12 @@ class SLICC(Grammar):
         self.symtab = SymbolTable(self)
         self.base_dir = base_dir
 
+        # Update slicc_interface/ProtocolInfo.cc/hh if updating this.
+        self.options = {
+            "partial_func_reads": False,
+            "use_secondary_store_conditional": False,
+        }
+
         if not includes:
             # raise error
             pass
@@ -305,7 +311,7 @@ class SLICC(Grammar):
         p[0] = []
 
     def p_decl__protocol(self, p):
-        "decl : PROTOCOL STRING SEMI"
+        "decl : PROTOCOL STRING exprs SEMI"
         if self.protocol:
             msg = "Protocol can only be set once! Error at {}:{}\n".format(
                 self.current_source,
@@ -313,6 +319,16 @@ class SLICC(Grammar):
             )
             raise ParseError(msg)
         self.protocol = p[2]
+        # Check for options
+        for option in p[3]:
+            assert type(option) is ast.VarExprAST
+            if option.name in self.options:
+                self.options[option.name] = True
+            else:
+                raise ParseError(
+                    f"Unknown option '{option.name}' for protocol "
+                    f"at {self.current_source}:{self.current_line}"
+                )
         p[0] = None
 
     def p_decl__include(self, p):

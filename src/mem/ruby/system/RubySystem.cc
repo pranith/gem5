@@ -97,12 +97,23 @@ RubySystem::registerNetwork(Network* network_ptr)
 }
 
 void
-RubySystem::registerAbstractController(AbstractController* cntrl)
+RubySystem::registerAbstractController(
+    AbstractController* cntrl, std::unique_ptr<ProtocolInfo> cntl_protocol)
 {
     m_abs_cntrl_vec.push_back(cntrl);
 
     MachineID id = cntrl->getMachineID();
     m_abstract_controls[id.getType()][id.getNum()] = cntrl;
+
+    if (!protocolInfo) {
+        protocolInfo = std::move(cntl_protocol);
+    } else {
+        fatal_if(
+            protocolInfo->getName() != cntl_protocol->getName(),
+            "All controllers in a system must use the same protocol. %s != %s",
+            protocolInfo->getName().c_str(), cntl_protocol->getName().c_str()
+        );
+    }
 }
 
 void
