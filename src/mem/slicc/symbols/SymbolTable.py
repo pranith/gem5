@@ -149,10 +149,64 @@ class SymbolTable:
                     ident = f"{self.slicc.protocol}/{ident}"
                 code('#include "mem/ruby/protocol/${{ident}}.hh"')
 
+        code(
+            f'#include "mem/ruby/protocol/{self.slicc.protocol}/{self.slicc.protocol}ProtocolInfo.hh"'
+        )
         code.write(path, f"{self.slicc.protocol}/Types.hh")
+
+        self.writeProtocolInfo(path)
 
         for symbol in self.sym_vec:
             symbol.writeCodeFiles(path, includes)
+
+    def writeProtocolInfo(self, path):
+        code = self.codeFormatter()
+        code(
+            f"""
+#ifndef __MEM_RUBY_PROTOCOL_{self.slicc.protocol}_{self.slicc.protocol}PROTOCOL_INFO_HH__
+#define __MEM_RUBY_PROTOCOL_{self.slicc.protocol}_{self.slicc.protocol}PROTOCOL_INFO_HH__
+
+#include "mem/ruby/slicc_interface/ProtocolInfo.hh"
+
+namespace gem5
+{{
+
+namespace ruby
+{{
+
+namespace {self.slicc.protocol}
+{{
+
+class {self.slicc.protocol}ProtocolInfo : public ProtocolInfo
+{{
+  public:
+      {self.slicc.protocol}ProtocolInfo() :
+          ProtocolInfo("{self.slicc.protocol}",
+"""
+        )
+        options = ",\n".join(
+            [
+                f"                       {'true' if value else 'false'}"
+                for _, value in self.slicc.options.items()
+            ]
+        )
+        code(options)
+        code(
+            f"""          )
+      {{
+      }}
+}};
+
+}}
+}}
+}}
+
+#endif // __MEM_RUBY_PROTOCOL_{self.slicc.protocol}_{self.slicc.protocol}PROTOCOL_INFO_HH__
+"""
+        )
+        code.write(
+            path, f"{self.slicc.protocol}/{self.slicc.protocol}ProtocolInfo.hh"
+        )
 
     def writeHTMLFiles(self, path):
         makeDir(path)
