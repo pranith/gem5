@@ -101,7 +101,7 @@ class L2Cache(RubyCache):
         self.replacement_policy = TreePLRURP()
 
 
-class CPCntrl(CorePair_Controller, CntrlBase):
+class CPCntrl(GPU_VIPER_CorePair_Controller, CntrlBase):
     def create(self, options, ruby_system, system):
         self.version = self.versionCount()
 
@@ -153,7 +153,7 @@ class TCPCache(RubyCache):
             self.replacement_policy = ObjectList.rp_list.get(options.tcp_rp)()
 
 
-class TCPCntrl(TCP_Controller, CntrlBase):
+class TCPCntrl(GPU_VIPER_TCP_Controller, CntrlBase):
     def create(self, options, ruby_system, system):
         self.version = self.versionCount()
 
@@ -246,7 +246,7 @@ class SQCCache(RubyCache):
             self.replacement_policy = ObjectList.rp_list.get(options.sqc_rp)()
 
 
-class SQCCntrl(SQC_Controller, CntrlBase):
+class SQCCntrl(GPU_VIPER_SQC_Controller, CntrlBase):
     def create(self, options, ruby_system, system):
         self.version = self.versionCount()
 
@@ -309,7 +309,7 @@ class TCC(RubyCache):
             self.replacement_policy = ObjectList.rp_list.get(options.tcc_rp)()
 
 
-class TCCCntrl(TCC_Controller, CntrlBase):
+class TCCCntrl(GPU_VIPER_TCC_Controller, CntrlBase):
     def create(self, options, ruby_system, system):
         self.version = self.versionCount()
         self.L2cache = TCC(
@@ -348,8 +348,7 @@ class L3Cache(RubyCache):
         self.replacement_policy = TreePLRURP()
 
 
-# unused in GPU_VIPER; see git blame for discussion
-class L3Cntrl(L3Cache_Controller, CntrlBase):
+class L3Cntrl(GPU_VIPER_L3Cache_Controller, CntrlBase):
     def create(self, options, ruby_system, system):
         self.version = self.versionCount()
         self.L3cache = L3Cache()
@@ -380,7 +379,7 @@ class L3Cntrl(L3Cache_Controller, CntrlBase):
         self.respToL3 = resp_to_l3
 
 
-class DirCntrl(Directory_Controller, CntrlBase):
+class DirCntrl(GPU_VIPER_Directory_Controller, CntrlBase):
     def create(self, options, dir_ranges, ruby_system, system):
         self.version = self.versionCount()
 
@@ -1096,7 +1095,7 @@ def create_system(
 
     for i, dma_device in enumerate(dma_devices):
         dma_seq = DMASequencer(version=i, ruby_system=ruby_system)
-        dma_cntrl = DMA_Controller(
+        dma_cntrl = GPU_VIPER_DMA_Controller(
             version=i, dma_sequencer=dma_seq, ruby_system=ruby_system
         )
         exec("system.dma_cntrl%d = dma_cntrl" % i)
