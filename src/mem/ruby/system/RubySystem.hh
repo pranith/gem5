@@ -137,6 +137,12 @@ class RubySystem : public ClockedObject
                                      uint64_t uncompressed_trace_size);
 
     void processRubyEvent();
+
+    // Called from `functionalRead` depending on if the protocol needs
+    // partial functional reads.
+    bool simpleFunctionalRead(PacketPtr pkt);
+    bool partialFunctionalRead(PacketPtr pkt);
+
   private:
     // configuration parameters
     bool m_randomization;
