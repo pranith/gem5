@@ -15,7 +15,8 @@ The most notable changes are:
 * Removes the RubySlicc_interfaces.slicc file from the SLICC includes of
 every protocol.
   * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
-
+* Updates the build configurations variables
+  * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names). So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
 * The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
   * They now reset to zero when m5.stats.reset() is called.
   * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.

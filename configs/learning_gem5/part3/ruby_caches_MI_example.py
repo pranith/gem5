@@ -48,7 +48,7 @@ from m5.util import (
 
 class MyCacheSystem(RubySystem):
     def __init__(self):
-        if buildEnv["PROTOCOL"] != "MI_example":
+        if "MI_example" not in buildEnv:
             fatal("This system assumes MI_example!")
 
         super().__init__()
