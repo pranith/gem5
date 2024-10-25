@@ -15,7 +15,8 @@ The most notable changes are:
 * Removes the RubySlicc_interfaces.slicc file from the SLICC includes of
 every protocol.
   * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
-
+* Updates the build configurations variables
+  * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names). So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
 
 
 # Version 24.0

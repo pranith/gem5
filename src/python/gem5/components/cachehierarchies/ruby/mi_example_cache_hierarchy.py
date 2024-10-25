@@ -65,6 +65,10 @@ class MIExampleCacheHierarchy(AbstractRubyCacheHierarchy):
         self._assoc = assoc
 
     @overrides(AbstractCacheHierarchy)
+    def get_coherence_protocol(self):
+        return CoherenceProtocol.MI_EXAMPLE
+
+    @overrides(AbstractCacheHierarchy)
     def incorporate_cache(self, board: AbstractBoard) -> None:
         super().incorporate_cache(board)
         self.ruby_system = RubySystem()

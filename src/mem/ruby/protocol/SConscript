@@ -117,8 +117,26 @@ slicc_builder = Builder(
     action=MakeAction(slicc_action, Transform("SLICC")), emitter=slicc_emitter
 )
 
-protocol = env["CONF"]["PROTOCOL"]
+if env["CONF"]["PROTOCOL"] != "MULTIPLE":
+    # Using backward compatibility
+    if (
+        f"RUBY_PROTOCOL_{env['CONF']['PROTOCOL']}" not in env["CONF"].keys()
+        or not env["CONF"][f"RUBY_PROTOCOL_{env['CONF']['PROTOCOL']}"]
+    ):
+        raise ValueError(
+            "Your build config must be updated for the new multiple Ruby "
+            "build system. Please select the correct protocol under Ruby. "
+            "Deselect \"Use multiple protocols\" and select the desired "
+            f"protocol ({env['CONF']['PROTOCOL']})\n"
+            "Run the following code:\n"
+            f"scons menuconfig {env['BUILDDIR']}\n"
+        )
 
+# Gather protocol names
+protocols = []
+for variable in env["CONF"]:
+    if variable.startswith("RUBY_PROTOCOL_") and env["CONF"][variable]:
+        protocols.append(variable[len("RUBY_PROTOCOL_") :])
 
 def find_protocol_sources(protocol):
     protocol_dir = None
@@ -135,7 +153,7 @@ def find_protocol_sources(protocol):
     return protocol_dir.File("%s.slicc" % protocol)
 
 
-sources = [find_protocol_sources(protocol)]
+sources = [find_protocol_sources(protocol) for protocol in protocols]
 
 env.Append(BUILDERS={"SLICC": slicc_builder})
 nodes = env.SLICC([], sources)
