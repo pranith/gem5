@@ -300,9 +300,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         if self.has_io_bus():
             return self.iobus
         else:
-            raise NotImplementedError(
-                "Board was not configured for FS mode and does not have an "
-                "I/O bus. Use `has_io_bus()` to check this."
+            raise Exception(
+                "Cannot execute `get_io_bus()`: Board does not have an I/O "
+                "bus to return. Use `has_io_bus()` to check this."
             )
 
     @overrides(AbstractSystemBoard)
@@ -314,9 +314,9 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         if self.has_dma_ports():
             return [self.pc.south_bridge.ide.dma, self.iobus.mem_side_ports]
         else:
-            raise NotImplementedError(
-                "Board was not configured for FS mode and does not have DMA "
-                "ports. Use `has_dma_ports()` to check this."
+            raise Exception(
+                "Cannot execute `get_dma_ports()`: Board does not have DMA "
+                "ports to return. Use `has_dma_ports()` to check this."
             )
 
     @overrides(AbstractSystemBoard)
@@ -328,9 +328,10 @@ class X86Board(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         if self.has_coherent_io():
             return self.iobus.mem_side_ports
         else:
-            raise NotImplementedError(
-                "Board was not configured for FS mode and does not have I/O "
-                "ports. Use has_coherent_io to check this."
+            raise Exception(
+                "Cannot execute `get_mem_side_coherent_io_port()`: Board does "
+                "not have I/O ports to return. Use `has_coherent_io()` to "
+                "check this."
             )
 
     @overrides(AbstractSystemBoard)
