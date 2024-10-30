@@ -3251,12 +3251,19 @@ namespace Aarch64
                 return decodeNeonUTwoShiftUFpReg<UcvtfFixedScX>(
                     size, machInst, vd, vn, shiftAmt);
             } else {
-                if (size & 0x1)
+                switch (size) {
+                  case 0b11:
                     return new ScvtfFixedScDX<uint64_t>(machInst, vd, vn,
                                                         shiftAmt);
-                else
+                  case 0b10:
                     return new ScvtfFixedScSX<uint32_t>(machInst, vd, vn,
                                                         shiftAmt);
+                  case 0b01:
+                    return new ScvtfFixedScSX<uint16_t>(machInst, vd, vn,
+                                                        shiftAmt);
+                  default:
+                    return new Unknown64(machInst);
+                }
             }
           case 0x1f:
             if (immh < 0x2)

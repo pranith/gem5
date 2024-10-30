@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2012-2013, 2017-2018, 2020 ARM Limited
+* Copyright (c) 2012-2013, 2017-2018, 2020, 2025 Arm Limited
 * Copyright (c) 2020 Metempsy Technology Consulting
 * All rights reserved
 *
@@ -4968,7 +4968,7 @@ fplibFixedToFP(uint64_t op, int fbits, bool u, FPRounding rounding,
 {
     int flags = 0;
     uint16_t res = fp16_cvtf(op, fbits, u,
-                             (int)rounding | ((uint32_t)fpscr >> 22 & 12),
+                             (int)rounding | (modeConv(fpscr) & 0xFC),
                              &flags);
     set_fpscr0(fpscr, flags);
     return res;
@@ -4980,7 +4980,7 @@ fplibFixedToFP(uint64_t op, int fbits, bool u, FPRounding rounding, FPSCR &fpscr
 {
     int flags = 0;
     uint32_t res = fp32_cvtf(op, fbits, u,
-                             (int)rounding | ((uint32_t)fpscr >> 22 & 12),
+                             (int)rounding | (modeConv(fpscr) & 0xFC),
                              &flags);
     set_fpscr0(fpscr, flags);
     return res;
@@ -4992,7 +4992,7 @@ fplibFixedToFP(uint64_t op, int fbits, bool u, FPRounding rounding, FPSCR &fpscr
 {
     int flags = 0;
     uint64_t res = fp64_cvtf(op, fbits, u,
-                             (int)rounding | ((uint32_t)fpscr >> 22 & 12),
+                             (int)rounding | (modeConv(fpscr) & 0xFC),
                              &flags);
     set_fpscr0(fpscr, flags);
     return res;

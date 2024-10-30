@@ -2166,33 +2166,35 @@ let {{
     threeRegWideInstX("saddw2", "Saddw2X", "SimdAddAccOp", smallSignedTypes,
                       addlwCode, hi=True)
     # SCVTF (fixed-point)
-    scvtfFixedCode = fpOp % ("fplibFixedToFP<Element>((int%d_t) srcElem1, imm,"
+    scvtfFixedCode = fpOp % ("fplibFixedToFP<Element>("
+                             "sext<sizeof(Element) * 8>(srcElem1), imm,"
                              " false, FPCRRounding(fpscr), fpscr)")
     twoEqualRegInstX("scvtf", "ScvtfFixedDX", "SimdCvtOp", smallFloatTypes, 2,
-                     scvtfFixedCode % 32, hasImm=True)
+                     scvtfFixedCode, hasImm=True)
     twoEqualRegInstX("scvtf", "ScvtfFixedSQX", "SimdCvtOp", smallFloatTypes, 4,
-                     scvtfFixedCode % 32, hasImm=True)
+                     scvtfFixedCode, hasImm=True)
     twoEqualRegInstX("scvtf", "ScvtfFixedDQX", "SimdCvtOp", ("uint64_t",), 4,
-                     scvtfFixedCode % 64, hasImm=True)
+                     scvtfFixedCode, hasImm=True)
     twoEqualRegInstX("scvtf", "ScvtfFixedScSX", "SimdCvtOp", smallFloatTypes,
-                     4, scvtfFixedCode % 32, hasImm=True, scalar=True)
+                     4, scvtfFixedCode, hasImm=True, scalar=True)
     twoEqualRegInstX("scvtf", "ScvtfFixedScDX", "SimdCvtOp", ("uint64_t",), 4,
-                     scvtfFixedCode % 64, hasImm=True, scalar=True)
+                     scvtfFixedCode, hasImm=True, scalar=True)
     # SCVTF (integer)
-    scvtfIntCode = fpOp % ("fplibFixedToFP<Element>((int%d_t) srcElem1, 0,"
+    scvtfIntCode = fpOp % ("fplibFixedToFP<Element>("
+                           "sext<sizeof(Element) * 8>(srcElem1), 0,"
                            " false, FPCRRounding(fpscr), fpscr)")
     twoEqualRegInstX("scvtf", "ScvtfIntDX", "SimdCvtOp", smallFloatTypes, 2,
-                     scvtfIntCode % 32)
+                     scvtfIntCode)
     twoEqualRegInstX("scvtf", "ScvtfIntSQX", "SimdCvtOp", smallFloatTypes, 4,
-                     scvtfIntCode % 32)
+                     scvtfIntCode)
     twoEqualRegInstX("scvtf", "ScvtfIntDQX", "SimdCvtOp", ("uint64_t",), 4,
-                     scvtfIntCode % 64)
+                     scvtfIntCode)
     twoEqualRegInstX("scvtf", "ScvtfIntScHX", "SimdCvtOp", ("uint16_t",), 4,
-                     scvtfIntCode % 16, scalar=True)
+                     scvtfIntCode, scalar=True)
     twoEqualRegInstX("scvtf", "ScvtfIntScSX", "SimdCvtOp", ("uint32_t",), 4,
-                     scvtfIntCode % 32, scalar=True)
+                     scvtfIntCode, scalar=True)
     twoEqualRegInstX("scvtf", "ScvtfIntScDX", "SimdCvtOp", ("uint64_t",), 4,
-                     scvtfIntCode % 64, scalar=True)
+                     scvtfIntCode, scalar=True)
     # SHADD
     haddCode = '''
             Element carryBit =
