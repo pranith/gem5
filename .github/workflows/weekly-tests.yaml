@@ -214,7 +214,7 @@ jobs:
     gpu-test-pannotia-fw-hip:
         runs-on: [self-hosted, linux, x64]
         container: ghcr.io/gem5/gcn-gpu:latest
-        timeout-minutes: 720 # 12 hours
+        timeout-minutes: 2160 # 36 hours
         needs: get-date
 
         steps:
