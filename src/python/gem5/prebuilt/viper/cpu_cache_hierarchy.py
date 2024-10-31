@@ -219,6 +219,7 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
                 )
                 ctrl.dma_sequencer = DMASequencer(version=i, in_ports=port)
 
+                ctrl.version = len(self._dma_controllers)
                 ctrl.ruby_system = self.ruby_system
                 ctrl.dma_sequencer.ruby_system = self.ruby_system
 
@@ -239,6 +240,7 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
                     version=len(self._dma_controllers), in_ports=port
                 )
 
+                ctrl.version = len(self._dma_controllers)
                 ctrl.ruby_system = self.ruby_system
                 ctrl.dma_sequencer.ruby_system = self.ruby_system
 

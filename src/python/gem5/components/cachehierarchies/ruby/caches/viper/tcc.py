@@ -28,14 +28,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects import (
+    GPU_VIPER_TCC_Controller,
     MessageBuffer,
     RubyCache,
-    TCC_Controller,
     TreePLRURP,
 )
 
 
-class TCCCache(TCC_Controller):
+class TCCCache(GPU_VIPER_TCC_Controller):
     def __init__(
         self,
         tcc_size: str,

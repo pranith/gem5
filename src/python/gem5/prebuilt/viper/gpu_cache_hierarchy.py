@@ -277,6 +277,7 @@ class ViperGPUCacheHierarchy(AbstractRubyCacheHierarchy):
             )
             ctrl.dma_sequencer = DMASequencer(version=i, in_ports=port)
 
+            ctrl.version = len(self._dma_controllers)
             ctrl.ruby_system = self.ruby_gpu
             ctrl.dma_sequencer.ruby_system = self.ruby_gpu
 
