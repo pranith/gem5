@@ -41,13 +41,15 @@ class GlobalInstTracker(SimObject):
     cxx_class = "gem5::GlobalInstTracker"
 
     cxx_exports = [
-        PyBindMethod("changeThreshold"),
+        PyBindMethod("addThreshold"),
+        PyBindMethod("getCounter"),
         PyBindMethod("resetCounter"),
-        PyBindMethod("getThreshold"),
+        PyBindMethod("getThresholds"),
+        PyBindMethod("resetThresholds"),
     ]
 
-    inst_threshold = Param.Counter(
-        "The instruction threshold to trigger an" " exit event"
+    inst_thresholds = VectorParam.Counter(
+        "A list of instruction thresholds to trigger an exit event"
     )
 
 

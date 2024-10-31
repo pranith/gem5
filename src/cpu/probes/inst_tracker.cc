@@ -81,22 +81,26 @@ LocalInstTracker::stopListening()
 
 GlobalInstTracker::GlobalInstTracker(const GlobalInstTrackerParams &params)
     : SimObject(params),
-      instCount(0),
-      instThreshold(params.inst_threshold)
+      instCount(0)
 {
-    DPRINTF(InstTracker, "instThreshold = %lu\n", instThreshold);
+    for (const auto &threshold : params.inst_thresholds) {
+        instThresholdSet.insert(threshold);
+        DPRINTF(InstTracker, "adding the instruction threshold\n"
+                              "instThreshold = %lu\n", threshold);
+    }
+    DPRINTF(InstTracker, "instThresholdSet size = %lu\n",
+            instThresholdSet.size());
 }
 
 void
 GlobalInstTracker::updateAndCheckInstCount(const uint64_t& inst)
 {
     instCount ++;
-    if (instCount >= instThreshold) {
+    if (instThresholdSet.find(instCount) != instThresholdSet.end()) {
         DPRINTF(InstTracker, "Instruction count reached the threshold\n"
-                                "instCount = %lu\n"
-                                "instThreshold = %lu\n",
-                                instCount, instThreshold);
-
+                                "instCount = %lu\n",
+                                instCount);
+        instThresholdSet.erase(instCount);
         // note that when the threshold is reached, the simulation will raise
         // and exit event but it will not reset the instruction counter.
         // user can reset the counter by calling the resetCounter() function

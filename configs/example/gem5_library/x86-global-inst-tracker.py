@@ -76,14 +76,16 @@ cache_hierarchy = PrivateL1CacheHierarchy(
 
 memory = SingleChannelDDR4_2400("1GB")
 
+# using 9 cores because when using openmp in SE mode, the number of cores
+# should be # cores + 1
 processor = SimpleProcessor(cpu_type=CPUTypes.TIMING, num_cores=9, isa=ISA.X86)
 
 # setup instruction tracker
 
 # first, we need to create a global instruction tracker
 global_inst_tracker = GlobalInstTracker(
-    # threshold to trigger the event
-    inst_threshold=100_000_000
+    # a list of thresholds to trigger the event
+    inst_thresholds=[100_000_000, 100_020_000]
 )
 
 # then, we create a local instruction tracker for each core
@@ -123,14 +125,17 @@ def max_inst_handler():
     # when it reached this function, it means that it successfully raised
     # the ExitEvent.MAX_INSTS event
     print("Reached MAX_INSTS with 100000000 instructions")
-    print("Changing threshold to 20000")
-    # we can change the threshold of the global instruction tracker
-    global_inst_tracker.changeThreshold(20000)
-    # we need to reset the counter of the global instruction tracker
-    # the counter does not reset automatically
+    yield False
+    print("Reached MAX_INSTS with 100020000 instructions")
+    # we can get the current counter of the global instruction tracker
+    print(f"Current counter: {global_inst_tracker.getCounter()}")
+    # we can reset the counter
     global_inst_tracker.resetCounter()
-    m5.stats.dump()
-    m5.stats.reset()
+    print(f"After reset, current counter: {global_inst_tracker.getCounter()}")
+    # we can add new threshold to the global instruction tracker
+    global_inst_tracker.addThreshold(20000)
+    # we can get the thresholds
+    print(f"Current thresholds: {global_inst_tracker.getThresholds()}")
     yield False
     print("Reached MAX_INSTS with 20000 instructions")
     print("Stop listening to instructions")
@@ -141,9 +146,7 @@ def max_inst_handler():
     #
     # for tracker in all_trackers:
     #     tracker.startListening()
-    m5.stats.dump()
-    m5.stats.reset()
-    yield False
+    yield True
 
 
 simulator = Simulator(
