@@ -151,6 +151,39 @@ def cache_factory(cache_class: str):
             size="16KiB",
             assoc=8,
         )
+    elif cache_class == "MESIThreeLevel":
+        from gem5.components.cachehierarchies.ruby.mesi_three_level_cache_hierarchy import (
+            MESIThreeLevelCacheHierarchy,
+        )
+
+        return MESIThreeLevelCacheHierarchy(
+            l1i_size="32KiB",
+            l1i_assoc="8",
+            l1d_size="32KiB",
+            l1d_assoc="8",
+            l2_size="256KiB",
+            l2_assoc="4",
+            l3_size="16MiB",
+            l3_assoc="16",
+            num_l3_banks=1,
+        )
+    elif cache_class == "OctopiCache":
+        from gem5.components.cachehierarchies.ruby.caches.prebuilt.octopi_cache.octopi import (
+            OctopiCache,
+        )
+
+        return OctopiCache(
+            l1i_size="32KiB",
+            l1i_assoc=8,
+            l1d_size="32KiB",
+            l1d_assoc=8,
+            l2_size="256KiB",
+            l2_assoc=4,
+            l3_size="16MiB",
+            l3_assoc=16,
+            num_core_complexes=1,
+            is_fullsystem=False,
+        )
     else:
         raise ValueError(f"The cache class {cache_class} is not supported.")
 
@@ -188,6 +221,8 @@ parser.add_argument(
         "MESITwoLevel",
         "MIExample",
         "CHIL1",
+        "MESIThreeLevel",
+        "OctopiCache",
     ],
 )
 

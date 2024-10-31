@@ -67,7 +67,6 @@ class L1Cache(MI_example_L1Cache_Controller):
         self.clk_domain = clk_domain
         self.send_evictions = core.requires_send_evicts()
 
-    @overrides(AbstractL1Cache)
     def connectQueues(self, network):
         self.mandatoryQueue = MessageBuffer()
         self.requestFromCache = MessageBuffer(ordered=True)
