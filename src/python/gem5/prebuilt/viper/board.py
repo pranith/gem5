@@ -72,6 +72,10 @@ class ViperBoard(X86Board):
 
         self.gpus = gpus
 
+    @overrides(AbstractCacheHierarchy)
+    def get_coherence_protocol(self):
+        return CoherenceProtocol.GPU_VIPER
+
     @overrides(AbstractBoard)
     def get_devices(self):
         return self.gpus

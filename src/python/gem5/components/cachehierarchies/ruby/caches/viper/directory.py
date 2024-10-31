@@ -29,17 +29,17 @@
 
 
 from m5.objects import (
+    GPU_VIPER_Directory_Controller,
     MessageBuffer,
     RubyDirectoryMemory,
 )
 
-from ......utils.override import overrides
-from ..abstract_directory import AbstractDirectory
 
-
-class ViperDirectory(AbstractDirectory):
+class ViperDirectory(GPU_VIPER_Directory_Controller):
     def __init__(self, network, cache_line_size, mem_range, port):
-        super().__init__(network, cache_line_size)
+        super().__init__()
+        self._cache_line_size = cache_line_size
+
         self.addr_ranges = [mem_range]
         self.directory = RubyDirectoryMemory(
             block_size=cache_line_size,
@@ -58,7 +58,8 @@ class ViperDirectory(AbstractDirectory):
         self.useL3OnWT = False
         self.L2isWB = False
 
-    @overrides(AbstractDirectory)
+        self.connectQueues(network)
+
     def connectQueues(self, network):
         self.requestFromDMA = MessageBuffer(ordered=True)
         self.requestFromDMA.in_port = network.out_port

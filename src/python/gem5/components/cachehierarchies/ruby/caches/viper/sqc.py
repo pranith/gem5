@@ -28,14 +28,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects import (
+    GPU_VIPER_SQC_Controller,
     MessageBuffer,
     RubyCache,
-    SQC_Controller,
     TreePLRURP,
 )
 
 
-class SQCCache(SQC_Controller):
+class SQCCache(GPU_VIPER_SQC_Controller):
     def __init__(
         self,
         sqc_size: str,

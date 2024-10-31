@@ -28,14 +28,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects import (
+    GPU_VIPER_TCP_Controller,
     MessageBuffer,
     RubyCache,
-    TCP_Controller,
     TreePLRURP,
 )
 
 
-class TCPCache(TCP_Controller):
+class TCPCache(GPU_VIPER_TCP_Controller):
     def __init__(
         self,
         tcp_size: str,

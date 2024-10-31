@@ -30,7 +30,7 @@
 import math
 
 from m5.objects import (
-    CorePair_Controller,
+    GPU_VIPER_CorePair_Controller,
     MessageBuffer,
     RubyCache,
     TreePLRURP,
@@ -39,7 +39,7 @@ from m5.objects import (
 from gem5.components.processors.abstract_core import AbstractCore
 
 
-class CorePairCache(CorePair_Controller):
+class CorePairCache(GPU_VIPER_CorePair_Controller):
     def __init__(
         self,
         l1i_size: str,

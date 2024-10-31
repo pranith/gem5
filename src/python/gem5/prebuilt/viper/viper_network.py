@@ -91,8 +91,15 @@ class SimpleDoubleCrossbar(SimpleNetwork):
         self.ruby_system = ruby_system
 
     def connect(self, controllers):
-        l2_xbar_types = ("TCP_Controller", "SQC_Controller", "TCC_Controller")
-        soc_xbar_types = ("DMA_Controller", "Directory_Controller")
+        l2_xbar_types = (
+            "GPU_VIPER_TCP_Controller",
+            "GPU_VIPER_SQC_Controller",
+            "GPU_VIPER_TCC_Controller",
+        )
+        soc_xbar_types = (
+            "GPU_VIPER_DMA_Controller",
+            "GPU_VIPER_Directory_Controller",
+        )
 
         # Create one router per controller plus a crossbar for L2 controllers
         # and a crossbar for SoC controllers.

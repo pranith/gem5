@@ -28,19 +28,21 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 
-from m5.objects import MessageBuffer
-
-from ......utils.override import overrides
-from ..abstract_dma_controller import AbstractDMAController
+from m5.objects import (
+    GPU_VIPER_DMA_Controller,
+    MessageBuffer,
+)
 
 
 # There is a controller for GPU and GPU to keep the "version" numbers
 # incrementing seperately
-class ViperCPUDMAController(AbstractDMAController):
+class ViperCPUDMAController(GPU_VIPER_DMA_Controller):
     def __init__(self, network, cache_line_size):
-        super().__init__(network, cache_line_size)
+        super().__init__()
 
-    @overrides(AbstractDMAController)
+        self._cache_line_size = cache_line_size
+        self.connectQueues(network)
+
     def connectQueues(self, network):
         # A buffer size of 0 means it is an infinite queue. The VIPER
         # DMA controller has not been thoroughly tested with finite buffers.
@@ -52,11 +54,12 @@ class ViperCPUDMAController(AbstractDMAController):
         self.requestToDir.out_port = network.in_port
 
 
-class ViperGPUDMAController(AbstractDMAController):
+class ViperGPUDMAController(GPU_VIPER_DMA_Controller):
     def __init__(self, network, cache_line_size):
-        super().__init__(network, cache_line_size)
+        super().__init__()
 
-    @overrides(AbstractDMAController)
+        self.connectQueues(network)
+
     def connectQueues(self, network):
         # A buffer size of 0 means it is an infinite queue. The VIPER
         # DMA controller has not been thoroughly tested with finite buffers.
