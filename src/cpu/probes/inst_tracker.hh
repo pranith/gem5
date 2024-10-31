@@ -29,6 +29,8 @@
 #ifndef __CPU_PROBES_INST_TRACKER_HH__
 #define __CPU_PROBES_INST_TRACKER_HH__
 
+#include <unordered_set>
+
 #include "debug/InstTracker.hh"
 #include "params/GlobalInstTracker.hh"
 #include "params/LocalInstTracker.hh"
@@ -101,18 +103,24 @@ class GlobalInstTracker : public SimObject
     uint64_t instCount;
 
     /**
-      * the threshold for the number of instructions that should be executed
-      * before the simulation exits
+      * a set of thresholds for the number of instructions that should be
+      * executed before the simulation exits
      */
-    uint64_t instThreshold;
+    std::unordered_set<uint64_t> instThresholdSet;
 
   public:
     void
-    changeThreshold(uint64_t new_threshold)
+    addThreshold(uint64_t new_threshold)
     {
-        instThreshold = new_threshold;
-        DPRINTF(InstTracker, "Changing the instruction threshold\n"
-                                  "instThreshold = %lu\n", instThreshold);
+        instThresholdSet.insert(new_threshold);
+        DPRINTF(InstTracker, "adding the instruction threshold %lu\n",
+                                                              new_threshold);
+    };
+
+    uint64_t
+    getCounter() const
+    {
+        return instCount;
     };
 
     void
@@ -123,10 +131,17 @@ class GlobalInstTracker : public SimObject
                                               "instCount = %lu\n", instCount);
     };
 
-    uint64_t
-    getThreshold() const
+    std::unordered_set<uint64_t>
+    getThresholds() const
     {
-        return instThreshold;
+        return instThresholdSet;
+    };
+
+    void
+    resetThresholds()
+    {
+        instThresholdSet.clear();
+        DPRINTF(InstTracker, "Resetting the instruction thresholds\n");
     };
 };
 
