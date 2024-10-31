@@ -253,6 +253,7 @@ def define_constants(constants):
     constants.power_tag = "POWER"
     constants.null_tag = "NULL"
     constants.all_compiled_tag = "ALL"
+    constants.null_all_ruby = "NULL_All_Ruby"
 
     constants.variant_tag_type = "variant"
     constants.opt_tag = "opt"
