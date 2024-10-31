@@ -30,24 +30,24 @@ from m5.objects import (
     RubySystem,
 )
 
-from ....coherence_protocol import CoherenceProtocol
-from ....utils.override import overrides
-from ....utils.requires import requires
+from .......coherence_protocol import CoherenceProtocol
+from .......utils.override import overrides
+from .......utils.requires import requires
 
-requires(coherence_protocol_required=CoherenceProtocol.MI_EXAMPLE)
+requires(coherence_protocol_required=CoherenceProtocol.MESI_THREE_LEVEL)
 
-from ......components.boards.abstract_board import AbstractBoard
-from ......components.cachehierarchies.ruby.caches.mesi_three_level.directory import (
+from .......components.boards.abstract_board import AbstractBoard
+from .......components.cachehierarchies.ruby.caches.mesi_three_level.directory import (
     Directory,
 )
-from ......components.cachehierarchies.ruby.caches.mesi_three_level.dma_controller import (
+from .......components.cachehierarchies.ruby.caches.mesi_three_level.dma_controller import (
     DMAController,
 )
-from ....abstract_cache_hierarchy import AbstractCacheHierarchy
-from ....abstract_three_level_cache_hierarchy import (
+from .....abstract_cache_hierarchy import AbstractCacheHierarchy
+from .....abstract_three_level_cache_hierarchy import (
     AbstractThreeLevelCacheHierarchy,
 )
-from ...abstract_ruby_cache_hierarchy import AbstractRubyCacheHierarchy
+from ....abstract_ruby_cache_hierarchy import AbstractRubyCacheHierarchy
 from .core_complex import CoreComplex
 from .octopi_network import OctopiNetwork
 from .ruby_network_components import (
