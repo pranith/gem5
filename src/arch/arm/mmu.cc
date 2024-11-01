@@ -507,9 +507,6 @@ MMU::checkPermissions64(TlbEntry *te, const RequestPtr &req, Mode mode,
     }
 
     Addr vaddr_tainted = req->getVaddr();
-    Addr vaddr = purifyTaggedAddr(vaddr_tainted, tc, state.exceptionLevel,
-        static_cast<TCR>(state.ttbcr), mode==Execute, state);
-
     Request::Flags flags = req->getFlags();
     bool is_fetch  = (mode == Execute);
     // Cache clean operations require read permissions to the specified VA
@@ -534,7 +531,7 @@ MMU::checkPermissions64(TlbEntry *te, const RequestPtr &req, Mode mode,
     // strongly ordered memory
     if (!is_fetch) {
         if (te->mtype != TlbEntry::MemoryType::Normal) {
-            if (vaddr & mask(flags & AlignmentMask)) {
+            if (vaddr_tainted & mask(flags & AlignmentMask)) {
                 stats.alignFaults++;
                 return std::make_shared<DataAbort>(
                     vaddr_tainted,
