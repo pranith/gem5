@@ -847,8 +847,8 @@ MMU::checkPAN(ThreadContext *tc, uint8_t ap, const RequestPtr &req, Mode mode,
     // gem5)
     // 4) Instructions to be treated as unprivileged, unless
     // HCR_EL2.{E2H, TGE} == {1, 0}
-    if (HaveExt(tc, ArmExtension::FEAT_PAN) && state.cpsr.pan && (ap & 0x1) &&
-        mode != BaseMMU::Execute) {
+    if (_release->has(ArmExtension::FEAT_PAN) && state.cpsr.pan &&
+        (ap & 0x1) && mode != BaseMMU::Execute) {
 
         if (req->isCacheMaintenance() &&
             !(req->getFlags() & Request::CACHE_BLOCK_ZERO)) {
