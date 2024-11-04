@@ -77,7 +77,7 @@ def test_memory(
         config_args=[generator, generator_cores, cache, module]
         + [memory]
         + list(args),
-        valid_isas=(constants.null_all_ruby,),
+        valid_isas=(constants.all_compiled_tag,),
         valid_hosts=constants.supported_hosts,
         length=constants.quick_tag,
     )
