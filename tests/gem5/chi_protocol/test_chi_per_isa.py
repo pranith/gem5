@@ -72,6 +72,6 @@ for isa in ("arm", "riscv", "x86"):
             ],
             valid_isas=(constants.all_compiled_tag,),
             valid_hosts=constants.supported_hosts,
-            protocol="CHI",
+            protocol=None,
             length=constants.long_tag,
         )
