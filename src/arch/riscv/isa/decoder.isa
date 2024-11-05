@@ -4881,7 +4881,7 @@ decode QUADRANT default Unknown::unknown() {
                             status.uie = status.upie;
                             status.upie = 1;
                             xc->setMiscReg(MISCREG_STATUS, status);
-                            NPC = xc->readMiscReg(MISCREG_UEPC);
+                            NPC = rvSext(xc->readMiscReg(MISCREG_UEPC));
                         }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
                     }
                     0x8: decode RS2 {
@@ -4907,7 +4907,7 @@ decode QUADRANT default Unknown::unknown() {
                                 status.spie = 1;
                                 status.spp = PRV_U;
                                 xc->setMiscReg(MISCREG_STATUS, status);
-                                NPC = xc->readMiscReg(MISCREG_SEPC);
+                                NPC = rvSext(xc->readMiscReg(MISCREG_SEPC));
                             }
                         }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
                         0x5: wfi({{
@@ -4977,7 +4977,7 @@ decode QUADRANT default Unknown::unknown() {
                             status.mpie = 1;
                             status.mpp = PRV_U;
                             xc->setMiscReg(MISCREG_STATUS, status);
-                            NPC = xc->readMiscReg(MISCREG_MEPC);
+                            NPC = rvSext(xc->readMiscReg(MISCREG_MEPC));
                         }
                     }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
                 }

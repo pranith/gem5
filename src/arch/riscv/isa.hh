@@ -124,10 +124,7 @@ class ISA : public BaseISA
     PCStateBase*
     newPCState(Addr new_inst_addr=0) const override
     {
-        if (_rvType == RV32) {
-            new_inst_addr = sext<32>(new_inst_addr);
-        }
-        return new PCState(new_inst_addr, _rvType);
+        return new PCState(rvSext(new_inst_addr), _rvType);
     }
 
   public:
@@ -196,6 +193,11 @@ class ISA : public BaseISA
 
     virtual Addr getFaultHandlerAddr(
         RegIndex idx, uint64_t cause, bool intr) const;
+
+    Addr rvSext(Addr addr) const
+    {
+        return (_rvType == RV32) ? sext<32>(addr) : addr;
+    }
 };
 
 } // namespace RiscvISA
