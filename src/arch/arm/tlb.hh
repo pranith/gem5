@@ -110,6 +110,21 @@ class TLB : public BaseTLB
         using AssociativeCache<TlbEntry>::accessEntry;
         TlbEntry* accessEntry(const KeyType &key) override;
         TlbEntry* findEntry(const KeyType &key) const override;
+
+        /**
+         * Invalidate the last matched entry
+         * The method has an optional param, which means: invalidate
+         * cached prev only if matches the entry argument. This is
+         * to be used for example on TLB entry invalidations
+         *
+         * @param invalid flush prev if param is nullptr, otherwise
+         *                only if prev == invalid
+         */
+        void invalidatePrev(const TlbEntry *invalid=nullptr);
+
+      private:
+        /** Last matched entry */
+        mutable TlbEntry *prev = nullptr;
     } table;
 
     /** TLB Size */

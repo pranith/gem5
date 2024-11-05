@@ -73,19 +73,29 @@ TLB::Table::accessEntry(const KeyType &key)
 TlbEntry*
 TLB::Table::findEntry(const KeyType &key) const
 {
-    auto candidates = indexingPolicy->getPossibleEntries(key);
+    // Exploiting locality to maximaize simulator performance
+    if (prev && prev->N == key.pageSize && prev->match(key)) {
+        return prev;
+    }
 
-    for (auto candidate : candidates) {
+    for (auto candidate : indexingPolicy->getPossibleEntries(key)) {
         auto entry = static_cast<TlbEntry*>(candidate);
         // We check for pageSize match outside of the Entry::match
         // as the latter is also used to match entries in TLBI invalidation
         // where we don't care about the pageSize
         if (entry->N == key.pageSize && entry->match(key)) {
-            return entry;
+            return prev = entry;
         }
     }
 
     return nullptr;
+}
+
+void
+TLB::Table::invalidatePrev(const TlbEntry *invalid)
+{
+    if (!invalid || invalid == prev)
+        prev = nullptr;
 }
 
 TLB::TLB(const ArmTLBParams &p)
@@ -239,6 +249,8 @@ TLB::insert(const Lookup &lookup_data, TlbEntry &entry)
 
     table.insertEntry(lookup_data, victim);
 
+    table.invalidatePrev(victim);
+
     observedPageSizes.insert(entry.N);
     stats.inserts++;
     ppRefills->notify(1);
@@ -280,6 +292,8 @@ TLB::flushAll()
         }
     }
 
+    table.invalidatePrev();
+
     stats.flushTlb++;
     observedPageSizes.clear();
 }
@@ -292,6 +306,9 @@ TLB::flush(const TLBIOp& tlbi_op)
         if (tlbi_op.match(&te, vmid)) {
             DPRINTF(TLB, " -  %s\n", te.print());
             table.invalidate(&te);
+
+            table.invalidatePrev(&te);
+
             stats.flushedEntries++;
         }
         valid_entry = valid_entry || te.valid;
