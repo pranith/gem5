@@ -1961,7 +1961,7 @@ template<typename ElemType, typename IndexType>
     uint32_t vd_vlmax = vlenb / vd_eewb;
     uint32_t vs1_vlmax = vlenb / vs1_eewb;
     for (uint32_t i = 0; i < ceil((float) this->vl / vd_vlmax); i++) {
-        uint32_t pinvd_micro_vl = (vd_vlmax*(i+1) <= remaining_vl)
+        uint32_t pinvd_micro_vl = (vd_vlmax <= remaining_vl)
                                   ? vd_vlmax : remaining_vl;
         uint8_t num_vd_pins = ceil((float) pinvd_micro_vl/vs1_vlmax)*vs2_vregs;
         microop = new VPinVdMicroInst(machInst, i, num_vd_pins, elen, vlen);
