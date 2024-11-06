@@ -7,6 +7,11 @@
   * It returns if the stride does not match, as opposed to issuing prefetching using the new stride --- the previous, incorrect behavior.
   * Returns if the new stride is 0, indicating multiple reads from the same cache line.
 
+* The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
+  * They now reset to zero when m5.stats.reset() is called.
+  * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.
+  * The statistics `hostInstRate` and `hostOpRate` are also affected by this change, as they are calculated using simInsts and simOps respectively.
+
 ### Multiple RubySystem objects in a simulation
 
 Simulation configurations can now create multiple `RubySystem`s in the same simulation.
@@ -26,6 +31,7 @@ The complete list of changes are:
  * `ALUFreeListArray` and `BankedArray` now require a clock period to be set in C++ using `setClockPeriod()` and no longer require a pointer to the `RubySystem`.
  * You may no longer call `RubySystem::getBlockSizeBytes()`, `RubySystem::getBlockSizeBits()`, etc. You must have a pointer to the `RubySystem` you are a part of and call, for example, `ruby_system->getBlockSizeBytes()`.
  * `MessageBuffer::enqueue()` has two new parameters indicating if the `RubySystem` has randomization and warmup enabled. You must explicitly specify these values now.
+
 
 # Version 24.0
 
