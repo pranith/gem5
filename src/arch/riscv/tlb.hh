@@ -147,6 +147,12 @@ class TLB : public BaseTLB
     Addr
     getValidAddr(Addr vaddr, ThreadContext *tc, BaseMMU::Mode mode)
     {
+      /**
+        * For RV32, we follow what the specification said:
+        * When mapping between narrower and wider addresses,
+        * RISC-V zero-extends a narrower physical address to a
+        * wider size.
+        */
         ISA* isa = static_cast<ISA*>(tc->getIsaPtr());
         if (isa->rvType() == RV32) {
             return bits(vaddr, 31, 0);
