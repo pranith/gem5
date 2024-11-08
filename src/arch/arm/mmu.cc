@@ -373,6 +373,20 @@ MMU::translateSe(const RequestPtr &req, ThreadContext *tc, Mode mode,
     }
 }
 
+Addr
+MMU::getValidAddr(Addr vaddr, ThreadContext *tc, Mode mode)
+{
+    auto& state = updateMiscReg(tc, NormalTran, false);
+    Addr purified_vaddr = 0;
+    if (state.aarch64) {
+        purified_vaddr = purifyTaggedAddr(vaddr, tc, state.exceptionLevel,
+            static_cast<TCR>(state.ttbcr), mode==Execute, state);
+    } else {
+        purified_vaddr = vaddr;
+    }
+    return purified_vaddr;
+}
+
 Fault
 MMU::checkPermissions(TlbEntry *te, const RequestPtr &req, Mode mode,
                       bool stage2)

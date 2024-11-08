@@ -276,6 +276,8 @@ class MMU : public BaseMMU
             Translation *translation, bool &delay, bool timing,
             CachedState &state);
 
+    Addr getValidAddr(Addr vaddr, ThreadContext *tc, Mode mode) override;
+
     Fault translateComplete(const RequestPtr &req, ThreadContext *tc,
             Translation *translation, Mode mode, ArmTranslationType tran_type,
             bool call_from_s2);
