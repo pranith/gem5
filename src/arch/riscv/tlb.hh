@@ -144,6 +144,15 @@ class TLB : public BaseTLB
     Fault finalizePhysical(const RequestPtr &req, ThreadContext *tc,
                            BaseMMU::Mode mode) const override;
 
+    Addr
+    getValidAddr(Addr vaddr, ThreadContext *tc, BaseMMU::Mode mode)
+    {
+        ISA* isa = static_cast<ISA*>(tc->getIsaPtr());
+        if (isa->rvType() == RV32) {
+            return bits(vaddr, 31, 0);
+        }
+        return vaddr;
+    }
     /**
      * Perform the tlb lookup
      * @param vpn The virtual page number extracted from the address.
