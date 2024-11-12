@@ -111,7 +111,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-
 # The simulation may fail in the case of using size "c" and size "d" of the
 # benchmarks. This is because the X86Board is currently limited to 3 GB of
 # memory.
