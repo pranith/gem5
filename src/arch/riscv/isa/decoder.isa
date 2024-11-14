@@ -5357,7 +5357,6 @@ decode QUADRANT default Unknown::unknown() {
                                 }
                                 NPC = NPC;
                             } else {
-
                                 if (pm == PRV_U ||
                                 (pm == PRV_S && status.tsr == 1)) {
                                     return std::make_shared<IllegalInstFault>(
@@ -5368,8 +5367,8 @@ decode QUADRANT default Unknown::unknown() {
                             }
 
                             NPC = virtualizationEnabled(xc) ?
-                                xc->readMiscReg(MISCREG_VSEPC) :
-                                xc->readMiscReg(MISCREG_SEPC);
+                                rvSext(xc->readMiscReg(MISCREG_VSEPC)) :
+                                rvSext(xc->readMiscReg(MISCREG_SEPC));
 
                             xc->setMiscReg(MISCREG_PRV, status.spp);
                             status.sie = status.spie;
@@ -5387,7 +5386,6 @@ decode QUADRANT default Unknown::unknown() {
                                     hstatus.spv = 0;
                                     xc->setMiscReg(MISCREG_HSTATUS, hstatus);
                                 }
-
                                 status.mprv = 0; // 20211203
                             }
                         }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
@@ -5578,7 +5576,7 @@ decode QUADRANT default Unknown::unknown() {
                         }
                     }}, IsSerializeAfter, IsNonSpeculative, IsReturn);
 
-                                        0x31: decode FUNCT3 {
+                    0x31: decode FUNCT3 {
                         0x0: hfence_gvma({{
                             auto pm = (PrivilegeMode)xc->readMiscReg(
                                                         MISCREG_PRV);
