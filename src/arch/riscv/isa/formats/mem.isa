@@ -366,7 +366,7 @@ def template HyperLoadExecute {{
                 "HyperLoad without RVH", machInst);
         }
 
-        if (isV(xc)) {
+        if (virtualizationEnabled(xc)) {
             return std::make_shared<VirtualInstFault>(
                 "HyperLoad with V-bit on", machInst);
         }
@@ -411,7 +411,7 @@ def template HyperLoadInitiateAcc {{
                 "HyperLoad without RVH", machInst);
         }
 
-        if (isV(xc)) {
+        if (virtualizationEnabled(xc)) {
             return std::make_shared<VirtualInstFault>(
                 "HyperLoad with V-bit on", machInst);
         }
@@ -463,7 +463,7 @@ def template HyperStoreExecute {{
                 "HyperStore without RVH", machInst);
         }
 
-        if (isV(xc)) {
+        if (virtualizationEnabled(xc)) {
             return std::make_shared<VirtualInstFault>(
                 "HyperStore with V-bit on", machInst);
         }
@@ -509,7 +509,7 @@ def template HyperStoreInitiateAcc {{
                 "HyperStore without RVH", machInst);
         }
 
-        if (isV(xc)) {
+        if (virtualizationEnabled(xc)) {
             return std::make_shared<VirtualInstFault>(
                 "HyperStore with V-bit on", machInst);
         }

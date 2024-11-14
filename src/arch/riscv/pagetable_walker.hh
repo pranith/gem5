@@ -163,8 +163,6 @@ namespace RiscvISA
             void endWalk();
             Fault pageFault();
             PacketPtr createReqPacket(Addr paddr, MemCmd cmd, size_t bytes);
-
-            bool debug_condition();
         };
 
         friend class WalkerState;

@@ -447,7 +447,8 @@ decode QUADRANT default Unknown::unknown() {
                 0x0: decode RC1 {
                     0x0: SystemOp::c_ebreak({{
                         MISA misa = xc->readMiscReg(MISCREG_ISA);
-                        bool virtualized = misa.rvh ? isV(xc) : false;
+                        bool virtualized = misa.rvh ?
+                            virtualizationEnabled(xc) : false;
                         // NB: Semihosting spec requires uncompressed ebreak,
                         // so this instruction does not check for semihosting.
                         return std::make_shared<BreakpointFault>(
@@ -5302,7 +5303,7 @@ decode QUADRANT default Unknown::unknown() {
                         0x0: ecall({{
                             MISA misa = xc->readMiscReg(MISCREG_ISA);
                             bool virtualized = misa.rvh ?
-                                isV(xc) : false;
+                                virtualizationEnabled(xc) : false;
                             return std::make_shared<SyscallFault>(
                                 (PrivilegeMode)xc->readMiscReg(MISCREG_PRV),
                                                                 virtualized);
@@ -5339,7 +5340,8 @@ decode QUADRANT default Unknown::unknown() {
                             HSTATUS hstatus = misa.rvh ?
                                 xc->readMiscReg(MISCREG_HSTATUS) : 0;
 
-                            MiscRegIndex status_idx = isV(xc) ?
+                            MiscRegIndex status_idx = \
+                                virtualizationEnabled(xc) ?
                                 MISCREG_VSSTATUS : MISCREG_STATUS;
 
                             STATUS status = xc->readMiscReg(status_idx);
@@ -5347,7 +5349,7 @@ decode QUADRANT default Unknown::unknown() {
                             auto pm = (PrivilegeMode)xc->readMiscReg(
                                                         MISCREG_PRV);
 
-                            if (misa.rvh && isV(xc)) {
+                            if (misa.rvh && virtualizationEnabled(xc)) {
                                 if (pm == PRV_U || hstatus.vtsr) {
                                     return std::make_shared<VirtualInstFault>(
                                             "sret in PRV_U or VTSR enabled",
@@ -5365,8 +5367,9 @@ decode QUADRANT default Unknown::unknown() {
                                 NPC = NPC;
                             }
 
-                            NPC = isV(xc) ? xc->readMiscReg(MISCREG_VSEPC) :
-                                            xc->readMiscReg(MISCREG_SEPC);
+                            NPC = virtualizationEnabled(xc) ?
+                                xc->readMiscReg(MISCREG_VSEPC) :
+                                xc->readMiscReg(MISCREG_SEPC);
 
                             xc->setMiscReg(MISCREG_PRV, status.spp);
                             status.sie = status.spie;
@@ -5376,7 +5379,7 @@ decode QUADRANT default Unknown::unknown() {
                             xc->setMiscReg(status_idx, status);
                             xc->tcBase()->getMMUPtr()->flushAll();
 
-                            if (!isV(xc)) {
+                            if (!virtualizationEnabled(xc)) {
                                 if (misa.rvh) {
                                     if (hstatus.spv) {
                                         setV(xc);
@@ -5396,7 +5399,8 @@ decode QUADRANT default Unknown::unknown() {
                                 MISCREG_PRV);
 
 
-                            if (misa.rvh && isV(xc) && pm == PRV_U) {
+                            if (misa.rvh && virtualizationEnabled(xc) &&
+                                 pm == PRV_U) {
                                 return std::make_shared<VirtualInstFault>(
                                             "wfi in VU mode",
                                             machInst);
@@ -5404,8 +5408,8 @@ decode QUADRANT default Unknown::unknown() {
                                 return std::make_shared<IllegalInstFault>(
                                         "wfi not in M mode with TW enabled",
                                         machInst);
-                            } else if (misa.rvh && isV(xc) && pm == PRV_S &&
-                                hstatus.vtw == 1) {
+                            } else if (misa.rvh && virtualizationEnabled(xc) &&
+                                        pm == PRV_S && hstatus.vtw == 1) {
                                 return std::make_shared<VirtualInstFault>(
                                         "wfi in VS mode with VTW enabled",
                                         machInst);
@@ -5454,7 +5458,7 @@ decode QUADRANT default Unknown::unknown() {
                         HSTATUS hstatus = xc->readMiscReg(MISCREG_HSTATUS);
                         auto pm = (PrivilegeMode)xc->readMiscReg(MISCREG_PRV);
 
-                        if (misa.rvh && isV(xc) &&
+                        if (misa.rvh && virtualizationEnabled(xc) &&
                             (pm == PRV_U || hstatus.vtvm == 1)) {
                             return std::make_shared<VirtualInstFault>(
                                     "sfence in VU mode or VTVM enabled",
@@ -5493,7 +5497,7 @@ decode QUADRANT default Unknown::unknown() {
                                             "hfence needs RVH",
                                             machInst);
                         }
-                        if (isV(xc)) {
+                        if (virtualizationEnabled(xc)) {
                             return std::make_shared<VirtualInstFault>(
                                             "hfence with V=1",
                                             machInst);
@@ -5515,7 +5519,7 @@ decode QUADRANT default Unknown::unknown() {
 
                     0x18: mret({{
                         if (xc->readMiscReg(MISCREG_PRV) != PRV_M) {
-                            if (isV(xc)) { // H-extension
+                            if (virtualizationEnabled(xc)) { // H-extension
                                 return std::make_shared<VirtualInstFault>(
                                     "mret at lower prv (V=1)", machInst);
                             }
@@ -5586,7 +5590,7 @@ decode QUADRANT default Unknown::unknown() {
                                                 "hfence needs RVH",
                                                 machInst);
                             }
-                            if (isV(xc)) {
+                            if (virtualizationEnabled(xc)) {
                                 return std::make_shared<VirtualInstFault>(
                                                 "hfence with V=1",
                                                 machInst);

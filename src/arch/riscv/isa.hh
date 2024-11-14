@@ -186,7 +186,7 @@ class ISA : public BaseISA
 
     bool getEnableRvv() const { return enableRvv; }
 
-    bool isV() const;
+    bool virtualizationEnabled() const;
 
     void
     clearLoadReservation(ContextID cid)
@@ -230,8 +230,8 @@ class ISA : public BaseISA
 
 // V-bit utilities (H-extension)
 
-bool isV(ExecContext *xc);
-bool isV(ThreadContext *tc);
+bool virtualizationEnabled(ExecContext *xc);
+bool virtualizationEnabled(ThreadContext *tc);
 
 void setV(ExecContext *xc);
 void setV(ThreadContext *tc);

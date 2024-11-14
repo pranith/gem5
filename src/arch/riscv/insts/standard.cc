@@ -103,7 +103,7 @@ SystemOp::executeEBreakOrSemihosting(ExecContext *xc) const
     }
     // No semihosting, raise a standard breakpoint exception.
     MISA misa = xc->readMiscReg(MISCREG_ISA);
-    bool virtualized = misa.rvh ? isV(xc) : false;
+    bool virtualized = misa.rvh ? virtualizationEnabled(xc) : false;
     return std::make_shared<BreakpointFault>(xc->pcState(), virtualized);
 }
 

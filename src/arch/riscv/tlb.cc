@@ -345,6 +345,8 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
 
     MISA misa = tc->readMiscReg(MISCREG_ISA);
 
+    // special access indicates that we should
+    // not lookup or insert to the TLB
     bool special_access = false
         || memaccess.force_virt
         || memaccess.hlvx
@@ -390,8 +392,6 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
         fault = NoFault;
     }
     else {
-
-
         if (memaccess.virt) {
             if (e->gpte != 0) {
                 fault = checkPermissions(
@@ -412,13 +412,18 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
         DPRINTF(TLB, "Dirty bit not set, repeating PT walk\n");
         fault = walker->start(tc, translation, req, mode);
         if (translation != nullptr || fault != NoFault) {
+            if (special_access)
+                delete e;
             delayed = true;
             return fault;
         }
     }
 
-    if (fault != NoFault)
+    if (fault != NoFault) {
+        if (special_access)
+            delete e;
         return fault;
+    }
 
     Addr paddr = ((e->paddr >> (e->logBytes - PageShift)) << e->logBytes)
         | (vaddr & mask(e->logBytes));
@@ -442,7 +447,7 @@ TLB::getMemAccessInfo(ThreadContext *tc, BaseMMU::Mode mode,
     HSTATUS hstatus = tc->readMiscReg(MISCREG_HSTATUS);
     PrivilegeMode priv = (PrivilegeMode)tc->readMiscReg(MISCREG_PRV);
 
-    bool virt = misa.rvh ? isV(tc) : false;
+    bool virt = misa.rvh ? virtualizationEnabled(tc) : false;
     bool force_virt = false;
     bool hlvx = false;
     bool lr = false;

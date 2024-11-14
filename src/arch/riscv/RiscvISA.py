@@ -109,9 +109,10 @@ class RiscvISA(BaseISA):
     )
     privilege_mode_set = Param.PrivilegeModeSet(
         "MSU",  # set MHSU to enable hypervisor (H-extension)
-        # O3 CPU is not supported in MHSU currently
-        # also change isa.cc:readMiscReg for MIDELEG
-        # if working with old bbl bootloader
+        # All timing CPUs are NOT supported in MHSU currently
+        # PTW does not yet implement timing walks with H extension on
+        # (P.S.: look at the change for MIDELEG in isa.cc:readMiscReg
+        # if working with old bbl bootloader)
         "The combination of privilege modes \
         in Privilege Levels section of RISC-V privileged spec",
     )

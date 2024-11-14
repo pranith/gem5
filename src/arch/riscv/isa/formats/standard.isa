@@ -381,11 +381,11 @@ def template CSRExecute {{
         // MISCREG_PRV as that might end up in mpp
         // which would violate the specification.
 
-        if (misa.rvh && pm == PRV_S && !isV(xc)) {
+        if (misa.rvh && pm == PRV_S && !virtualizationEnabled(xc)) {
             pm = PRV_HS;
         }
         if (pm < lowestAllowedMode) {
-            if (isV(xc)) {
+            if (virtualizationEnabled(xc)) {
                 return std::make_shared<VirtualInstFault>(
                     csprintf("[V] %s is not accessible in %s\n", csrName, pm),
                     machInst);
@@ -406,7 +406,7 @@ def template CSRExecute {{
         // software thinks it is accessing S-mode CSRs!
         // However, we remap these accesses to the virtual CSRs
         // hosted in different MISCREGs to implement the virtualization.
-        if (misa.rvh && isV(xc) && pm == PRV_S) {
+        if (misa.rvh && virtualizationEnabled(xc) && pm == PRV_S) {
             // Check if the supervisor CSR being accessed
             // is virtualized and remap it.
             // Args are passed by reference and modified if needed.

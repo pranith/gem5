@@ -73,7 +73,7 @@ Interrupts::globalMask() const
     PrivilegeMode prv = (PrivilegeMode)tc->readMiscReg(MISCREG_PRV);
     switch (prv) {
         case PRV_U:
-            if (misa.rvh && isV(tc)) {
+            if (misa.rvh && virtualizationEnabled(tc)) {
                 STATUS vsstatus = tc->readMiscReg(MISCREG_VSSTATUS);
                 INTERRUPT hideleg = tc->readMiscReg(MISCREG_HIDELEG);
 
@@ -132,7 +132,7 @@ Interrupts::globalMask() const
                 mask.uei = mask.uti = mask.usi = 1;
             break;
         case PRV_S:
-            if (misa.rvh && isV(tc)) {
+            if (misa.rvh && virtualizationEnabled(tc)) {
                 STATUS vsstatus = tc->readMiscReg(MISCREG_VSSTATUS);
                 INTERRUPT hideleg = tc->readMiscReg(MISCREG_HIDELEG);
 
