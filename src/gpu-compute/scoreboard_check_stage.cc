@@ -198,6 +198,9 @@ ScoreboardCheckStage::ready(Wavefront *w, nonrdytype_e *rdyStatus,
     }
 
     if (ii->isMFMA()) {
+        panic_if(!computeUnit.mfma_cycles.count(w->gfxVersion),
+            "No MFMA timings for %s\n", GfxVersionStrings[int(w->gfxVersion)]);
+
         if (computeUnit.matrix_core_ready[w->simdId] <= curTick()) {
             computeUnit.matrix_core_ready[w->simdId] =
                 curTick() +

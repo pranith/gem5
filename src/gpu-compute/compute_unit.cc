@@ -109,6 +109,12 @@ ComputeUnit::ComputeUnit(const Params &p) : ClockedObject(p),
     memtime_latency(p.memtime_latency * p.clk_domain->clockPeriod()),
     mfma_scale(p.mfma_scale),
     mfma_cycles({
+        // gfx90a is MI200 series (MI210, MI250X). The latency values are the
+        // "passes" in the MI200 Instruction Set Architecture reference listed
+        // for each instruction in section 12.10:
+        // https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/
+        //          instruction-set-architectures/
+        //          instinct-mi200-cdna2-instruction-set-architecture.pdf
         {GfxVersion::gfx90a, {
             {"v_mfma_f32_32x32x1_2b_f32", 64},
             {"v_mfma_f32_16x16x1_4b_f32", 32},
@@ -133,6 +139,11 @@ ComputeUnit::ComputeUnit(const Params &p) : ClockedObject(p),
             {"v_mfma_f32_16x16x4_bf64", 32},
             {"v_mfma_f32_4x4x4_4b_bf64", 16},
         }},
+        // gfx942 is MI300X. The latency values are taken from table 28 in
+        // section 7.1.2 in the MI300 Instruction Set Architecture reference:
+        // https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/
+        //          instruction-set-architectures/
+        //          amd-instinct-mi300-cdna3-instruction-set-architecture.pdf
         {GfxVersion::gfx942, {
             {"v_mfma_f32_32x32x1_2b_f32", 64},
             {"v_mfma_f32_16x16x1_4b_f32", 32},
