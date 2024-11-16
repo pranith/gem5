@@ -308,7 +308,7 @@ parser.add_argument(
     type=float,
     # Set to a default of 1 to not scale MFMA cycles
     default=1,
-    help="Scale how long an mfma consumes the matrix core unit",
+    help="Scale how long an MFMA instruction reserves the matrix core unit",
 )
 
 parser.add_argument("--TLB-prefetch", type=int, help="prefetch depth for TLBs")
