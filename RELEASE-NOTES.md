@@ -17,6 +17,30 @@ every protocol.
   * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
 * Updates the build configurations variables
   * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names). So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
+* The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
+  * They now reset to zero when m5.stats.reset() is called.
+  * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.
+  * The statistics `hostInstRate` and `hostOpRate` are also affected by this change, as they are calculated using simInsts and simOps respectively.
+
+### Multiple RubySystem objects in a simulation
+
+Simulation configurations can now create multiple `RubySystem`s in the same simulation.
+Previously this was not possible due to `RubySystem` sharing variables across all `RubySystems` (e.g., cache line size).
+Allowing this feature requires developer facing changes for custom Ruby protocols.
+The most common changes will be:
+ * Modify your custom protocol SLICC files, replace any instances of `RubySystem::foo()` with `m_ruby_system->foo()`, and recompile. `m_ruby_system` is automatically set by SLICC generated code.
+ * If your custom protocol contains local `WriteMask` declarations (e.g., `WriteMask tmp_mask;`), modify the protocol so that `tmp_mask.setBlockSize(...)` is called. Use the block size of the `RubySystem` here (e.g., you can use `other_mask.getBlockSize()` or get block size from another object).
+ * Modify your python configurations to assign the parameter `ruby_system` for the python classes `RubySequencer`, `RubyDirectoryMemory`, and `RubyPortProxy` or any derived classes. You will receive an error at the start of gem5 if this is not done.
+ * If your python configuration uses a `RubyPrefetcher`, modify the configuration to assign the `block_size` parameter to the cache line size of the `RubySystem` the prefetcher is part of.
+
+The complete list of changes are:
+ * `AbstractCacheEntry`, `ALUFreeListArray`, `DataBlock`, `Message`, `PerfectCacheMemory`, `PersistentTable`, `TBETable`, `TimerTable`, and `WriteMask` classes now require the cache line size to be explicitly set. This is handled automatically by the SLICC parser but must be done explicitly in C++ code by calling `setBlockSize()`.
+ * `RubyPrefetcher` now requires `block_size` be assigned in python configurations.
+ * `CacheMemory` now requires a pointer to the `RubySystem` to be set. This is handled automatically by the SLICC parser but must be done explicitly in C++ code by calling `setRubySystem()`.
+ * `RubyDirectoryMemory`, `RubyPortProxy`, and `RubySequencer` now require a pointer to the `RubySystem` to be set by python configurations. If you have custom protocols using `DirectoryMemory` or derived classes from it, the `ruby_system` parameter must be set in the python configuration.
+ * `ALUFreeListArray` and `BankedArray` now require a clock period to be set in C++ using `setClockPeriod()` and no longer require a pointer to the `RubySystem`.
+ * You may no longer call `RubySystem::getBlockSizeBytes()`, `RubySystem::getBlockSizeBits()`, etc. You must have a pointer to the `RubySystem` you are a part of and call, for example, `ruby_system->getBlockSizeBytes()`.
+ * `MessageBuffer::enqueue()` has two new parameters indicating if the `RubySystem` has randomization and warmup enabled. You must explicitly specify these values now.
 
 
 # Version 24.0

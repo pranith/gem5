@@ -284,7 +284,7 @@ class Simulator:
             * ExitEvent.FAIL : exit simulation
             * ExitEvent.SWITCHCPU: call ``switch`` on the processor
             * ExitEvent.WORKBEGIN: reset stats
-            * ExitEvent.WORKEND: exit simulation
+            * ExitEvent.WORKEND: dump stats
             * ExitEvent.USER_INTERRUPT: exit simulation
             * ExitEvent.MAX_TICK: exit simulation
             * ExitEvent.SCHEDULED_TICK: exit simulation

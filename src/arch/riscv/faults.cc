@@ -160,7 +160,7 @@ RiscvFault::invoke(ThreadContext *tc, const StaticInstPtr &inst)
 
         // Set PC to fault handler address
         Addr addr = isa->getFaultHandlerAddr(tvec, _code, isInterrupt());
-        pc_state.set(addr);
+        pc_state.set(isa->rvSext(addr));
         tc->pcState(pc_state);
     } else {
         invokeSE(tc, inst);

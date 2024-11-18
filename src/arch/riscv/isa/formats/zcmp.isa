@@ -248,8 +248,8 @@ def template SpAdjMicroExecute {{
         Addr pc, const loader::SymbolTable *symtab) const
     {
         std::stringstream ss;
-        ss << mnemonic << ' ' << registerName(destRegIdx(0)) << ' '
-            << registerName(srcRegIdx(0)) << ' ' << adj;
+        ss << mnemonic << ' ' << registerName(destRegIdx(0)) << ", "
+            << registerName(srcRegIdx(0)) << ", " << adj;
         return ss.str();
     }
 }};
@@ -600,7 +600,7 @@ def template CmMvMicroExecute {{
         Addr pc, const loader::SymbolTable *symtab) const
     {
         std::stringstream ss;
-        ss << mnemonic << ' ' << registerName(destRegIdx(0)) << ' '
+        ss << mnemonic << ' ' << registerName(destRegIdx(0)) << ", "
             << registerName(srcRegIdx(0));
         return ss.str();
     }
@@ -616,7 +616,7 @@ def format CmPush(*flags) {{
 
     memacc_code = 'Mem_sw = CmPushReg_sw;'
     ea_code = 'EA = rvSext(sp + offset);'
-    micro32_iop = InstObjParams('lw', f'{Name}32MicroInst', 'RiscvMicroInst',
+    micro32_iop = InstObjParams('sw', f'{Name}32MicroInst', 'RiscvMicroInst',
         {'ea_code': ea_code, 'memacc_code': memacc_code},
         flags)
 
@@ -632,7 +632,7 @@ def format CmPush(*flags) {{
 
     memacc_code = 'Mem = CmPushReg;'
     ea_code = 'EA = rvSext(sp + offset);'
-    micro64_iop = InstObjParams('ld', f'{Name}64MicroInst', 'RiscvMicroInst',
+    micro64_iop = InstObjParams('sd', f'{Name}64MicroInst', 'RiscvMicroInst',
         {'ea_code': ea_code, 'memacc_code': memacc_code},
         flags)
 

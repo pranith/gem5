@@ -502,7 +502,7 @@ AbstractController::broadcast(MachineType type)
     assert(m_ruby_system != nullptr);
     NodeID type_count = m_ruby_system->MachineType_base_count(type);
 
-    NetDest dest;
+    NetDest dest(m_ruby_system);
     for (NodeID i = 0; i < type_count; i++) {
         MachineID mach = {type, i};
         dest.add(mach);

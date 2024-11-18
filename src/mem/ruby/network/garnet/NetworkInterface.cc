@@ -404,7 +404,7 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
 
         Message *new_net_msg_ptr = new_msg_ptr.get();
         if (dest_nodes.size() > 1) {
-            NetDest personal_dest;
+            NetDest personal_dest(m_net_ptr->getRubySystem());
             for (int m = 0; m < (int) MachineType_NUM; m++) {
                 if ((destID >= MachineType_base_number((MachineType) m)) &&
                     destID < MachineType_base_number((MachineType) (m+1))) {
