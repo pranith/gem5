@@ -500,7 +500,7 @@ struct TlbEntry : public ReplaceableEntry, Serializable
     }
 
     std::string
-    print() const
+    print() const override
     {
         return csprintf("%#x, asn %d vmn %d ppn %#x size: %#x ap:%d "
                         "ns:%d ss:%s g:%d xs: %d regime:%s", vpn << N, asid, vmid,
