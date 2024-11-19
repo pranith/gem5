@@ -3206,6 +3206,11 @@ namespace Aarch64
                 // FCVT Dd = convertFormat(Hn)
                 return new FcvtFpHFpD(machInst, rd, rn);
             break;
+          case 0x6:
+            if (type == 1)
+                // FCVT Hd = convertFormat(Sn)
+                return new FcvtFpSBf(machInst, rd, rn);
+            break;
           case 0x7:
             if (type == 0)
                 // FCVT Hd = convertFormat(Sn)
