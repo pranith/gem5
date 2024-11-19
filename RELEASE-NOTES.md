@@ -16,7 +16,10 @@ The most notable changes are:
 every protocol.
   * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
 * Updates the build configurations variables
-  * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names). So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
+  * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names), and in addition,  So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
+  * **USER FACING CHANGE**: The the "build_opts/ALL" build spec has been updated to include all Ruby protocols . As such, gem5 compilations of the "ALL" compilation target will include all gem5 Ruby protocols (previously just MESI_Two_Level).
+  * A "build_opts/NULL_ALL_RUBY" build spec has been added to include all Ruby protocols for a "NULL ISA" build . This is useful for testing Ruby protocols without the overhead of a full ISA and is used in gem5's traffic generator tests.
+  * A "build_opts/ARM_X96" build spec has been added due to a unique restriction in the "tests/gem5/fs/linux/arm" tests which requires a compilation of gem5 with both ARM and X86 and solely the MESI_Two_Level protocol.
 * The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
   * They now reset to zero when m5.stats.reset() is called.
   * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.
