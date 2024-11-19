@@ -222,7 +222,6 @@ STeMS::reconstructSequence(
 
     // Now query the PST with the PC of each RMOB entry
     idx = 0;
-    constexpr bool is_secure = false;
     for (auto it = rmob_it; it != rmob.end() && (idx < reconstructionEntries);
         it++) {
         auto pst_entry = patternSequenceTable.findEntry(

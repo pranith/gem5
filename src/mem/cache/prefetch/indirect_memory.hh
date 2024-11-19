@@ -124,7 +124,7 @@ class IndirectMemory : public Queued
         }
     };
     /** Prefetch table */
-    AssociativeSet<PrefetchTableEntry> prefetchTable;
+    AssociativeCache<PrefetchTableEntry> prefetchTable;
 
     /** Indirect Pattern Detector entrt */
     struct IndirectPatternDetectorEntry : public TaggedEntry
