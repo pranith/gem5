@@ -1475,7 +1475,7 @@ def VectorSlideBase(name, Name, category, code, flags, macro_construtor,
     )
     inst_name, inst_suffix = name.split("_", maxsplit=1)
     dest_reg_id = "vecRegClass[_machInst.vd + vdIdx]"
-    src2_reg_id = "vecRegClass[_machInst.vs2 + vs2Idx]"
+    src2_reg_id = "vecRegClass[VecMemInternalReg0 + vs2Idx]"
     src1_ireg_id = "intRegClass[_machInst.rs1]"
     src1_freg_id = "floatRegClass[_machInst.rs1]"
 
