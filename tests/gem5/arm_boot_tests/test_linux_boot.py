@@ -87,7 +87,6 @@ arm_boot_test"
         valid_isas=(constants.all_compiled_tag,),
         valid_hosts=constants.supported_hosts,
         length=length,
-        protocol=None,
     )
 
 

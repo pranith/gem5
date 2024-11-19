@@ -46,10 +46,6 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
-
-# This function was removed in the change to compile all Ruby protocols in one
-# build
-# from gem5.runtime import get_runtime_coherence_protocol
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
@@ -189,8 +185,9 @@ motherboard.set_kernel_disk_workload(
 # Begin running of the simulation. This will exit once the Linux system boot
 # is complete.
 print("Running with ISA: " + processor.get_isa().name)
-# This function was removed
-# print("Running with protocol: " + get_runtime_coherence_protocol().name)
+print(
+    "Running with protocol: " + cache_hierarchy.get_coherence_protocol().name
+)
 print()
 
 simulator = Simulator(
