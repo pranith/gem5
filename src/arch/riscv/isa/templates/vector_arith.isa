@@ -2309,6 +2309,10 @@ template<typename ElemType>
     }
 
     for (uint32_t i = 0; i < ceil((float) this->vl/micro_vlmax); i++) {
+        microop = new VCpyVsMicroInst(machInst, i, machInst.vs2, elen, vlen);
+        microop->setFlag(IsDelayedCommit);
+        this->microops.push_back(microop);
+
         microop = new VPinVdMicroInst(machInst, i, i+1, elen, vlen, true);
         microop->setFlag(IsDelayedCommit);
         this->microops.push_back(microop);
@@ -2354,6 +2358,10 @@ template<typename ElemType>
     }
 
     for (uint32_t i = 0; i < ceil((float) this->vl / micro_vlmax); i++) {
+        microop = new VCpyVsMicroInst(machInst, i, machInst.vs2, elen, vlen);
+        microop->setFlag(IsDelayedCommit);
+        this->microops.push_back(microop);
+
         microop = new VPinVdMicroInst(machInst, i, num_microops-i, elen, vlen,
                                       false);
         microop->setFlag(IsDelayedCommit);
