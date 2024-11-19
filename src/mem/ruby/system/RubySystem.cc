@@ -97,12 +97,23 @@ RubySystem::registerNetwork(Network* network_ptr)
 }
 
 void
-RubySystem::registerAbstractController(AbstractController* cntrl)
+RubySystem::registerAbstractController(
+    AbstractController* cntrl, std::unique_ptr<ProtocolInfo> cntl_protocol)
 {
     m_abs_cntrl_vec.push_back(cntrl);
 
     MachineID id = cntrl->getMachineID();
     m_abstract_controls[id.getType()][id.getNum()] = cntrl;
+
+    if (!protocolInfo) {
+        protocolInfo = std::move(cntl_protocol);
+    } else {
+        fatal_if(
+            protocolInfo->getName() != cntl_protocol->getName(),
+            "All controllers in a system must use the same protocol. %s != %s",
+            protocolInfo->getName().c_str(), cntl_protocol->getName().c_str()
+        );
+    }
 }
 
 void
@@ -493,9 +504,17 @@ RubySystem::resetStats()
     ClockedObject::resetStats();
 }
 
-#ifndef PARTIAL_FUNC_READS
 bool
-RubySystem::functionalRead(PacketPtr pkt)
+RubySystem::functionalRead(PacketPtr pkt) {
+    if (protocolInfo->getPartialFuncReads()) {
+        return partialFunctionalRead(pkt);
+    } else {
+        return simpleFunctionalRead(pkt);
+    }
+}
+
+bool
+RubySystem::simpleFunctionalRead(PacketPtr pkt)
 {
     Addr address(pkt->getAddr());
     Addr line_address = makeLineAddress(address, m_block_size_bits);
@@ -634,9 +653,9 @@ RubySystem::functionalRead(PacketPtr pkt)
 
     return false;
 }
-#else
+
 bool
-RubySystem::functionalRead(PacketPtr pkt)
+RubySystem::partialFunctionalRead(PacketPtr pkt)
 {
     Addr address(pkt->getAddr());
     Addr line_address = makeLineAddress(address, m_block_size_bits);
@@ -731,7 +750,6 @@ RubySystem::functionalRead(PacketPtr pkt)
 
     return bytes.isFull();
 }
-#endif
 
 // The function searches through all the buffers that exist in different
 // cache, directory and memory controllers, and in the network components

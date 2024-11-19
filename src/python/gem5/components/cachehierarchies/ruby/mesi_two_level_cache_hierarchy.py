@@ -40,6 +40,7 @@ requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
 
 from ....isas import ISA
 from ...boards.abstract_board import AbstractBoard
+from ..abstract_cache_hierarchy import AbstractCacheHierarchy
 from ..abstract_two_level_cache_hierarchy import AbstractTwoLevelCacheHierarchy
 from .abstract_ruby_cache_hierarchy import AbstractRubyCacheHierarchy
 from .caches.mesi_two_level.directory import Directory
@@ -82,6 +83,10 @@ class MESITwoLevelCacheHierarchy(
         )
 
         self._num_l2_banks = num_l2_banks
+
+    @overrides(AbstractCacheHierarchy)
+    def get_coherence_protocol(self):
+        return CoherenceProtocol.MESI_TWO_LEVEL
 
     def incorporate_cache(self, board: AbstractBoard) -> None:
         super().incorporate_cache(board)

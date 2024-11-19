@@ -63,7 +63,7 @@ for isa in isa_map.keys():
                 "requires_check.py",
             ),
             config_args=["-i", isa],
-            valid_isas=(isa_map[isa],),
+            valid_isas=(constants.all_compiled_tag,),
             length=length_map[isa],
         )
 

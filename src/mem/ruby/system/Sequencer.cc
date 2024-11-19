@@ -963,11 +963,13 @@ Sequencer::makeRequest(PacketPtr pkt)
         if (pkt->isWrite()) {
             DPRINTF(RubySequencer, "Issuing SC\n");
             primary_type = RubyRequestType_Store_Conditional;
-#if defined (PROTOCOL_MESI_Three_Level) || defined (PROTOCOL_MESI_Three_Level_HTM)
-            secondary_type = RubyRequestType_Store_Conditional;
-#else
-            secondary_type = RubyRequestType_ST;
-#endif
+            const ProtocolInfo &protocol_info =
+                m_ruby_system->getProtocolInfo();
+            if (protocol_info.getUseSecondaryStoreConditional()) {
+                secondary_type = RubyRequestType_Store_Conditional;
+            } else {
+                secondary_type = RubyRequestType_ST;
+            }
         } else {
             DPRINTF(RubySequencer, "Issuing LL\n");
             assert(pkt->isRead());
