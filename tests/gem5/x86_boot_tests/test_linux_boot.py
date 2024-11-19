@@ -88,7 +88,6 @@ def test_boot(
         + additional_config_args,
         valid_isas=(constants.all_compiled_tag,),
         valid_hosts=constants.supported_hosts,
-        protocol=None,
         length=length,
     )
 

@@ -75,7 +75,6 @@ def test_kvm_fork_run(cpu: str, num_cpus: int, mem_system: str, length: str):
         ],
         valid_isas=(constants.all_compiled_tag,),
         valid_hosts=(constants.host_x86_64_tag,),
-        protocol=None,
         length=length,
         uses_kvm=True,
     )
