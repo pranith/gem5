@@ -82,7 +82,7 @@ class PcCountTrackerManager : public SimObject {
      * @return the corresponding value of count for the inputted Program
      * Counter address
      */
-    int
+    uint64_t
     getPcCount(Addr pc) const
     {
         if (counter.find(pc) != counter.end()) {
