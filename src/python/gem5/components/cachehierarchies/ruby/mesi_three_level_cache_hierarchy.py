@@ -40,6 +40,7 @@ requires(coherence_protocol_required=CoherenceProtocol.MESI_THREE_LEVEL)
 
 from ....isas import ISA
 from ...boards.abstract_board import AbstractBoard
+from ..abstract_cache_hierarchy import AbstractCacheHierarchy
 from ..abstract_three_level_cache_hierarchy import (
     AbstractThreeLevelCacheHierarchy,
 )
@@ -86,6 +87,10 @@ class MESIThreeLevelCacheHierarchy(
         )
 
         self._num_l3_banks = num_l3_banks
+
+    @overrides(AbstractCacheHierarchy)
+    def get_coherence_protocol(self):
+        return CoherenceProtocol.MESI_THREE_LEVEL
 
     def incorporate_cache(self, board: AbstractBoard) -> None:
         super().incorporate_cache(board)

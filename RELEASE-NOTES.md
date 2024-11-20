@@ -1,4 +1,4 @@
-# Verion 24.1
+# Version 24.1
 
 ## User facing changes
 
@@ -7,6 +7,19 @@
   * It returns if the stride does not match, as opposed to issuing prefetching using the new stride --- the previous, incorrect behavior.
   * Returns if the new stride is 0, indicating multiple reads from the same cache line.
 
+### Multiple Ruby Protocols in a Single Build
+
+There are many developer facing / API changes to enable Ruby multiple protocols in a single build.
+The most notable changes are:
+
+* Removes the RubySlicc_interfaces.slicc file from the SLICC includes of
+every protocol.
+  * Changes required: If you have a custom protocol, you will need to remove the line `include "RubySlicc_interfaces.slicc"` from your .slicc file.
+* Updates the build configurations variables
+  * **USER FACING CHANGE**: The Ruby protocols in Kconfig have changed names (they are now the same case as the SLICC file names), and in addition,  So, after this commit, your build configurations need to be updated. You can do so by running `scons menuconfig <build dir>` and selecting the right ruby options. Alternatively, if you're using a `build_opts` file, you can run `scons defconfig build/<ISA> build_opts/<ISA>` which should update your config correctly.
+  * **USER FACING CHANGE**: The the "build_opts/ALL" build spec has been updated to include all Ruby protocols . As such, gem5 compilations of the "ALL" compilation target will include all gem5 Ruby protocols (previously just MESI_Two_Level).
+  * A "build_opts/NULL_ALL_RUBY" build spec has been added to include all Ruby protocols for a "NULL ISA" build . This is useful for testing Ruby protocols without the overhead of a full ISA and is used in gem5's traffic generator tests.
+  * A "build_opts/ARM_X86" build spec has been added due to a unique restriction in the "tests/gem5/fs/linux/arm" tests which requires a compilation of gem5 with both ARM and X86 and solely the MESI_Two_Level protocol.
 * The [behavior of the statistics `simInsts` and `simOps` has been changed](https://github.com/gem5/gem5/pull/1615).
   * They now reset to zero when m5.stats.reset() is called.
   * Previously, they incorrectly did not reset and would increase monotonically throughout the simulation.
@@ -32,6 +45,13 @@ The complete list of changes are:
  * You may no longer call `RubySystem::getBlockSizeBytes()`, `RubySystem::getBlockSizeBits()`, etc. You must have a pointer to the `RubySystem` you are a part of and call, for example, `ruby_system->getBlockSizeBytes()`.
  * `MessageBuffer::enqueue()` has two new parameters indicating if the `RubySystem` has randomization and warmup enabled. You must explicitly specify these values now.
 
+# Version 24.0.0.1
+
+**[HOTFIX]** Fixes a bug affecting the use of the `IndirectMemoryPrefetcher`, `SignaturePathPrefetcher`, `SignaturePathPrefetcherV2`, `STeMSPrefetcher`, and `PIFPrefetcher` SimObjects.
+Use of these resulted in gem5 crashing a gem5 crash with the error message "Need is_secure arg".
+
+The fix to this introduced to the gem5 develop branch in the <https://github.com/gem5/gem5/pull/1374> Pull Request.
+The commits in this PR were cherry-picked on the gem5 stable branch to create the v24.0.0.1 hotfix release.
 
 # Version 24.0
 

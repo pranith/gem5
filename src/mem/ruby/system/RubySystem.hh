@@ -42,6 +42,7 @@
 #include "mem/packet.hh"
 #include "mem/ruby/profiler/Profiler.hh"
 #include "mem/ruby/slicc_interface/AbstractController.hh"
+#include "mem/ruby/slicc_interface/ProtocolInfo.hh"
 #include "mem/ruby/system/CacheRecorder.hh"
 #include "params/RubySystem.hh"
 #include "sim/clocked_object.hh"
@@ -104,7 +105,9 @@ class RubySystem : public ClockedObject
     bool functionalWrite(Packet *ptr);
 
     void registerNetwork(Network*);
-    void registerAbstractController(AbstractController*);
+    void registerAbstractController(
+        AbstractController*, std::unique_ptr<ProtocolInfo>
+    );
     void registerMachineID(const MachineID& mach_id, Network* network);
     void registerRequestorIDs();
 
@@ -115,6 +118,8 @@ class RubySystem : public ClockedObject
             [this]{ processRubyEvent(); }, "RubyEvent");
         schedule(e, tick);
     }
+
+    const ProtocolInfo& getProtocolInfo() { return *protocolInfo; }
 
   private:
     // Private copy constructor and assignment operator
@@ -132,6 +137,12 @@ class RubySystem : public ClockedObject
                                      uint64_t uncompressed_trace_size);
 
     void processRubyEvent();
+
+    // Called from `functionalRead` depending on if the protocol needs
+    // partial functional reads.
+    bool simpleFunctionalRead(PacketPtr pkt);
+    bool partialFunctionalRead(PacketPtr pkt);
+
   private:
     // configuration parameters
     bool m_randomization;
@@ -152,6 +163,8 @@ class RubySystem : public ClockedObject
     std::unordered_map<MachineID, unsigned> machineToNetwork;
     std::unordered_map<RequestorID, unsigned> requestorToNetwork;
     std::unordered_map<unsigned, std::vector<AbstractController*>> netCntrls;
+
+    std::unique_ptr<ProtocolInfo> protocolInfo;
 
   public:
     Profiler* m_profiler;

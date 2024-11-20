@@ -57,7 +57,7 @@ namespace ArmISA {
 
 class TableWalker;
 class TLB;
-class TlbEntry;
+struct TlbEntry;
 class TLBIOp;
 class TlbTestInterface;
 

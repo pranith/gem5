@@ -48,7 +48,7 @@ from m5.util import (
 
 class MyCacheSystem(RubySystem):
     def __init__(self):
-        if buildEnv["PROTOCOL"] != "MI_example":
+        if "MI_example" not in buildEnv:
             fatal("This system assumes MI_example!")
 
         super().__init__()
@@ -109,7 +109,8 @@ class MyCacheSystem(RubySystem):
             self.sequencers[i].connectCpuPorts(cpu)
 
 
-class L1Cache(L1Cache_Controller):
+class L1Cache(MI_example_L1Cache_Controller):
+
     _version = 0
 
     @classmethod
@@ -165,7 +166,8 @@ class L1Cache(L1Cache_Controller):
         self.responseToCache.in_port = ruby_system.network.out_port
 
 
-class DirController(Directory_Controller):
+class DirController(MI_example_Directory_Controller):
+
     _version = 0
 
     @classmethod

@@ -48,6 +48,7 @@ from m5.objects import (
 )
 from m5.util.fdthelper import *
 
+from ...coherence_protocol import CoherenceProtocol
 from ..boards.abstract_board import AbstractBoard
 
 
@@ -139,6 +140,15 @@ class AbstractCacheHierarchy(SubSystem):
         or not.
 
         :returns: ``True`` if the cache hierarchy is ruby. Otherwise ``False``.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_coherence_protocol(self) -> CoherenceProtocol:
+        """
+        Returns the coherence protocol used in the cache hierarchy.
+
+        :returns: The coherence protocol used in the cache hierarchy.
         """
         raise NotImplementedError
 
