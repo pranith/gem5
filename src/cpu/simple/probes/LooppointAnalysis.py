@@ -55,13 +55,13 @@ class LooppointAnalysis(ProbeListenerObject):
         "the LooppointAnalysis manager"
     )
     bb_valid_addr_range = Param.AddrRange(
-        "the valid address range for basic blocks. If the address start and"
+        "the valid address range for basic blocks. If the address start and "
         "end are both 0 (AddrRange(start=0, end=0)), it means every address is"
-        "valid."
+        " valid."
     )
     marker_valid_addr_range = Param.AddrRange(
         "the valid address range for markers. If the address start and end are"
-        "both 0 (AddrRange(start=0, end=0)), it means every address is valid."
+        " both 0 (AddrRange(start=0, end=0)), it means every address is valid."
     )
     bb_excluded_addr_ranges = VectorParam.AddrRange(
         [], "the excluded address ranges for basic blocks"
