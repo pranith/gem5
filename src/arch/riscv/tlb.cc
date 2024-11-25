@@ -386,15 +386,8 @@ TLB::translate(const RequestPtr &req, ThreadContext *tc,
             if (req->getFlags() & Request::PHYSICAL) {
                 /**
                  * we simply set the virtual address to physical address.
-                 *
-                 * For RV32, we follow what the specification said:
-                 * When mapping between narrower and wider addresses,
-                 * RISC-V zero-extends a narrower physical address to a
-                 * wider size.
                  */
-                req->setPaddr(((ISA*) tc->getIsaPtr())->rvType() == RV32 ?
-                              bits(req->getVaddr(), 31, 0) :
-                              req->getVaddr());
+                req->setPaddr(getValidAddr(req->getVaddr(), tc, mode));
             } else {
                 fault = doTranslate(req, tc, translation, mode, delayed);
             }
@@ -430,9 +423,7 @@ TLB::translate(const RequestPtr &req, ThreadContext *tc,
          * (except for COMPAT mode for RV32 Userspace in RV64 Linux), we
          * need to ignore the upper bits beyond 32 bits.
          */
-        Addr vaddr = ((ISA*) tc->getIsaPtr())->rvType() == RV32 ?
-                      bits(req->getVaddr(), 31, 0) :
-                      req->getVaddr();
+        Addr vaddr = getValidAddr(req->getVaddr(), tc, mode);
         Addr paddr;
 
         if (!p->pTable->translate(vaddr, paddr))
@@ -469,7 +460,7 @@ Fault
 TLB::translateFunctional(const RequestPtr &req, ThreadContext *tc,
                          BaseMMU::Mode mode)
 {
-    const Addr vaddr = req->getVaddr();
+    const Addr vaddr = getValidAddr(req->getVaddr(), tc, mode);
     Addr paddr = vaddr;
 
     if (FullSystem) {
