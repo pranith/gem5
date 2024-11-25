@@ -197,7 +197,7 @@ SyscallDescTable<EmuLinux::SyscallABI64> EmuLinux::syscallDescs64 = {
     { 140, "getpriority" },
     { 141, "setpriority", ignoreFunc },
     { 142, "sched_setparam" },
-    { 143, "sched_getparam" },
+    { 143, "sched_getparam", sched_getparamFunc },
     { 144, "sched_setscheduler" },
     { 145, "sched_getscheduler" },
     { 146, "sched_get_priority_max" },

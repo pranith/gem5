@@ -347,6 +347,10 @@ SyscallReturn getcpuFunc(SyscallDesc *desc, ThreadContext *tc,
 SyscallReturn getsocknameFunc(SyscallDesc *desc, ThreadContext *tc,
                               int tgt_fd, VPtr<> addrPtr, VPtr<> lenPtr);
 
+// Target sched_getparam() handler.
+SyscallReturn sched_getparamFunc(SyscallDesc *desc, ThreadContext *tc,
+                                 int pid, VPtr<int> paramPtr);
+
 template <class OS>
 SyscallReturn
 atSyscallPath(ThreadContext *tc, int dirfd, std::string &path)

@@ -1468,4 +1468,16 @@ getcpuFunc(SyscallDesc *desc, ThreadContext *tc,
     return 0;
 }
 
+SyscallReturn
+sched_getparamFunc(SyscallDesc *desc, ThreadContext *tc,
+                   int pid, VPtr<int> paramPtr)
+{
+    if (!paramPtr || pid < 0)
+        return -EINVAL;
+
+    warn_once("sched_getparam: pretending sched_priority is 0 for all PIDs\n");
+    *paramPtr = 0;
+    return 0;
+}
+
 } // namespace gem5
