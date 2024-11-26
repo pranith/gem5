@@ -2551,6 +2551,8 @@ let {{
                 destElem = (srcElem1 >> shiftAmt);
             }
             destElem += rBit;
+        } else if (shiftAmt == 0) {
+            destElem = srcElem1;
         } else {
             if (shiftAmt >= sizeof(Element) * 8) {
                 if (srcElem1 != 0) {
