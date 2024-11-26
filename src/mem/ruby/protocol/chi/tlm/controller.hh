@@ -41,9 +41,9 @@
 #include <ARM/TLM/arm_chi.h>
 
 #include "mem/ruby/protocol/chi/generic/CHIGenericController.hh"
-#include "mem/ruby/protocol/CHIDataType.hh"
-#include "mem/ruby/protocol/CHIRequestType.hh"
-#include "mem/ruby/protocol/CHIResponseType.hh"
+#include "mem/ruby/protocol/CHI/CHIDataType.hh"
+#include "mem/ruby/protocol/CHI/CHIRequestType.hh"
+#include "mem/ruby/protocol/CHI/CHIResponseType.hh"
 #include "mem/ruby/protocol/RequestStatus.hh"
 #include "mem/ruby/protocol/WriteMask.hh"
 #include "params/TlmController.hh"
@@ -97,10 +97,10 @@ class CacheController : public ruby::CHIGenericController
     /** Set this to send data upstream */
     std::function<void(ARM::CHI::Payload* payload, ARM::CHI::Phase* phase)> bw;
 
-    bool recvRequestMsg(const ruby::CHIRequestMsg *msg) override;
-    bool recvSnoopMsg(const ruby::CHIRequestMsg *msg) override;
-    bool recvResponseMsg(const ruby::CHIResponseMsg *msg) override;
-    bool recvDataMsg(const ruby::CHIDataMsg *msg) override;
+    bool recvRequestMsg(const CHIRequestMsg *msg) override;
+    bool recvSnoopMsg(const CHIRequestMsg *msg) override;
+    bool recvResponseMsg(const CHIResponseMsg *msg) override;
+    bool recvDataMsg(const CHIDataMsg *msg) override;
 
     void sendMsg(ARM::CHI::Payload &payload, ARM::CHI::Phase &phase);
     using CHIGenericController::sendRequestMsg;
@@ -114,7 +114,7 @@ class CacheController : public ruby::CHIGenericController
     Addr reqAddr(ARM::CHI::Payload &payload, ARM::CHI::Phase &phase) const;
     Addr reqSize(ARM::CHI::Payload &payload, ARM::CHI::Phase &phase) const;
 
-    void pCreditGrant(const ruby::CHIResponseMsg *msg);
+    void pCreditGrant(const CHIResponseMsg *msg);
 
     struct Transaction
     {
@@ -135,12 +135,12 @@ class CacheController : public ruby::CHIGenericController
             ARM::CHI::Phase &_phase);
 
         virtual bool
-        handle(const ruby::CHIDataMsg *msg)
+        handle(const CHIDataMsg *msg)
         {
             panic("Unimplemented");
         }
 
-        virtual bool handle(const ruby::CHIResponseMsg *msg);
+        virtual bool handle(const CHIResponseMsg *msg);
 
         CacheController *controller;
         ARM::CHI::Payload *payload;
@@ -149,21 +149,21 @@ class CacheController : public ruby::CHIGenericController
     struct ReadTransaction : public Transaction
     {
         using Transaction::Transaction;
-        bool handle(const ruby::CHIDataMsg *msg) override;
-        bool handle(const ruby::CHIResponseMsg *msg) override;
-        bool forward(const ruby::CHIDataMsg *msg);
+        bool handle(const CHIDataMsg *msg) override;
+        bool handle(const CHIResponseMsg *msg) override;
+        bool forward(const CHIDataMsg *msg);
 
         uint8_t dataMsgCnt = 0;
     };
     struct DatalessTransaction : public Transaction
     {
         using Transaction::Transaction;
-        bool handle(const ruby::CHIResponseMsg *msg) override;
+        bool handle(const CHIResponseMsg *msg) override;
     };
     struct WriteTransaction : public Transaction
     {
         using Transaction::Transaction;
-        bool handle(const ruby::CHIResponseMsg *msg) override;
+        bool handle(const CHIResponseMsg *msg) override;
         bool recvComp = false;
         bool recvDBID = false;
     };

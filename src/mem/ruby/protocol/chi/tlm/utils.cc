@@ -47,6 +47,7 @@ namespace tlm::chi {
 namespace {
 
 using namespace ARM::CHI;
+using namespace ruby::CHI;
 
 std::string
 reqOpcodeToName(ReqOpcode req_opcode)
@@ -242,30 +243,30 @@ transactionToString(const Payload &payload,
 
 namespace tlm_to_ruby {
 
-ruby::CHIRequestType
+CHIRequestType
 reqOpcode(ReqOpcode req)
 {
-    static std::unordered_map<uint8_t, ruby::CHIRequestType> translation_map = {
-        { REQ_OPCODE_READ_SHARED, ruby::CHIRequestType_ReadShared },
-        { REQ_OPCODE_READ_CLEAN, ruby::CHIRequestType_ReadOnce }, // TODO
-        { REQ_OPCODE_READ_ONCE, ruby::CHIRequestType_ReadOnce },
-        { REQ_OPCODE_READ_NO_SNP, ruby::CHIRequestType_ReadNoSnp }, // TODO
-        { REQ_OPCODE_READ_UNIQUE, ruby::CHIRequestType_ReadUnique },
-        { REQ_OPCODE_READ_NOT_SHARED_DIRTY, ruby::CHIRequestType_ReadNotSharedDirty },
-        { REQ_OPCODE_READ_PREFER_UNIQUE, ruby::CHIRequestType_ReadUnique }, // TODO
-        { REQ_OPCODE_MAKE_READ_UNIQUE, ruby::CHIRequestType_MakeReadUnique }, // TODO
+    static std::unordered_map<uint8_t, CHIRequestType> translation_map = {
+        { REQ_OPCODE_READ_SHARED, CHIRequestType_ReadShared },
+        { REQ_OPCODE_READ_CLEAN, CHIRequestType_ReadOnce }, // TODO
+        { REQ_OPCODE_READ_ONCE, CHIRequestType_ReadOnce },
+        { REQ_OPCODE_READ_NO_SNP, CHIRequestType_ReadNoSnp }, // TODO
+        { REQ_OPCODE_READ_UNIQUE, CHIRequestType_ReadUnique },
+        { REQ_OPCODE_READ_NOT_SHARED_DIRTY, CHIRequestType_ReadNotSharedDirty },
+        { REQ_OPCODE_READ_PREFER_UNIQUE, CHIRequestType_ReadUnique }, // TODO
+        { REQ_OPCODE_MAKE_READ_UNIQUE, CHIRequestType_MakeReadUnique }, // TODO
 
-        { REQ_OPCODE_CLEAN_UNIQUE, ruby::CHIRequestType_CleanUnique },
-        { REQ_OPCODE_MAKE_UNIQUE, ruby::CHIRequestType_CleanUnique }, // TODO
-        { REQ_OPCODE_EVICT, ruby::CHIRequestType_Evict },
-        { REQ_OPCODE_STASH_ONCE_SEP_SHARED, ruby::CHIRequestType_StashOnceShared }, // TODO
-        { REQ_OPCODE_STASH_ONCE_SEP_UNIQUE, ruby::CHIRequestType_StashOnceUnique },
-        { REQ_OPCODE_WRITE_NO_SNP_PTL, ruby::CHIRequestType_WriteUniquePtl },
-        { REQ_OPCODE_WRITE_NO_SNP_FULL, ruby::CHIRequestType_WriteUniqueFull },
-        { REQ_OPCODE_WRITE_UNIQUE_FULL, ruby::CHIRequestType_WriteUniqueFull },
-        { REQ_OPCODE_WRITE_UNIQUE_ZERO, ruby::CHIRequestType_WriteUniqueZero },
-        { REQ_OPCODE_WRITE_BACK_FULL, ruby::CHIRequestType_WriteBackFull },
-        { REQ_OPCODE_WRITE_EVICT_OR_EVICT, ruby::CHIRequestType_WriteEvictFull }, // TODO
+        { REQ_OPCODE_CLEAN_UNIQUE, CHIRequestType_CleanUnique },
+        { REQ_OPCODE_MAKE_UNIQUE, CHIRequestType_CleanUnique }, // TODO
+        { REQ_OPCODE_EVICT, CHIRequestType_Evict },
+        { REQ_OPCODE_STASH_ONCE_SEP_SHARED, CHIRequestType_StashOnceShared }, // TODO
+        { REQ_OPCODE_STASH_ONCE_SEP_UNIQUE, CHIRequestType_StashOnceUnique },
+        { REQ_OPCODE_WRITE_NO_SNP_PTL, CHIRequestType_WriteUniquePtl },
+        { REQ_OPCODE_WRITE_NO_SNP_FULL, CHIRequestType_WriteUniqueFull },
+        { REQ_OPCODE_WRITE_UNIQUE_FULL, CHIRequestType_WriteUniqueFull },
+        { REQ_OPCODE_WRITE_UNIQUE_ZERO, CHIRequestType_WriteUniqueZero },
+        { REQ_OPCODE_WRITE_BACK_FULL, CHIRequestType_WriteBackFull },
+        { REQ_OPCODE_WRITE_EVICT_OR_EVICT, CHIRequestType_WriteEvictFull }, // TODO
     };
 
     auto it = translation_map.find(req);
@@ -289,35 +290,35 @@ reqOpcode(ReqOpcode req)
     default: panic(""); \
     }
 
-ruby::CHIDataType
+CHIDataType
 datOpcode(DatOpcode dat, Resp resp)
 {
     switch (dat) {
       case DAT_OPCODE_NON_COPY_BACK_WR_DATA:
-        return ruby::CHIDataType_NCBWrData;
+        return CHIDataType_NCBWrData;
       case DAT_OPCODE_COPY_BACK_WR_DATA:
         switch (resp) {
-          case RESP_I: return ruby::CHIDataType_CBWrData_I;
-          case RESP_UC: return ruby::CHIDataType_CBWrData_UC;
-          case RESP_SC: return ruby::CHIDataType_CBWrData_SC;
-          case RESP_UD_PD: return ruby::CHIDataType_CBWrData_UD_PD;
+          case RESP_I: return CHIDataType_CBWrData_I;
+          case RESP_UC: return CHIDataType_CBWrData_UC;
+          case RESP_SC: return CHIDataType_CBWrData_SC;
+          case RESP_UD_PD: return CHIDataType_CBWrData_UD_PD;
           default: panic("");
         }
       case DAT_OPCODE_SNP_RESP_DATA:
-        RESP_CASE(ruby::CHIDataType_SnpRespData)
+        RESP_CASE(CHIDataType_SnpRespData)
       default:
         panic("Unsupported Translation: %s\n", datOpcodeToName(dat));
     }
 }
 
-ruby::CHIResponseType
+CHIResponseType
 rspOpcode(RspOpcode opc, Resp resp)
 {
     switch(opc) {
-      case RSP_OPCODE_COMP_ACK: return ruby::CHIResponseType_CompAck;
+      case RSP_OPCODE_COMP_ACK: return CHIResponseType_CompAck;
       case RSP_OPCODE_SNP_RESP:
         switch (resp) {
-          case RESP_I: return ruby::CHIResponseType_SnpResp_I;
+          case RESP_I: return CHIResponseType_SnpResp_I;
           default: panic("Invalid resp %d for %d\n", resp, opc);
         }
       default:
@@ -330,40 +331,40 @@ rspOpcode(RspOpcode opc, Resp resp)
 namespace ruby_to_tlm {
 
 uint8_t
-datOpcode(ruby::CHIDataType dat)
+datOpcode(CHIDataType dat)
 {
     switch (dat) {
-      case ruby::CHIDataType_CompData_I:
-      case ruby::CHIDataType_CompData_UC:
-      case ruby::CHIDataType_CompData_SC:
-      case ruby::CHIDataType_CompData_UD_PD:
-      case ruby::CHIDataType_CompData_SD_PD:
+      case CHIDataType_CompData_I:
+      case CHIDataType_CompData_UC:
+      case CHIDataType_CompData_SC:
+      case CHIDataType_CompData_UD_PD:
+      case CHIDataType_CompData_SD_PD:
         return 0x4;
-      case ruby::CHIDataType_DataSepResp_UC:
+      case CHIDataType_DataSepResp_UC:
         return 0xb;
-      case ruby::CHIDataType_CBWrData_UC:
-      case ruby::CHIDataType_CBWrData_SC:
-      case ruby::CHIDataType_CBWrData_UD_PD:
-      case ruby::CHIDataType_CBWrData_SD_PD:
-      case ruby::CHIDataType_CBWrData_I:
+      case CHIDataType_CBWrData_UC:
+      case CHIDataType_CBWrData_SC:
+      case CHIDataType_CBWrData_UD_PD:
+      case CHIDataType_CBWrData_SD_PD:
+      case CHIDataType_CBWrData_I:
         return 0x2;
-      case ruby::CHIDataType_NCBWrData:
+      case CHIDataType_NCBWrData:
         return 0x3;
-      case ruby::CHIDataType_SnpRespData_I:
-      case ruby::CHIDataType_SnpRespData_I_PD:
-      case ruby::CHIDataType_SnpRespData_SC:
-      case ruby::CHIDataType_SnpRespData_SC_PD:
-      case ruby::CHIDataType_SnpRespData_SD:
-      case ruby::CHIDataType_SnpRespData_UC:
-      case ruby::CHIDataType_SnpRespData_UD:
+      case CHIDataType_SnpRespData_I:
+      case CHIDataType_SnpRespData_I_PD:
+      case CHIDataType_SnpRespData_SC:
+      case CHIDataType_SnpRespData_SC_PD:
+      case CHIDataType_SnpRespData_SD:
+      case CHIDataType_SnpRespData_UC:
+      case CHIDataType_SnpRespData_UD:
         return 0x1;
-      case ruby::CHIDataType_SnpRespData_SC_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_SC_Fwded_SD_PD:
-      case ruby::CHIDataType_SnpRespData_SC_PD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_SD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_I_Fwded_SD_PD:
-      case ruby::CHIDataType_SnpRespData_I_PD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_I_Fwded_SC:
+      case CHIDataType_SnpRespData_SC_Fwded_SC:
+      case CHIDataType_SnpRespData_SC_Fwded_SD_PD:
+      case CHIDataType_SnpRespData_SC_PD_Fwded_SC:
+      case CHIDataType_SnpRespData_SD_Fwded_SC:
+      case CHIDataType_SnpRespData_I_Fwded_SD_PD:
+      case CHIDataType_SnpRespData_I_PD_Fwded_SC:
+      case CHIDataType_SnpRespData_I_Fwded_SC:
         return 0x6;
       default:
         panic("Unrecognised data opcode: %d\n", dat);
@@ -371,16 +372,16 @@ datOpcode(ruby::CHIDataType dat)
 }
 
 uint8_t
-rspOpcode(ruby::CHIResponseType rsp)
+rspOpcode(CHIResponseType rsp)
 {
     switch (rsp) {
-      case ruby::CHIResponseType_Comp_UD_PD:
-      case ruby::CHIResponseType_Comp_UC:
-      case ruby::CHIResponseType_Comp_I:
+      case CHIResponseType_Comp_UD_PD:
+      case CHIResponseType_Comp_UC:
+      case CHIResponseType_Comp_I:
         return RSP_OPCODE_COMP;
-      case ruby::CHIResponseType_CompDBIDResp:
+      case CHIResponseType_CompDBIDResp:
         return RSP_OPCODE_COMP_DBID_RESP;
-      case ruby::CHIResponseType_RetryAck:
+      case CHIResponseType_RetryAck:
         return RSP_OPCODE_RETRY_ACK;
       default:
         panic("Unrecognised rsp opcode: %d\n", rsp);
@@ -388,18 +389,18 @@ rspOpcode(ruby::CHIResponseType rsp)
 }
 
 uint8_t
-snpOpcode(ruby::CHIRequestType snp)
+snpOpcode(CHIRequestType snp)
 {
     switch (snp) {
-      case ruby::CHIRequestType_SnpOnceFwd:
+      case CHIRequestType_SnpOnceFwd:
         return SNP_OPCODE_SNP_ONCE_FWD;
-      case ruby::CHIRequestType_SnpOnce:
+      case CHIRequestType_SnpOnce:
         return SNP_OPCODE_SNP_ONCE;
-      case ruby::CHIRequestType_SnpShared:
+      case CHIRequestType_SnpShared:
         return SNP_OPCODE_SNP_SHARED;
-      case ruby::CHIRequestType_SnpCleanInvalid:
+      case CHIRequestType_SnpCleanInvalid:
         return SNP_OPCODE_SNP_CLEAN_INVALID;
-      case ruby::CHIRequestType_SnpUnique:
+      case CHIRequestType_SnpUnique:
         return SNP_OPCODE_SNP_UNIQUE;
       default:
         panic("Unrecognised snp opcode: %d\n", snp);
@@ -407,62 +408,62 @@ snpOpcode(ruby::CHIRequestType snp)
 }
 
 Resp
-datResp(ruby::CHIDataType dat)
+datResp(CHIDataType dat)
 {
     switch (dat) {
-      case ruby::CHIDataType_SnpRespData_I:
-      case ruby::CHIDataType_CompData_I:
-      case ruby::CHIDataType_CBWrData_I:
+      case CHIDataType_SnpRespData_I:
+      case CHIDataType_CompData_I:
+      case CHIDataType_CBWrData_I:
         return RESP_I;
-      case ruby::CHIDataType_SnpRespData_SC:
-      case ruby::CHIDataType_CompData_SC:
-      case ruby::CHIDataType_CBWrData_SC:
+      case CHIDataType_SnpRespData_SC:
+      case CHIDataType_CompData_SC:
+      case CHIDataType_CBWrData_SC:
         return RESP_SC;
-      case ruby::CHIDataType_SnpRespData_UC:
-      case ruby::CHIDataType_CompData_UC:
-      case ruby::CHIDataType_CBWrData_UC:
-      case ruby::CHIDataType_DataSepResp_UC:
+      case CHIDataType_SnpRespData_UC:
+      case CHIDataType_CompData_UC:
+      case CHIDataType_CBWrData_UC:
+      case CHIDataType_DataSepResp_UC:
         return RESP_UC;
-      case ruby::CHIDataType_SnpRespData_UD:
+      case CHIDataType_SnpRespData_UD:
         return RESP_UD;
-      case ruby::CHIDataType_SnpRespData_SD:
+      case CHIDataType_SnpRespData_SD:
         return RESP_SD;
-      case ruby::CHIDataType_SnpRespData_I_PD:
+      case CHIDataType_SnpRespData_I_PD:
         return RESP_I_PD;
-      case ruby::CHIDataType_SnpRespData_SC_PD:
+      case CHIDataType_SnpRespData_SC_PD:
         return RESP_SC_PD;
-      case ruby::CHIDataType_CompData_UD_PD:
-      case ruby::CHIDataType_CBWrData_UD_PD:
+      case CHIDataType_CompData_UD_PD:
+      case CHIDataType_CBWrData_UD_PD:
         return RESP_UD_PD;
-      case ruby::CHIDataType_CompData_SD_PD:
-      case ruby::CHIDataType_CBWrData_SD_PD:
+      case CHIDataType_CompData_SD_PD:
+      case CHIDataType_CBWrData_SD_PD:
         return RESP_SD_PD;
       // TODO
-      case ruby::CHIDataType_SnpRespData_SC_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_SC_Fwded_SD_PD:
-      case ruby::CHIDataType_SnpRespData_SC_PD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_SD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_I_Fwded_SD_PD:
-      case ruby::CHIDataType_SnpRespData_I_PD_Fwded_SC:
-      case ruby::CHIDataType_SnpRespData_I_Fwded_SC:
+      case CHIDataType_SnpRespData_SC_Fwded_SC:
+      case CHIDataType_SnpRespData_SC_Fwded_SD_PD:
+      case CHIDataType_SnpRespData_SC_PD_Fwded_SC:
+      case CHIDataType_SnpRespData_SD_Fwded_SC:
+      case CHIDataType_SnpRespData_I_Fwded_SD_PD:
+      case CHIDataType_SnpRespData_I_PD_Fwded_SC:
+      case CHIDataType_SnpRespData_I_Fwded_SC:
       default:
         panic("Unrecognised data opcode: %d\n", dat);
     }
 }
 
 Resp
-rspResp(ruby::CHIResponseType rsp)
+rspResp(CHIResponseType rsp)
 {
     switch (rsp) {
-      case ruby::CHIResponseType_Comp_I:
+      case CHIResponseType_Comp_I:
         return RESP_I;
-      case ruby::CHIResponseType_Comp_UC:
+      case CHIResponseType_Comp_UC:
         return RESP_UC;
-      case ruby::CHIResponseType_Comp_UD_PD:
+      case CHIResponseType_Comp_UD_PD:
         return RESP_UD_PD;
-      case ruby::CHIResponseType_CompDBIDResp:
+      case CHIResponseType_CompDBIDResp:
         return RESP_I;
-      case ruby::CHIResponseType_RetryAck:
+      case CHIResponseType_RetryAck:
         // Just setup to zero
         return RESP_I;
       default:
