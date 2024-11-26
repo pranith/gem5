@@ -38,16 +38,16 @@
 #include "mem/ruby/protocol/chi/tlm/controller.hh"
 
 #include "debug/TLM.hh"
-#include "mem/ruby/protocol/CHIDataMsg.hh"
-#include "mem/ruby/protocol/CHIRequestMsg.hh"
-#include "mem/ruby/protocol/CHIResponseMsg.hh"
+#include "mem/ruby/protocol/CHI/CHIDataMsg.hh"
+#include "mem/ruby/protocol/CHI/CHIRequestMsg.hh"
+#include "mem/ruby/protocol/CHI/CHIResponseMsg.hh"
 #include "mem/ruby/protocol/chi/tlm/utils.hh"
 
 namespace gem5 {
 
 namespace tlm::chi {
 
-using namespace ruby;
+using namespace ruby::CHI;
 
 CacheController::CacheController(const Params &p)
   : CHIGenericController(p)
@@ -97,7 +97,7 @@ bool
 CacheController::recvResponseMsg(const CHIResponseMsg *msg)
 {
 
-    if (msg->m_type == ruby::CHIResponseType_PCrdGrant) {
+    if (msg->m_type == CHIResponseType_PCrdGrant) {
         // P-credit grant does not refer to a specific transaction id
         pCreditGrant(msg);
         return true;
@@ -347,7 +347,7 @@ CacheController::sendDataMsg(ARM::CHI::Payload &payload,
         }
     }
 
-    data_msg->m_bitMask = WriteMask(byte_enabled.size(), byte_enabled);
+    data_msg->m_bitMask = ruby::WriteMask(byte_enabled.size(), byte_enabled);
 
     sendDataMsg(data_msg);
 }

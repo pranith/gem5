@@ -57,6 +57,8 @@ namespace gem5
 namespace ruby
 {
 
+using namespace CHI;
+
 CHIGenericController::CHIGenericController(const Params &p)
   : AbstractController(p),
     reqOut(p.reqOut), snpOut(p.snpOut),
@@ -70,7 +72,8 @@ CHIGenericController::CHIGenericController(const Params &p)
 {
     m_machineID.type = MachineType_Cache;
     m_machineID.num = m_version;
-    p.ruby_system->registerAbstractController(this);
+    p.ruby_system->registerAbstractController(
+        this, std::make_unique<CHIProtocolInfo>());
     p.ruby_system->m_num_controllers[m_machineID.type]++;
     m_ruby_system = p.ruby_system;
 }

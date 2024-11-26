@@ -50,10 +50,10 @@
 #include "params/CHIGenericController.hh"
 
 // Generated from SLICC
-#include "mem/ruby/protocol/CHIDataMsg.hh"
-#include "mem/ruby/protocol/CHIRequestMsg.hh"
-#include "mem/ruby/protocol/CHIResponseMsg.hh"
-#include "mem/ruby/protocol/Cache_Controller.hh"
+#include "mem/ruby/protocol/CHI/CHIDataMsg.hh"
+#include "mem/ruby/protocol/CHI/CHIRequestMsg.hh"
+#include "mem/ruby/protocol/CHI/CHIResponseMsg.hh"
+#include "mem/ruby/protocol/CHI/Cache_Controller.hh"
 
 namespace gem5
 {
@@ -125,9 +125,12 @@ class CHIGenericController : public AbstractController
         CHI_DAT = 3
     };
 
-    typedef std::shared_ptr<CHIRequestMsg> CHIRequestMsgPtr;
-    typedef std::shared_ptr<CHIResponseMsg> CHIResponseMsgPtr;
-    typedef std::shared_ptr<CHIDataMsg> CHIDataMsgPtr;
+    using CHIRequestMsg = CHI::CHIRequestMsg;
+    using CHIResponseMsg = CHI::CHIResponseMsg;
+    using CHIDataMsg = CHI::CHIDataMsg;
+    using CHIRequestMsgPtr = std::shared_ptr<CHIRequestMsg>;
+    using CHIResponseMsgPtr = std::shared_ptr<CHIResponseMsg>;
+    using CHIDataMsgPtr = std::shared_ptr<CHIDataMsg>;
 
     bool
     sendRequestMsg(CHIRequestMsgPtr msg)
