@@ -41,9 +41,9 @@
 #include <ARM/TLM/arm_chi.h>
 
 #include "base/types.hh"
-#include "mem/ruby/protocol/CHIDataType.hh"
-#include "mem/ruby/protocol/CHIRequestType.hh"
-#include "mem/ruby/protocol/CHIResponseType.hh"
+#include "mem/ruby/protocol/CHI/CHIDataType.hh"
+#include "mem/ruby/protocol/CHI/CHIRequestType.hh"
+#include "mem/ruby/protocol/CHI/CHIResponseType.hh"
 
 namespace gem5 {
 
@@ -54,20 +54,20 @@ std::string transactionToString(const ARM::CHI::Payload &payload,
 
 namespace tlm_to_ruby {
 
-ruby::CHIRequestType reqOpcode(ARM::CHI::ReqOpcode req);
-ruby::CHIDataType datOpcode(ARM::CHI::DatOpcode dat, ARM::CHI::Resp resp);
-ruby::CHIResponseType rspOpcode(ARM::CHI::RspOpcode res, ARM::CHI::Resp resp);
+ruby::CHI::CHIRequestType reqOpcode(ARM::CHI::ReqOpcode req);
+ruby::CHI::CHIDataType datOpcode(ARM::CHI::DatOpcode dat, ARM::CHI::Resp resp);
+ruby::CHI::CHIResponseType rspOpcode(ARM::CHI::RspOpcode res, ARM::CHI::Resp resp);
 
 }
 
 namespace ruby_to_tlm {
 
-uint8_t datOpcode(ruby::CHIDataType dat);
-uint8_t rspOpcode(ruby::CHIResponseType res);
-uint8_t snpOpcode(ruby::CHIRequestType snp);
+uint8_t datOpcode(ruby::CHI::CHIDataType dat);
+uint8_t rspOpcode(ruby::CHI::CHIResponseType res);
+uint8_t snpOpcode(ruby::CHI::CHIRequestType snp);
 
-ARM::CHI::Resp datResp(ruby::CHIDataType dat);
-ARM::CHI::Resp rspResp(ruby::CHIResponseType rsp);
+ARM::CHI::Resp datResp(ruby::CHI::CHIDataType dat);
+ARM::CHI::Resp rspResp(ruby::CHI::CHIResponseType rsp);
 
 }
 
