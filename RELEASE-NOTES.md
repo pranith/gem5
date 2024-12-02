@@ -45,6 +45,58 @@ The complete list of changes are:
  * You may no longer call `RubySystem::getBlockSizeBytes()`, `RubySystem::getBlockSizeBits()`, etc. You must have a pointer to the `RubySystem` you are a part of and call, for example, `ruby_system->getBlockSizeBytes()`.
  * `MessageBuffer::enqueue()` has two new parameters indicating if the `RubySystem` has randomization and warmup enabled. You must explicitly specify these values now.
 
+## ArmISA changes/improvements
+
+### Architectural extensions
+
+- Architectural support for the following extensions:
+* FEAT_TTST
+* FEAT_XS
+
+### Bugfixes
+
+* Add support of AArch32 VRINTN/X/A/Z/M/P instructions
+* Add support of AArch32 VCVTA/P/N/M instructions
+* The following syscalls have been added in SE mode
+  * readv
+  * poll
+  * pread64
+  * pwrite64
+  * truncate64
+* The following syscalls have been fixed in SE mode when running on a 32bit HOST:
+  * getcwd
+  * lseek
+
+### CPU changes
+
+Before this release the Arm TLBs were using an hardcoded fully associative model with LRU replacement policy.
+The associativity and replacement policy of the Arm TLBs are now configurable with the IndexingPolicy and ReplacementPolicy classes by setting the indexing_policy and replacement_policy params.
+
+
+```python
+    indexing_policy = Param.TLBIndexingPolicy(
+        TLBSetAssociative(assoc=Parent.assoc, num_entries=Parent.size),
+        "Indexing policy of the TLB",
+    )
+    replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the TLB"
+    )
+```
+
+While default behaviour is still LRU + FA, the L2 TLB in the ArmMMU (l2_shared) has been converted from being a fully associative structure into being a 5-way set associative.
+The default ArmMMU is therefore:
+
+```python
+    # L2 TLBs
+    l2_shared = ArmTLB(
+        entry_type="unified", size=1280, assoc=5, partial_levels=["L2"]
+    )
+
+    # L1 TLBs
+    itb = ArmTLB(entry_type="instruction", next_level=Parent.l2_shared)
+    dtb = ArmTLB(entry_type="data", next_level=Parent.l2_shared)
+```
+
 # Version 24.0.0.1
 
 **[HOTFIX]** Fixes a bug affecting the use of the `IndirectMemoryPrefetcher`, `SignaturePathPrefetcher`, `SignaturePathPrefetcherV2`, `STeMSPrefetcher`, and `PIFPrefetcher` SimObjects.
