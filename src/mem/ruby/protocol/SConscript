@@ -91,6 +91,14 @@ def slicc_emitter(target, source, env):
 
         files.update([output_dir.File(f) for f in sorted(slicc.files())])
 
+        # Dynamically determine protocol and add ProtocolInfo.hh to the list of
+        # files to be built
+        protocol_name = os.path.splitext(os.path.basename(filepath))[0]
+        protocol_file = output_dir.File(
+            f"{protocol_name}/{protocol_name}ProtocolInfo.hh"
+        )
+        files.update([protocol_file])
+
     return list(files), source
 
 
