@@ -108,6 +108,7 @@ class RemoteGDB : public BaseRemoteGDB
             uint32_t stval;
             uint32_t sip;
             uint32_t satp;
+            uint32_t senvcfg;
             uint32_t mvendorid;
             uint32_t marchid;
             uint32_t mimpid;
@@ -192,6 +193,7 @@ class RemoteGDB : public BaseRemoteGDB
             uint64_t stval;
             uint64_t sip;
             uint64_t satp;
+            uint64_t senvcfg;
             uint64_t mvendorid;
             uint64_t marchid;
             uint64_t mimpid;

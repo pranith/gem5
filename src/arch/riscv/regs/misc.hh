@@ -183,6 +183,7 @@ enum MiscRegIndex
     MISCREG_SCAUSE,
     MISCREG_STVAL,
     MISCREG_SATP,
+    MISCREG_SENVCFG,
 
     MISCREG_UTVEC,
     MISCREG_USCRATCH,
@@ -360,6 +361,7 @@ enum CSRIndex
     CSR_STVAL = 0x143,
     CSR_SIP = 0x144,
     CSR_SATP = 0x180,
+    CSR_SENVCFG = 0x10A, // 20240411 RISCV spec, volume 2
 
     CSR_MVENDORID = 0xF11,
     CSR_MARCHID = 0xF12,
@@ -777,6 +779,9 @@ const std::unordered_map<int, CSRMetadata> CSRData = {
         {"sip", MISCREG_SIP, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
     {CSR_SATP,
         {"satp", MISCREG_SATP, rvTypeFlags(RV64, RV32), isaExtsFlags('s')}},
+    {CSR_SENVCFG,
+        {"senvcfg", MISCREG_SENVCFG, rvTypeFlags(RV64, RV32),
+         isaExtsFlags('s')}},
 
     {CSR_MVENDORID,
         {"mvendorid", MISCREG_VENDORID, rvTypeFlags(RV64, RV32),

@@ -327,6 +327,8 @@ RemoteGDB::Riscv32GdbRegCache::getRegs(ThreadContext *context)
         CSRData.at(CSR_SIP).physIndex) & RVxCSRMasks.at(CSR_SIP);
     r.satp = context->readMiscRegNoEffect(
         CSRData.at(CSR_SATP).physIndex);
+    r.senvcfg = context->readMiscRegNoEffect(
+        CSRData.at(CSR_SENVCFG).physIndex);
 
     // M mode CSR
     r.mvendorid = context->readMiscRegNoEffect(
@@ -426,6 +428,8 @@ RemoteGDB::Riscv32GdbRegCache::setRegs(ThreadContext *context) const
         CSRData.at(CSR_STVAL).physIndex, r.stval);
     context->setMiscRegNoEffect(
         CSRData.at(CSR_SATP).physIndex, r.satp);
+    context->setMiscRegNoEffect(
+        CSRData.at(CSR_SENVCFG).physIndex, r.senvcfg);
 
     // M mode CSR
     setRegWithMask(context, RV32, pms, CSR_MSTATUS, r.mstatus);
@@ -528,6 +532,8 @@ RemoteGDB::Riscv64GdbRegCache::getRegs(ThreadContext *context)
         CSRData.at(CSR_SIP).physIndex) & RVxCSRMasks.at(CSR_SIP);
     r.satp = context->readMiscRegNoEffect(
         CSRData.at(CSR_SATP).physIndex);
+    r.senvcfg = context->readMiscRegNoEffect(
+        CSRData.at(CSR_SENVCFG).physIndex);
 
     // M mode CSR
     r.mvendorid = context->readMiscRegNoEffect(
@@ -625,7 +631,8 @@ RemoteGDB::Riscv64GdbRegCache::setRegs(ThreadContext *context) const
         CSRData.at(CSR_STVAL).physIndex, r.stval);
     context->setMiscRegNoEffect(
         CSRData.at(CSR_SATP).physIndex, r.satp);
-
+    context->setMiscRegNoEffect(
+        CSRData.at(CSR_SENVCFG).physIndex, r.senvcfg);
     // M mode CSR
     setRegWithMask(context, RV64, pms, CSR_MSTATUS, r.mstatus);
     setRegNoEffectWithMask(context, RV64, pms, CSR_MISA, r.misa);

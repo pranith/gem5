@@ -185,6 +185,7 @@ namespace RiscvISA
     [MISCREG_SCAUSE]        = "SCAUSE",
     [MISCREG_STVAL]         = "STVAL",
     [MISCREG_SATP]          = "SATP",
+    [MISCREG_SENVCFG]       = "SENVCFG",
 
     [MISCREG_UTVEC]         = "UTVEC",
     [MISCREG_USCRATCH]      = "USCRATCH",
@@ -777,6 +778,11 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                     new_val.mode != AddrXlateMode::SV39)
                     new_val.mode = cur_val.mode;
                 setMiscRegNoEffect(idx, new_val);
+            }
+            break;
+          case MISCREG_SENVCFG:
+            {
+                setMiscRegNoEffect(idx, val + 1);
             }
             break;
           case MISCREG_TSELECT:
