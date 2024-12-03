@@ -755,7 +755,8 @@ namespace ArmISA
         Bitfield<0>      f;
    EndBitUnion(PAR)
 
-   BitUnion32(ESR)
+   BitUnion64(ESR)
+        Bitfield<55, 32> iss2;
         Bitfield<31, 26> ec;
         Bitfield<25> il;
         Bitfield<24, 0> iss;
