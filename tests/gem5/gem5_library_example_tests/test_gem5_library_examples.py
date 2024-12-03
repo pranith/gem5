@@ -156,6 +156,27 @@ if os.access("/dev/kvm", mode=os.R_OK | os.W_OK):
         uses_kvm=True,
     )
 
+if os.access("/dev/kvm", mode=os.R_OK | os.W_OK):
+    # The x86-ubuntu-run uses KVM cores, this test will therefore only be run
+    # on systems that support KVM.
+    gem5_verify_config(
+        name="test-gem5-library-example-x86-ubuntu-run-with-kvm-no-perf",
+        fixtures=(),
+        verifiers=(),
+        config=joinpath(
+            config.base_dir,
+            "configs",
+            "example",
+            "gem5_library",
+            "x86-ubuntu-run-with-kvm-no-perf.py",
+        ),
+        config_args=[],
+        valid_isas=(constants.all_compiled_tag,),
+        valid_hosts=(constants.host_x86_64_tag,),
+        length=constants.long_tag,
+        uses_kvm=True,
+    )
+
 gem5_verify_config(
     name="test-gem5-library-example-x86-ubuntu-run",
     fixtures=(),
