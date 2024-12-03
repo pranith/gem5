@@ -97,6 +97,25 @@ The default ArmMMU is therefore:
     dtb = ArmTLB(entry_type="data", next_level=Parent.l2_shared)
 ```
 
+## AMBA CHI changes/improvements
+
+PR [1084](https://github.com/gem5/gem5/pull/1084) introduced two new CHI relevant classes.
+* The first one is the CHIGenericController. This is a purely C++ based / abstract interface of a Coherence Controller for ruby.
+It is meant to bypass SLICC and removes the limitation of using the gem5 Sequencer and associated data structures.
+* The second one is the CHI-TLM controller, which extends the aforementioned CHIGenericController. This is a bridge between the AMBA TLM 2.0 implementation of CHI [1](https://developer.arm.com/documentation/101459/latest) [2](https://developer.arm.com/Architectures/AMBA#Downloads) with the gem5 (ruby) one.
+
+In other words it translates AMBA CHI transactions into ruby messages (which are then forwarded to the MessageQueues)
+and viceversa.
+
+```
+ARM::CHI::Payload,         CHIRequestMsg
+                     <-->  CHIDataMsg
+ARM::CHI::Phase            CHIResponseMsg
+                           CHIDataMsg
+```
+
+In this way it will be possible to connect external RNF models to the ruby interconnect via the CHI-TLM library
+
 # Version 24.0.0.1
 
 **[HOTFIX]** Fixes a bug affecting the use of the `IndirectMemoryPrefetcher`, `SignaturePathPrefetcher`, `SignaturePathPrefetcherV2`, `STeMSPrefetcher`, and `PIFPrefetcher` SimObjects.
