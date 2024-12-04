@@ -359,7 +359,7 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.unify_repl_TBEs = False
 
 
-class CHI_MNController(Base_CHI_MiscNode_Controller):
+class CHI_MNController(CHI_MiscNode_Controller):
     """
     Default parameters for a Misc Node
     """
