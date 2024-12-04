@@ -257,7 +257,14 @@ get_cpu_online_mask(ThreadContext *tc)
     RiscvLinux::cpumask_t *cpu_online_mask = cpumask_malloc(tc);
     if (cpu_online_mask != nullptr) {
         for (int i = 0; i < tc->getSystemPtr()->threads.size(); i++) {
-            CPU_SET(i, (cpu_set_t *)&cpu_online_mask->bits);
+            #ifdef __linux__
+                        CPU_SET(i, (cpu_set_t *)&cpu_online_mask->bits);
+            #else
+                        // For non-Linux systems, we use cpumask_set_cpu.
+                        // CPU_SET is a macro that is not available on all
+                        // non-Linux systems.
+                        cpumask_set_cpu(i, cpu_online_mask);
+            #endif
         }
     }
 
