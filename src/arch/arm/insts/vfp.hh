@@ -266,6 +266,7 @@ setFPExceptions(int exceptions) {
 
 template <typename T>
 uint64_t
+GEM5_NO_OPTIMIZE
 vfpFpToFixed(T val, bool isSigned, uint8_t width, uint8_t imm, bool
              useRmode = true, VfpRoundingMode roundMode = VfpRoundZero,
              bool aarch64 = false)
@@ -437,6 +438,7 @@ vfpFpToFixed(T val, bool isSigned, uint8_t width, uint8_t imm, bool
 
 template <typename T>
 T
+GEM5_NO_OPTIMIZE
 vfpFpRint(T val, bool exact, bool defaultNan, bool useRmode = true,
           VfpRoundingMode roundMode = VfpRoundZero)
 {
