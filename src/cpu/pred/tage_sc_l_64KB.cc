@@ -88,7 +88,9 @@ TAGE_SC_L_64KB_StatisticalCorrector::makeThreadHistory()
 
 unsigned
 TAGE_SC_L_64KB_StatisticalCorrector::getIndBiasBank(Addr branch_pc,
-        BranchInfo* bi, int hitBank, int altBank) const
+                                                    BranchInfo *bi,
+                                                    int hitBank,
+                                                    int altBank) const
 {
     Addr shifted_pc = branch_pc >> instShiftAmt;
     return (bi->predBeforeSC
@@ -102,36 +104,33 @@ TAGE_SC_L_64KB_StatisticalCorrector::getIndBiasBank(Addr branch_pc,
 
 int
 TAGE_SC_L_64KB_StatisticalCorrector::gPredictions(ThreadID tid, Addr branch_pc,
-        BranchInfo* bi, int & lsum, int64_t pathHist)
+                                                  BranchInfo *bi, int &lsum)
 {
-    SC_64KB_ThreadHistory *sh =
-        static_cast<SC_64KB_ThreadHistory *>(scHistory);
-
     lsum += gPredict(
-        ((branch_pc >> instShiftAmt) << 1) + bi->predBeforeSC, sh->bwHist, bwm,
+        ((branch_pc >> instShiftAmt) << 1) + bi->predBeforeSC, bi->bwHist, bwm,
         bwgehl, bwnb, logBwnb, wbw);
 
     lsum += gPredict(
-        branch_pc, pathHist, pm, pgehl, pnb, logPnb, wp);
+        branch_pc, bi->pHist, pm, pgehl, pnb, logPnb, wp);
 
     lsum += gPredict(
-        branch_pc, sh->getLocalHistory(1, branch_pc), lm,
+        branch_pc, bi->localHistories[1], lm,
         lgehl, lnb, logLnb, wl);
 
     lsum += gPredict(
-        branch_pc, sh->getLocalHistory(2, branch_pc), sm,
+        branch_pc, bi->localHistories[2], sm,
         sgehl, snb, logSnb, ws);
 
     lsum += gPredict(
-        branch_pc, sh->getLocalHistory(3, branch_pc), tm,
+        branch_pc, bi->localHistories[3], tm,
         tgehl, tnb, logTnb, wt);
 
     lsum += gPredict(
-        branch_pc, sh->imHist[scHistory->imliCount], imm,
+        branch_pc, bi->imHist, imm,
         imgehl, imnb, logImnb, wim);
 
     lsum += gPredict(
-        branch_pc, sh->imliCount, im, igehl, inb, logInb, wi);
+        branch_pc, bi->imliCount, im, igehl, inb, logInb, wi);
 
     int thres = (updateThreshold>>3) + pUpdateThreshold[getIndUpd(branch_pc)]
       + 12*((wb[getIndUpds(branch_pc)] >= 0) + (wp[getIndUpds(branch_pc)] >= 0)
@@ -150,8 +149,9 @@ TAGE_SC_L_64KB_StatisticalCorrector::gIndexLogsSubstr(int nbr, int i)
 
 void
 TAGE_SC_L_64KB_StatisticalCorrector::scHistoryUpdate(Addr branch_pc,
-        const StaticInstPtr &inst, bool taken, BranchInfo* tage_bi,
-        Addr corrTarget)
+                                                     const StaticInstPtr &inst,
+                                                     bool taken, Addr target,
+                                                     int64_t phist)
 {
     int brtype = inst->isDirectCtrl() ? 0 : 2;
     if (! inst->isUncondCtrl()) {
@@ -168,36 +168,57 @@ TAGE_SC_L_64KB_StatisticalCorrector::scHistoryUpdate(Addr branch_pc,
         sh->updateLocalHistory(3, branch_pc, taken);
     }
 
-    StatisticalCorrector::scHistoryUpdate(branch_pc, inst, taken, tage_bi,
-                                          corrTarget);
+    StatisticalCorrector::scHistoryUpdate(branch_pc, inst, taken,
+                                          target, phist);
+}
+
+void
+TAGE_SC_L_64KB_StatisticalCorrector::scRecordHistState(Addr branch_pc,
+                                                       BranchInfo *bi)
+{
+    StatisticalCorrector::scRecordHistState(branch_pc, bi);
+    auto sh = static_cast<SC_64KB_ThreadHistory *>(scHistory);
+    bi->imHist = sh->imHist[sh->imliCount];
+    bi->localHistories[2] = sh->getLocalHistory(2, branch_pc);
+    bi->localHistories[3] = sh->getLocalHistory(3, branch_pc);
+}
+
+bool
+TAGE_SC_L_64KB_StatisticalCorrector::scRestoreHistState(BranchInfo *bi)
+{
+    if (!StatisticalCorrector::scRestoreHistState(bi)) {
+        return false;
+    }
+    auto sh = static_cast<SC_64KB_ThreadHistory *>(scHistory);
+    sh->imHist[sh->imliCount] = bi->imHist;
+    sh->setLocalHistory(2, bi->pc, bi->localHistories[2]);
+    sh->setLocalHistory(3, bi->pc, bi->localHistories[3]);
+    return true;
 }
 
 void
 TAGE_SC_L_64KB_StatisticalCorrector::gUpdates(ThreadID tid, Addr pc,
-        bool taken, BranchInfo* bi, int64_t phist)
+                                              bool taken, BranchInfo *bi)
 {
-    SC_64KB_ThreadHistory *sh =
-        static_cast<SC_64KB_ThreadHistory *>(scHistory);
-
-    gUpdate((pc << 1) + bi->predBeforeSC, taken, sh->bwHist, bwm,
+    gUpdate((pc << 1) + bi->predBeforeSC, taken, bi->bwHist, bwm,
             bwgehl, bwnb, logBwnb, wbw, bi);
 
-    gUpdate(pc, taken, phist, pm,
+    gUpdate(pc, taken, bi->pHist, pm,
             pgehl, pnb, logPnb, wp, bi);
 
-    gUpdate(pc, taken, sh->getLocalHistory(1, pc), lm,
+    gUpdate(pc, taken, bi->localHistories[1], lm,
             lgehl, lnb, logLnb, wl, bi);
 
-    gUpdate(pc, taken, sh->getLocalHistory(2, pc), sm,
+    gUpdate(pc, taken, bi->localHistories[2], sm,
             sgehl, snb, logSnb, ws, bi);
 
-    gUpdate(pc, taken, sh->getLocalHistory(3, pc), tm,
+    gUpdate(pc, taken, bi->localHistories[3], tm,
             tgehl, tnb, logTnb, wt, bi);
 
-    gUpdate(pc, taken, sh->imHist[scHistory->imliCount], imm,
+    gUpdate(pc, taken, bi->imHist, imm,
             imgehl, imnb, logImnb, wim, bi);
 
-    gUpdate(pc, taken, sh->imliCount, im,
+    gUpdate(pc, taken, bi->imliCount, im,
             igehl, inb, logInb, wi, bi);
 }
 
@@ -219,8 +240,8 @@ TAGE_SC_L_TAGE_64KB::gtag(ThreadID tid, Addr pc, int bank) const
 }
 
 void
-TAGE_SC_L_TAGE_64KB::handleAllocAndUReset(
-    bool alloc, bool taken, TAGEBase::BranchInfo* bi, int nrand)
+TAGE_SC_L_TAGE_64KB::handleAllocAndUReset(bool alloc, bool taken,
+                                          TAGEBase::BranchInfo *bi, int nrand)
 {
     if (! alloc) {
         return;
@@ -268,7 +289,7 @@ TAGE_SC_L_TAGE_64KB::handleAllocAndUReset(
 
 void
 TAGE_SC_L_TAGE_64KB::handleTAGEUpdate(Addr branch_pc, bool taken,
-                                 TAGEBase::BranchInfo* bi)
+                                      TAGEBase::BranchInfo *bi)
 {
     if (bi->hitBank > 0) {
         if (abs (2 * gtable[bi->hitBank][bi->hitBankIndex].ctr + 1) == 1) {

@@ -189,13 +189,13 @@ class MPP_StatisticalCorrector : public StatisticalCorrector
     bool scPredict(ThreadID tid, Addr branch_pc, bool cond_branch,
                    StatisticalCorrector::BranchInfo* bi, bool prev_pred_taken,
                    bool bias_bit, bool use_conf_ctr, int8_t conf_ctr,
-                   unsigned conf_bits, int hitBank, int altBank, int64_t phist,
+                   unsigned conf_bits, int hitBank, int altBank,
                    int init_lsum) override;
 
     void condBranchUpdate(ThreadID tid, Addr branch_pc, bool taken,
                           StatisticalCorrector::BranchInfo *bi,
-                          Addr target, bool b, int hitBank, int altBank,
-                          int64_t phist) override;
+                          Addr target, bool b, int hitBank,
+                          int altBank) override;
 
     virtual void getBiasLSUM(Addr branch_pc,
             StatisticalCorrector::BranchInfo *bi, int &lsum) const = 0;

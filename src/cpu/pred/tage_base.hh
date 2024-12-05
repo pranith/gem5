@@ -504,6 +504,8 @@ class TAGEBase : public SimObject
         // Speculative path history
         // (LSB of branch address)
         int pathHist;
+        // Non-speculative path history
+        int nonSpecPathHist;
 
         // Speculative branch direction
         // history (circular buffer)

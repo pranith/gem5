@@ -195,7 +195,8 @@ class BranchPredictor(SimObject):
         "to 0.",
     )
     speculativeHistUpdate = Param.Bool(
-        True, "Use speculative update for histories"
+        True,
+        "Use speculative update for histories",
     )
 
     requiresBTBHit = Param.Bool(
@@ -631,6 +632,11 @@ class StatisticalCorrector(SimObject):
 
     initialUpdateThresholdValue = Param.Int(
         0, "Initial pUpdate threshold counter value"
+    )
+
+    speculativeHistUpdate = Param.Bool(
+        Parent.speculativeHistUpdate,
+        "Use speculative update for the statistical corrector",
     )
 
 

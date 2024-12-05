@@ -172,10 +172,13 @@ class TAGE_SC_L: public LTAGE
 
     bool predict(
         ThreadID tid, Addr branch_pc, bool cond_branch, void* &b) override;
+    void squash(ThreadID tid, void * &bp_history) override;
     void update(ThreadID tid, Addr pc, bool taken, void * &bp_history,
                 bool squashed, const StaticInstPtr & inst,
                 Addr target) override;
-
+    void updateHistories(ThreadID tid, Addr pc, bool uncond,
+                         bool taken, Addr target, const StaticInstPtr &inst,
+                         void * &bp_history) override;
     void branchPlaceholder(ThreadID tid, Addr pc,
                                 bool uncond, void * &bp_history) override
     { panic("Not implemented for this BP!\n"); }

@@ -387,12 +387,17 @@ TAGE_SC_L::predict(ThreadID tid, Addr pc, bool cond_branch, void* &b)
         int8_t tage_ctr = use_tage_ctr ?
             tage->getCtr(tage_scl_bi->hitBank, tage_scl_bi->hitBankIndex) : 0;
         bool bias = (bi->tageBranchInfo->longestMatchPred !=
-                    bi->tageBranchInfo->altTaken);
+                     bi->tageBranchInfo->altTaken);
 
         pred_taken = statisticalCorrector->scPredict(tid, pc, cond_branch,
-                bi->scBranchInfo, pred_taken, bias, use_tage_ctr, tage_ctr,
-                tage->getTageCtrBits(), bi->tageBranchInfo->hitBank,
-                bi->tageBranchInfo->altBank, tage->getPathHist(tid));
+                                                     bi->scBranchInfo,
+                                                     pred_taken, bias,
+                                                     use_tage_ctr, tage_ctr,
+                                                     tage->getTageCtrBits(),
+                                                     bi->tageBranchInfo->
+                                                                    hitBank,
+                                                     bi->tageBranchInfo->
+                                                                    altBank);
 
         if (bi->scBranchInfo->usedScPred) {
             bi->tageBranchInfo->provider = SC;
@@ -423,6 +428,11 @@ TAGE_SC_L::update(ThreadID tid, Addr pc, bool taken, void *&bp_history,
             if (bi->tageBranchInfo->condBranch) {
                 loopPredictor->squashLoop(bi->lpBranchInfo);
             }
+            if (statisticalCorrector) {
+                statisticalCorrector->updateHistories(pc, true, inst, taken,
+                                                      bi->scBranchInfo, target,
+                                                      tage->getPathHist(tid));
+            }
         }
         return;
     }
@@ -439,28 +449,60 @@ TAGE_SC_L::update(ThreadID tid, Addr pc, bool taken, void *&bp_history,
             statisticalCorrector->updateStats(taken, bi->scBranchInfo);
 
             bool bias = (bi->tageBranchInfo->longestMatchPred !=
-                        bi->tageBranchInfo->altTaken);
+                         bi->tageBranchInfo->altTaken);
             statisticalCorrector->condBranchUpdate(tid, pc, taken,
-                bi->scBranchInfo, target, bias, bi->tageBranchInfo->hitBank,
-                bi->tageBranchInfo->altBank, tage->getPathHist(tid));
+                                                   bi->scBranchInfo, target,
+                                                   bias,
+                                                   bi->tageBranchInfo->hitBank,
+                                                   bi->tageBranchInfo->altBank
+                                                   );
         }
 
         loopPredictor->condBranchUpdate(tid, pc, taken,
-                bi->tageBranchInfo->tagePred, bi->lpBranchInfo, instShiftAmt);
+                                        bi->tageBranchInfo->tagePred,
+                                        bi->lpBranchInfo, instShiftAmt);
 
         tage->condBranchUpdate(tid, pc, taken, bi->tageBranchInfo,
                                nrand, target, bi->lpBranchInfo->predTaken);
     }
 
+    tage->updateHistories(tid, pc, false, taken, target,
+                          inst, bi->tageBranchInfo);
+
     if (statisticalCorrector) {
-        statisticalCorrector->scHistoryUpdate(pc, inst, taken,
-                                            bi->scBranchInfo, target);
+        statisticalCorrector->updateHistories(pc, false, inst, taken,
+                                              bi->scBranchInfo, target,
+                                              tage->getPathHist(tid, false));
     }
 
-    tage->updateHistories(tid, pc, false, taken, target,
-                            inst, bi->tageBranchInfo);
+
     delete bi;
     bp_history = nullptr;
+}
+
+void
+TAGE_SC_L::squash(ThreadID tid, void * &bp_history)
+{
+    TageSCLBranchInfo* bi = static_cast<TageSCLBranchInfo*>(bp_history);
+    if (statisticalCorrector) {
+        statisticalCorrector->scRestoreHistState(bi->scBranchInfo);
+    }
+    LTAGE::squash(tid, bp_history);
+}
+
+
+void
+TAGE_SC_L::updateHistories(ThreadID tid, Addr pc, bool uncond, bool taken,
+                           Addr target, const StaticInstPtr &inst,
+                           void * &bp_history)
+{
+    TAGE::updateHistories(tid, pc, uncond, taken, target, inst, bp_history);
+    if (statisticalCorrector) {
+        auto bi = static_cast<TageSCLBranchInfo*>(bp_history);
+        statisticalCorrector->updateHistories(pc, true, inst, taken,
+                                              bi->scBranchInfo, target,
+                                              tage->getPathHist(tid));
+    }
 }
 
 
