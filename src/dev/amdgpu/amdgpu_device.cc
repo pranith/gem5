@@ -58,6 +58,8 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
       init_interrupt_count(0), _lastVMID(0),
       deviceMem(name() + ".deviceMem", p.memories, false, "", false)
 {
+    uint64_t vram_size = 0;
+
     // System pointer needs to be explicitly set for device memory since
     // DRAMCtrl uses it to get (1) cache line size and (2) the mem mode.
     // Note this means the cache line size is system wide.
@@ -66,7 +68,11 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
 
         // Add to system's device memory map.
         p.system->addDeviceMemory(gpuMemMgr->getRequestorID(), m);
+
+        vram_size += m->getAddrRange().size();
     }
+
+    vramSize = vram_size;
 
     if (config().expansionROM) {
         romRange = RangeSize(config().expansionROM, ROM_SIZE);
@@ -155,18 +161,27 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     // could possibly be anything, but these are the values used by hardware.
     uint64_t mmhubBase = 0x8000ULL << 24;
     uint64_t mmhubTop = 0x83ffULL << 24;
-    uint64_t mem_size = 0x3ff0; // 16 GB of memory
+    uint64_t mmio_mem_size = vram_size / 0x100000;
+
+    // The driver adds + 1 to MMIO value to reduce the number of bits required
+    // to represent max memory size. Subtract one here before writing MMIO.
+    mmio_mem_size -= 0x1;
 
     gpuvm.setMMHUBBase(mmhubBase);
     gpuvm.setMMHUBTop(mmhubTop);
 
-    // Map other MMIO apertures based on gfx version. This must be done before
-    // any calls to get/setRegVal.
+    // Map other MMIO apertures based on gfx version. For MI300X+ these come
+    // from the ip discovery table (see ip_discovery_header struct in
+    // include/discovery.h in amdgpu driver. Common values for MI200 - MI350:
     // NBIO               0x0     - 0x4280
     // IH                 0x4280  - 0x4980
     // GRBM               0x8000  - 0xC000
     // GFX                0x28000 - 0x3F000
-    // MMHUB              0x68000 - 0x6a120
+    // MMHUB              0x68000 - 0x6a120 (MI200)
+    // MMHUB              0x60D00 - 0x62E20 (MI3xx)
+    // SMU                0x5a000 - 0x5ace4
+    //
+    // This must be done before any calls to get/setRegVal.
     gpuvm.setMMIOAperture(NBIO_MMIO_RANGE, AddrRange(0x0, 0x4280));
     gpuvm.setMMIOAperture(IH_MMIO_RANGE,   AddrRange(0x4280, 0x4980));
     gpuvm.setMMIOAperture(GRBM_MMIO_RANGE, AddrRange(0x8000, 0xC000));
@@ -189,24 +204,19 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     } else if (p.device_name == "MI100") {
         setRegVal(MI100_FB_LOCATION_BASE, mmhubBase >> 24);
         setRegVal(MI100_FB_LOCATION_TOP, mmhubTop >> 24);
-        setRegVal(MI100_MEM_SIZE_REG, mem_size);
+        setRegVal(MI100_MEM_SIZE_REG, mmio_mem_size);
     } else if (p.device_name == "MI200") {
         // This device can have either 64GB or 128GB of device memory.
         // This limits to 16GB for simulation.
         setRegVal(MI200_FB_LOCATION_BASE, mmhubBase >> 24);
         setRegVal(MI200_FB_LOCATION_TOP, mmhubTop >> 24);
-        setRegVal(MI200_MEM_SIZE_REG, mem_size);
-    } else if (p.device_name == "MI300X") {
+        setRegVal(MI200_MEM_SIZE_REG, mmio_mem_size);
+    } else if (p.device_name == "MI300X" || p.device_name == "MI355X") {
+        // The MMIO addresses are the same in MI300X and MI355X
         // VRAM size in MB (shifted right by 20 bits)
         setRegVal(MI300X_FB_LOCATION_BASE, mmhubBase >> 24);
         setRegVal(MI300X_FB_LOCATION_TOP, mmhubTop >> 24);
-        setRegVal(MI300X_MEM_SIZE_REG, mem_size);
-    } else if (p.device_name == "MI355X") {
-        // Same as MI300X
-        // VRAM size in MB (shifted right by 20 bits)
-        setRegVal(MI300X_FB_LOCATION_BASE, mmhubBase >> 24);
-        setRegVal(MI300X_FB_LOCATION_TOP, mmhubTop >> 24);
-        setRegVal(MI300X_MEM_SIZE_REG, mem_size);
+        setRegVal(MI300X_MEM_SIZE_REG, mmio_mem_size);
     } else {
         panic("Unknown GPU device %s\n", p.device_name);
     }
@@ -229,7 +239,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
         // From ROCk driver: amdgpu/amdgpu_discovery.h:
         constexpr uint64_t DISCOVERY_TMR_OFFSET = (64 << 10);
         constexpr int IPT_SIZE_DW = 0xa00;
-        uint64_t ip_table_base = (mem_size << 20) - DISCOVERY_TMR_OFFSET;
+        uint64_t ip_table_base = (mmio_mem_size << 20) - DISCOVERY_TMR_OFFSET;
 
         DPRINTF(AMDGPUDevice, "Using IP discovery file %s\n", p.ipt_binary);
 
