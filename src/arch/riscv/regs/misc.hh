@@ -1265,6 +1265,20 @@ BitUnion64(INTERRUPT)
     Bitfield<0> usi;
 EndBitUnion(INTERRUPT)
 
+
+// From the RISCV specification version 20240411, volume 2,
+// section 10.1.10, page 98
+BitUnion64(SENVCFG)
+    Bitfield<63,34> wpri_1;
+    Bitfield<33,32> pmm;
+    Bitfield<31,8> wpri_2;
+    Bitfield<7> cbze;
+    Bitfield<6> cbcfe;
+    Bitfield<5,4> cbie;
+    Bitfield<3,1> wpri_3;
+    Bitfield<0> fiom;
+EndBitUnion(SENVCFG)
+
 const off_t MXL_OFFSETS[enums::Num_RiscvType] = {
     [RV32] = (sizeof(uint32_t) * 8 - 2),
     [RV64] = (sizeof(uint64_t) * 8 - 2),
