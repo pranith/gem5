@@ -782,7 +782,27 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
             break;
           case MISCREG_SENVCFG:
             {
-                setMiscRegNoEffect(idx, val + 1);
+                // panic on write to bitfields that aren't implemented in gem5
+                SENVCFG panic_mask = 0;
+                panic_mask.pmm = 3;
+
+                SENVCFG wpri_mask = 0;
+                wpri_mask.wpri_1 = ~wpri_mask.wpri_1;
+                wpri_mask.wpri_2 = ~wpri_mask.wpri_2;
+                wpri_mask.wpri_3 = ~wpri_mask.wpri_3;
+
+                if ((panic_mask & val) != 0) {
+                    panic("Tried to write to an unimplemented bitfield in the "
+                    "senvcfg CSR!\nThe attempted write was:\n %" PRIu64 "\n",
+                    val);
+                }
+
+                if ((wpri_mask & val) != 0) {
+                    warn("Ignoring write to WPRI bit(s) in senvcfg CSR.\n"
+                    "The attempted write was:\n %" PRIu64 "\n", val);
+                } else {
+                    setMiscRegNoEffect(idx, val);
+                }
             }
             break;
           case MISCREG_TSELECT:
