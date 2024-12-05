@@ -57,7 +57,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
       cp(p.cp), checkpoint_before_mmios(p.checkpoint_before_mmios),
       init_interrupt_count(0), _lastVMID(0),
       deviceMem(name() + ".deviceMem", p.memories, false, "", false),
-      system(p.system)
+      system(p.system), gpuId(p.gpu_id)
 {
     uint64_t vram_size = 0;
 
@@ -157,6 +157,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     cp->setGPUDevice(this);
     nbio.setGPUDevice(this);
     gpuvm.setGPUDevice(this);
+    smu.setGPUDevice(this);
 
     // Address aperture for device memory. We tell this to the driver and
     // could possibly be anything, but these are the values used by hardware.
@@ -193,6 +194,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     } else {
         gpuvm.setMMIOAperture(MMHUB_MMIO_RANGE,  AddrRange(0x68000, 0x6A120));
     }
+    gpuvm.setMMIOAperture(SMU_MMIO_RANGE,  AddrRange(0x5A000, 0x5ACE4));
 
     // These are hardcoded register values to return what the driver expects
     setRegVal(AMDGPU_MP0_SMN_C2PMSG_33, 0x80000000);
@@ -527,6 +529,9 @@ AMDGPUDevice::readMMIO(PacketPtr pkt, Addr offset)
     } else if (aperture == gpuvm.getMMIORange(MMHUB_MMIO_RANGE)) {
         DPRINTF(AMDGPUDevice, "MMHUB base\n");
         gpuvm.readMMIO(pkt, aperture_offset >> MMHUB_OFFSET_SHIFT);
+    } else if (aperture == gpuvm.getMMIORange(SMU_MMIO_RANGE)) {
+        DPRINTF(AMDGPUDevice, "SMU base\n");
+        smu.readMMIO(pkt, aperture_offset >> SMU_OFFSET_SHIFT);
     } else {
         DPRINTF(AMDGPUDevice, "Unknown MMIO aperture for read %#x\n", offset);
     }
@@ -697,6 +702,9 @@ AMDGPUDevice::writeMMIO(PacketPtr pkt, Addr offset)
     } else if (aperture == gpuvm.getMMIORange(GFX_MMIO_RANGE)) {
         DPRINTF(AMDGPUDevice, "GFX base\n");
         gfx.writeMMIO(pkt, aperture_offset);
+    } else if (aperture == gpuvm.getMMIORange(SMU_MMIO_RANGE)) {
+        DPRINTF(AMDGPUDevice, "SMU base\n");
+        smu.writeMMIO(pkt, aperture_offset >> SMU_OFFSET_SHIFT);
     } else {
         DPRINTF(AMDGPUDevice, "Unknown MMIO aperture for write %#x\n", offset);
     }
