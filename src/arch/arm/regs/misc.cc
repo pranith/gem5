@@ -2201,27 +2201,6 @@ faultSctlr2EL2(const MiscRegLUTEntry &entry,
     }
 }
 
-Fault
-faultSctlr2VheEL2(const MiscRegLUTEntry &entry,
-    ThreadContext *tc, const MiscRegOp64 &inst)
-{
-    if (HaveExt(tc, ArmExtension::FEAT_SCTLR2)) {
-        const HCR hcr = tc->readMiscRegNoEffect(MISCREG_HCR_EL2);
-        const SCR scr = tc->readMiscReg(MISCREG_SCR_EL3);
-        if (hcr.e2h) {
-            if (ArmSystem::haveEL(tc, EL3) && !scr.sctlr2En) {
-                return inst.generateTrap(EL3);
-            } else {
-                return NoFault;
-            }
-        } else {
-            return inst.undefined();
-        }
-    } else {
-        return inst.undefined();
-    }
-}
-
 template<bool read, auto g_bitfield>
 Fault
 faultTcr2EL1(const MiscRegLUTEntry &entry,
@@ -2262,27 +2241,6 @@ faultTcr2EL2(const MiscRegLUTEntry &entry,
             return inst.generateTrap(EL3);
         } else {
             return NoFault;
-        }
-    } else {
-        return inst.undefined();
-    }
-}
-
-Fault
-faultTcr2VheEL2(const MiscRegLUTEntry &entry,
-    ThreadContext *tc, const MiscRegOp64 &inst)
-{
-    if (HaveExt(tc, ArmExtension::FEAT_TCR2)) {
-        const HCR hcr = tc->readMiscRegNoEffect(MISCREG_HCR_EL2);
-        const SCR scr = tc->readMiscReg(MISCREG_SCR_EL3);
-        if (hcr.e2h) {
-            if (ArmSystem::haveEL(tc, EL3) && !scr.tcr2En) {
-                return inst.generateTrap(EL3);
-            } else {
-                return NoFault;
-            }
-        } else {
-            return inst.undefined();
         }
     } else {
         return inst.undefined();
@@ -2336,18 +2294,6 @@ faultCpacrEL2(const MiscRegLUTEntry &entry,
         return inst.generateTrap(EL3);
     } else {
         return NoFault;
-    }
-}
-
-Fault
-faultCpacrVheEL2(const MiscRegLUTEntry &entry,
-    ThreadContext *tc, const MiscRegOp64 &inst)
-{
-    const HCR hcr = tc->readMiscRegNoEffect(MISCREG_HCR_EL2);
-    if (hcr.e2h) {
-        return faultCpacrEL2(entry, tc, inst);
-    } else {
-        return inst.undefined();
     }
 }
 
@@ -2919,6 +2865,18 @@ faultMpamsmEL1(const MiscRegLUTEntry &entry,
         } else {
             return NoFault;
         }
+    } else {
+        return inst.undefined();
+    }
+}
+
+template <auto faultAtEL2>
+Fault
+faultVheEL2(const MiscRegLUTEntry &entry,
+    ThreadContext *tc, const MiscRegOp64 &inst)
+{
+    if (ELIsInHost(tc, EL2)) {
+        return faultAtEL2(entry, tc, inst);
     } else {
         return inst.undefined();
     }
@@ -5151,7 +5109,7 @@ ISA::initializeMiscRegMetadata()
       .faultWrite(EL1, faultSctlr2EL1<false, &HCR::tvm>)
       .fault(EL2,faultSctlr2EL2);
     InitReg(MISCREG_SCTLR2_EL12)
-      .fault(EL2, faultSctlr2VheEL2)
+      .fault(EL2, faultVheEL2<faultSctlr2EL2>)
       .fault(EL3, defaultFaultE2H_EL3)
       .mapsTo(MISCREG_SCTLR2_EL1);
     InitReg(MISCREG_ACTLR_EL1)
@@ -5165,7 +5123,7 @@ ISA::initializeMiscRegMetadata()
       .fault(EL2, faultCpacrEL2)
       .mapsTo(MISCREG_CPACR);
     InitReg(MISCREG_CPACR_EL12)
-      .fault(EL2, faultCpacrVheEL2)
+      .fault(EL2, faultVheEL2<faultCpacrEL2>)
       .fault(EL3, defaultFaultE2H_EL3)
       .mapsTo(MISCREG_CPACR_EL1);
     InitReg(MISCREG_SCTLR_EL2)
@@ -5260,7 +5218,7 @@ ISA::initializeMiscRegMetadata()
       .faultWrite(EL1, faultTcr2EL1<false, &HCR::tvm>)
       .fault(EL2, faultTcr2EL2);
     InitReg(MISCREG_TCR2_EL12)
-      .fault(EL2, faultTcr2VheEL2)
+      .fault(EL2, faultVheEL2<faultTcr2EL2>)
       .fault(EL3, faultTcr2VheEL3)
       .mapsTo(MISCREG_TCR2_EL1);
     InitReg(MISCREG_TTBR0_EL2)
@@ -6728,7 +6686,7 @@ ISA::initializeMiscRegMetadata()
         .fault(EL3, faultZcrEL3)
         .hyp().mon();
     InitReg(MISCREG_ZCR_EL12)
-        .fault(EL2, defaultFaultE2H_EL2)
+        .fault(EL2, faultVheEL2<faultZcrEL2>)
         .fault(EL3, defaultFaultE2H_EL3)
         .mapsTo(MISCREG_ZCR_EL1);
     InitReg(MISCREG_ZCR_EL1)
