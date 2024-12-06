@@ -295,10 +295,10 @@ TLB::createPagefault(Addr vaddr, BaseMMU::Mode mode)
 }
 
 Addr
-TLB::translateWithTLB(Addr vaddr, uint16_t asid, Addr xmode,
-                      BaseMMU::Mode mode)
+TLB::hiddenTranslateWithTLB(Addr vaddr, uint16_t asid, Addr xmode,
+                            BaseMMU::Mode mode)
 {
-    TlbEntry *e = lookup(getVPNFromVAddr(vaddr, xmode), asid, mode, false);
+    TlbEntry *e = lookup(getVPNFromVAddr(vaddr, xmode), asid, mode, true);
     assert(e != nullptr);
     return e->paddr << PageShift | (vaddr & mask(e->logBytes));
 }

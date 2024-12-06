@@ -131,8 +131,8 @@ class TLB : public BaseTLB
      */
     Port *getTableWalkerPort() override;
 
-    Addr translateWithTLB(Addr vaddr, uint16_t asid, Addr xmode,
-                          BaseMMU::Mode mode);
+    Addr hiddenTranslateWithTLB(Addr vaddr, uint16_t asid, Addr xmode,
+                                BaseMMU::Mode mode);
 
     Fault translateAtomic(const RequestPtr &req,
                           ThreadContext *tc, BaseMMU::Mode mode) override;
