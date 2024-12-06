@@ -797,12 +797,7 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                     val);
                 }
 
-                if ((wpri_mask & val) != 0) {
-                    warn("Ignoring write to WPRI bit(s) in senvcfg CSR.\n"
-                    "The attempted write was:\n %" PRIu64 "\n", val);
-                } else {
-                    setMiscRegNoEffect(idx, val);
-                }
+                setMiscRegNoEffect(idx, val & ~wpri_mask);
             }
             break;
           case MISCREG_TSELECT:
