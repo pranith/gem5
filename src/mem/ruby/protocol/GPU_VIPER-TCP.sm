@@ -917,8 +917,18 @@ machine(MachineType:TCP, "GPU TCP (L1 Data Cache)")
   // store followed by a load. Thus, complete the store without affecting
   // TBE or line state.
   // TCC_AckWB only snoops TBE
-  transition({V, I, IV, A}, TCC_AckWB) {
+  transition({V, I, IV}, TCC_AckWB) {
     wd_wtDone;
+    pr_popResponseQueue;
+  }
+
+  transition(A, TCC_AckWB, I) {TagArrayRead, DataArrayRead, DataArrayWrite} {
+    a_allocate;
+    w_writeCache;
+    ad_atomicDone;
+    ic_invCache;
+    wada_wakeUpAllDependentsAddr;
+    d_deallocateTBE;
     pr_popResponseQueue;
   }
 
