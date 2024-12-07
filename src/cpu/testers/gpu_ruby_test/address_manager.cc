@@ -64,9 +64,10 @@ AddressManager::AddressManager(int n_atomic_locs, int n_normal_locs_per_atomic)
         randAddressMap.begin(),
         randAddressMap.end(),
 
-        // TODO: This is a bug unrelated to this draft PR but the GPU tester is
-        // useful for testing this PR.
-        std::default_random_engine(rng->random<unsigned>(0,UINT_MAX))
+        // Note: This RNG has an upper bound of UINT_MAX - 1. This will fail
+        // if the number of locations exceeds this value. Please do not
+        // change this.
+        std::default_random_engine(rng->random<unsigned>(0,UINT_MAX - 1))
     );
 
     // initialize atomic locations
