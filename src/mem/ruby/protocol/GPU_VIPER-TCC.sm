@@ -933,14 +933,18 @@ machine(MachineType:TCC, "TCC Cache")
   }
 
   action(pa_performAtomic, "pa", desc="Perform atomic") {
-    peek(coreRequestNetwork_in, CPURequestMsg) {
-      if ((is_valid(tbe) && tbe.atomicDataReturn) || in_msg.Type == CoherenceRequestType:AtomicReturn) {
-        cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, false);
-      } else {
-        // Set the isAtomicNoReturn flag to ensure that logs are not
-        // generated erroneously
-        assert((is_valid(tbe) && tbe.atomicDataNoReturn) || in_msg.Type == CoherenceRequestType:AtomicNoReturn);
-        cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, true);
+    if (is_valid(tbe) && tbe.atomicDataReturn) {
+       cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, false);
+    } else if (is_valid(tbe) && tbe.atomicDataNoReturn) {
+       cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, true);
+    } else {
+      peek(coreRequestNetwork_in, CPURequestMsg) {
+        if (in_msg.Type == CoherenceRequestType:AtomicReturn) {
+           cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, false);
+        } else {
+          assert(in_msg.Type == CoherenceRequestType:AtomicNoReturn);
+          cache_entry.DataBlk.atomicPartial(cache_entry.DataBlk, cache_entry.writeMask, true);
+        }
       }
     }
   }
