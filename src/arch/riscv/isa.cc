@@ -185,6 +185,7 @@ namespace RiscvISA
     [MISCREG_SCAUSE]        = "SCAUSE",
     [MISCREG_STVAL]         = "STVAL",
     [MISCREG_SATP]          = "SATP",
+    [MISCREG_SENVCFG]       = "SENVCFG",
 
     [MISCREG_UTVEC]         = "UTVEC",
     [MISCREG_USCRATCH]      = "USCRATCH",
@@ -777,6 +778,26 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                     new_val.mode != AddrXlateMode::SV39)
                     new_val.mode = cur_val.mode;
                 setMiscRegNoEffect(idx, new_val);
+            }
+            break;
+          case MISCREG_SENVCFG:
+            {
+                // panic on write to bitfields that aren't implemented in gem5
+                SENVCFG panic_mask = 0;
+                panic_mask.pmm = 3;
+
+                SENVCFG wpri_mask = 0;
+                wpri_mask.wpri_1 = ~wpri_mask.wpri_1;
+                wpri_mask.wpri_2 = ~wpri_mask.wpri_2;
+                wpri_mask.wpri_3 = ~wpri_mask.wpri_3;
+
+                if ((panic_mask & val) != 0) {
+                    panic("Tried to write to an unimplemented bitfield in the "
+                    "senvcfg CSR!\nThe attempted write was:\n %" PRIu64 "\n",
+                    val);
+                }
+
+                setMiscRegNoEffect(idx, val & ~wpri_mask);
             }
             break;
           case MISCREG_TSELECT:
