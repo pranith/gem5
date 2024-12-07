@@ -160,6 +160,23 @@ In this way it will be possible to connect external RNF models to the ruby inter
 * Add support for Zicbop extension #1710
 * Fix vector instruction assertion caused by speculative execution #1711
 
+## GPU model improvements
+
+The GPUFS model is now available in the standard library!
+There is a new `ViperBoard` in `gem5.prebuilt.viper`.
+This board is an initial implementation and will be improved in the next versions of gem5.
+There is an example script in `configs/example/gem5_library/x86-mi300x-gpu.py` that shows how to use the `ViperBoard`.
+See #1636.
+
+### Other GPU changes
+
+* Vega10 has been deprecated #1619
+* Replacement policy has been improved #1564
+* Swizzle multi-dword scratch requests now supported #1445
+* Many improvements to Vega implementation including memtime, SDWA, SDWAB, and DPP instructions #1350, #1378
+* Matrix Core Engines (AMD's equivalent to NVIDIA's TensorCores) now supported! #1248, #1700
+* Pannotia tests integrated into weekly tests #1584
+
 ## Other Miscellaneous Changes
 
 ### Other Ruby Related Changes
