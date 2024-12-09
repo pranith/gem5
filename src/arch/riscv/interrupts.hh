@@ -61,6 +61,7 @@ class Interrupts : public BaseInterrupts
   private:
     std::bitset<NumInterruptTypes> ip;
     std::bitset<NumInterruptTypes> ie;
+    int nmi_cause;
 
     std::vector<gem5::IntSinkPin<Interrupts>*> localInterruptPins;
   public:
@@ -79,6 +80,10 @@ class Interrupts : public BaseInterrupts
     bool checkInterrupt(int num) const { return ip[num] && ie[num]; }
     bool checkInterrupts() const override
     {
+        ISA* isa = static_cast<ISA*>(tc->getIsaPtr());
+        if (isa->enableSmrnmi() && tc->readMiscReg(MISCREG_NMIE) == 0) {
+            return false;
+        }
         return checkNonMaskableInterrupt() || (ip & ie & globalMask()).any();
     }
 
