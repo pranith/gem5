@@ -140,6 +140,7 @@ TAGE_SC_L_TAGE::calculateIndicesAndTags(
     ThreadID tid, Addr pc, TAGEBase::BranchInfo* bi)
 {
     // computes the table addresses and the partial tags
+    Addr shifted_pc = pc >> instShiftAmt;
 
     for (int i = 1; i <= nHistoryTables; i += 2) {
         tableIndices[i] = gindex(tid, pc, i);
@@ -152,7 +153,7 @@ TAGE_SC_L_TAGE::calculateIndicesAndTags(
         bi->tableTags[i+1] = tableTags[i+1];
     }
 
-    Addr t = (pc ^ (threadHistory[tid].pathHist &
+    Addr t = (shifted_pc ^ (threadHistory[tid].pathHist &
                     ((1 << histLengths[firstLongTagTable]) - 1)))
              % longTagsTageFactor;
 
@@ -165,7 +166,8 @@ TAGE_SC_L_TAGE::calculateIndicesAndTags(
         }
     }
 
-    t = (pc ^ (threadHistory[tid].pathHist & ((1 << histLengths[1]) - 1)))
+    t = (shifted_pc ^ (threadHistory[tid].pathHist &
+                    ((1 << histLengths[1]) - 1)))
         % shortTagsTageFactor;
 
     for (int i = 1; i <= firstLongTagTable - 1; i++) {
@@ -193,11 +195,10 @@ TAGE_SC_L_TAGE::gindex(ThreadID tid, Addr pc, int bank) const
     int index;
     int hlen = (histLengths[bank] > pathHistBits) ? pathHistBits :
                                                     histLengths[bank];
-    unsigned int shortPc = pc;
+    unsigned int shifted_pc = pc >> instShiftAmt;
 
-    // pc is not shifted by instShiftAmt in this implementation
-    index = shortPc ^
-            (shortPc >> ((int) abs(logTagTableSizes[bank] - bank) + 1)) ^
+    index = shifted_pc ^
+            (shifted_pc >> ((int) abs(logTagTableSizes[bank] - bank) + 1)) ^
             threadHistory[tid].computeIndices[bank].comp ^
             F(threadHistory[tid].pathHist, hlen, bank);
 
@@ -233,7 +234,8 @@ TAGE_SC_L_TAGE::F(int a, int size, int bank) const
 int
 TAGE_SC_L_TAGE::bindex(Addr pc) const
 {
-    return ((pc ^ (pc >> instShiftAmt)) &
+    Addr shifted_pc = pc >> instShiftAmt;
+    return ((shifted_pc ^ (shifted_pc >> 2)) &
             ((1ULL << (logTagTableSizes[0])) - 1));
 }
 
@@ -244,12 +246,12 @@ TAGE_SC_L_TAGE::updatePathAndGlobalHistory(
 {
     ThreadHistory& tHist = threadHistory[tid];
     // TAGE update
-    int tmp = ((branch_pc ^ (branch_pc >> instShiftAmt))) ^ taken;
-    int path = branch_pc ^ (branch_pc >> instShiftAmt)
-                         ^ (branch_pc >> (instShiftAmt+2));
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    int tmp = ((shifted_pc ^ (shifted_pc >> 2))) ^ taken;
+    int path = shifted_pc ^ (shifted_pc >> 2) ^ (shifted_pc >> 4);
     if ((brtype == 3) & taken) {
-         tmp = (tmp ^ (target >> instShiftAmt));
-         path = path ^ (target >> instShiftAmt) ^ (target >> (instShiftAmt+2));
+         tmp = (tmp ^ (target >> 2));
+         path = path ^ (target >> 2) ^ (target >> 4);
     }
 
     // some branch types use 3 bits in global history, the others just 2

@@ -70,6 +70,7 @@ StatisticalCorrector::StatisticalCorrector(
     pUpdateThresholdWidth(p.pUpdateThresholdWidth),
     extraWeightsWidth(p.extraWeightsWidth),
     scCountersWidth(p.scCountersWidth),
+    instShiftAmt(p.instShiftAmt),
     firstH(0),
     secondH(0),
     stats(this)
@@ -156,34 +157,41 @@ unsigned
 StatisticalCorrector::getIndBias(Addr branch_pc, BranchInfo* bi,
                                  bool bias) const
 {
-    return (((((branch_pc ^(branch_pc >>2))<<1) ^ (bi->lowConf & bias)) <<1)
-            +  bi->predBeforeSC) & ((1<<logBias) -1);
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    return (((((shifted_pc ^ (shifted_pc >> 2)) << 1)
+            ^ (bi->lowConf & bias)) << 1) +  bi->predBeforeSC)
+            & ((1 << logBias) - 1);
 }
 
 unsigned
 StatisticalCorrector::getIndBiasSK(Addr branch_pc, BranchInfo* bi) const
 {
-    return (((((branch_pc ^ (branch_pc >> (logBias-2)))<<1) ^
-           (bi->highConf))<<1) + bi->predBeforeSC) & ((1<<logBias) -1);
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    return (((((shifted_pc ^ (shifted_pc >> (logBias - 2))) << 1)
+            ^ bi->highConf) << 1) + bi->predBeforeSC)
+            & ((1 << logBias) - 1);
 }
 
 unsigned
 StatisticalCorrector::getIndUpd(Addr branch_pc) const
 {
-    return ((branch_pc ^ (branch_pc >>2)) & ((1 << (logSizeUp)) - 1));
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    return ((shifted_pc ^ (shifted_pc >> 2)) & ((1 << logSizeUp) - 1));
 }
 
 unsigned
 StatisticalCorrector::getIndUpds(Addr branch_pc) const
 {
-    return ((branch_pc ^ (branch_pc >>2)) & ((1 << (logSizeUps)) - 1));
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    return ((shifted_pc ^ (shifted_pc >> 2)) & ((1 << logSizeUps) - 1));
 }
 
 int64_t
 StatisticalCorrector::gIndex(Addr branch_pc, int64_t bhist, int logs, int nbr,
                              int i)
 {
-    return (((int64_t) branch_pc) ^ bhist ^ (bhist >> (8 - i)) ^
+    return (((int64_t) branch_pc >> instShiftAmt) ^
+             bhist ^ (bhist >> (8 - i)) ^
             (bhist >> (16 - 2 * i)) ^ (bhist >> (24 - 3 * i)) ^
             (bhist >> (32 - 3 * i)) ^ (bhist >> (40 - 4 * i))) &
            ((1 << (logs - gIndexLogsSubstr(nbr, i))) - 1);

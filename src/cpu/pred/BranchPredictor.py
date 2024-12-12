@@ -172,7 +172,9 @@ class SimpleIndirectPredictor(IndirectPredictor):
         "pipeline depth or a high value e.g. 256 to make it 'unlimited'.",
     )
     indirectGHRBits = Param.Unsigned(13, "Indirect GHR number of bits")
-    instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
+    instShiftAmt = Param.Unsigned(
+        Parent.instShiftAmt, "Number of bits to shift instructions by"
+    )
 
 
 class BranchPredictor(SimObject):
@@ -182,7 +184,15 @@ class BranchPredictor(SimObject):
     abstract = True
 
     numThreads = Param.Unsigned(Parent.numThreads, "Number of threads")
-    instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
+    instShiftAmt = Param.Unsigned(
+        0,
+        "The `instShiftAmt` is intended for fixed size instruction sets "
+        "(Arm,RISC-V) to shift the FULL PC by `n` bits (e.g. 2 for 4 byte "
+        "instructions) as the two least significant bits are always zero and "
+        "therefore not useful for prediction. For variable size instruction "
+        "sets (x86) all bits are used and the `instShiftAmt` should be set "
+        "to 0.",
+    )
     requiresBTBHit = Param.Bool(
         False,
         "Requires the BTB to hit for returns and indirect branches. For an"
@@ -560,6 +570,10 @@ class StatisticalCorrector(SimObject):
     cxx_class = "gem5::branch_prediction::StatisticalCorrector"
     cxx_header = "cpu/pred/statistical_corrector.hh"
     abstract = True
+
+    instShiftAmt = Param.Unsigned(
+        Parent.instShiftAmt, "Number of bits to shift instructions by"
+    )
 
     # Statistical corrector parameters
 

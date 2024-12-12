@@ -73,8 +73,12 @@ unsigned
 TAGE_SC_L_8KB_StatisticalCorrector::getIndBiasBank(Addr branch_pc,
         BranchInfo* bi, int hitBank, int altBank) const
 {
-    return (bi->predBeforeSC + (((hitBank+1)/4)<<4) + (bi->highConf<<1) +
-            (bi->lowConf <<2) +((altBank!=0)<<3)) & ((1<<logBias) -1);
+    return (bi->predBeforeSC
+         + (((hitBank + 1) / 4) << 4)
+         + (bi->highConf << 1)
+         + (bi->lowConf << 2)
+         + ((altBank != 0) << 3))
+         & ((1 << logBias) -1);
 }
 
 int
@@ -170,8 +174,9 @@ TAGE_SC_L_TAGE_8KB::gindex_ext(int index, int bank) const
 uint16_t
 TAGE_SC_L_TAGE_8KB::gtag(ThreadID tid, Addr pc, int bank) const
 {
-    int tag = (threadHistory[tid].computeIndices[bank - 1].comp << 2) ^ pc ^
-              (pc >> instShiftAmt) ^
+    Addr shifted_pc = pc >> instShiftAmt;
+    int tag = (threadHistory[tid].computeIndices[bank - 1].comp << 2)
+            ^ shifted_pc ^ (shifted_pc >> 2) ^
               threadHistory[tid].computeIndices[bank].comp;
     int hlen = (histLengths[bank] > pathHistBits) ? pathHistBits :
                                                     histLengths[bank];

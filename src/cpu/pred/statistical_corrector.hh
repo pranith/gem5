@@ -128,7 +128,9 @@ class StatisticalCorrector : public SimObject
 
         unsigned getEntry(Addr pc, unsigned idx)
         {
-            return (pc ^ (pc >> shifts[idx])) & (localHistories[idx].size()-1);
+            Addr shifted_pc = pc >> instShiftAmt;
+            return (shifted_pc ^ (shifted_pc >> shifts[idx]))
+                 & (localHistories[idx].size()-1);
         }
     };
 
@@ -185,6 +187,8 @@ class StatisticalCorrector : public SimObject
     const unsigned extraWeightsWidth;
 
     const unsigned scCountersWidth;
+
+    const unsigned instShiftAmt;
 
     int8_t firstH;
     int8_t secondH;

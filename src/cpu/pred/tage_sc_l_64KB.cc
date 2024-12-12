@@ -90,9 +90,14 @@ unsigned
 TAGE_SC_L_64KB_StatisticalCorrector::getIndBiasBank(Addr branch_pc,
         BranchInfo* bi, int hitBank, int altBank) const
 {
-    return (bi->predBeforeSC + (((hitBank+1)/4)<<4) + (bi->highConf<<1) +
-            (bi->lowConf <<2) + ((altBank!=0)<<3) +
-            ((branch_pc^(branch_pc>>2))<<7)) & ((1<<logBias) -1);
+    Addr shifted_pc = branch_pc >> instShiftAmt;
+    return (bi->predBeforeSC
+            + (((hitBank + 1) / 4) << 4)
+            + (bi->highConf << 1)
+            + (bi->lowConf << 2)
+            + ((altBank != 0) << 3)
+            + ((shifted_pc ^ (shifted_pc >> 2)) << 7))
+         & ((1 << logBias) -1);
 }
 
 int
@@ -103,7 +108,7 @@ TAGE_SC_L_64KB_StatisticalCorrector::gPredictions(ThreadID tid, Addr branch_pc,
         static_cast<SC_64KB_ThreadHistory *>(scHistory);
 
     lsum += gPredict(
-        (branch_pc << 1) + bi->predBeforeSC, sh->bwHist, bwm,
+        ((branch_pc >> instShiftAmt) << 1) + bi->predBeforeSC, sh->bwHist, bwm,
         bwgehl, bwnb, logBwnb, wbw);
 
     lsum += gPredict(
@@ -206,7 +211,8 @@ uint16_t
 TAGE_SC_L_TAGE_64KB::gtag(ThreadID tid, Addr pc, int bank) const
 {
     // very similar to the TAGE implementation, but w/o shifting the pc
-    int tag = pc ^ threadHistory[tid].computeTags[0][bank].comp ^
+    Addr shifted_pc = pc >> instShiftAmt;
+    int tag = shifted_pc ^ threadHistory[tid].computeTags[0][bank].comp ^
               (threadHistory[tid].computeTags[1][bank].comp << 1);
 
     return (tag & ((1ULL << tagTableTagWidths[bank]) - 1));
