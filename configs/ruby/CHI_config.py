@@ -601,7 +601,7 @@ class CHI_RNF(CHI_Node):
     @classmethod
     def generate(cls, options, ruby_system, cpus):
         rnfs = [
-            CHI_RNF(
+            cls(
                 [cpu],
                 ruby_system,
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
@@ -724,7 +724,7 @@ class CHI_MN(CHI_Node):
         """
         Creates one Misc Node
         """
-        return [CHI_MN(ruby_system, [cpu.l1d for cpu in cpus])]
+        return [cls(ruby_system, [cpu.l1d for cpu in cpus])]
 
 
 class CHI_SNF_Base(CHI_Node):
