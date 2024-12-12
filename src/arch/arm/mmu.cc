@@ -745,10 +745,6 @@ MMU::s1PermBits64(TlbEntry *te, const RequestPtr &req, Mode mode,
                         "w:%d, x:%d, is_priv: %d, wxn: %d\n", ap, xn,
                         pxn, r, w, x, is_priv, wxn);
 
-    if (faultPAN(tc, ap, req, mode, is_priv, state)) {
-        return std::make_pair(false, false);
-    }
-
     TranslationRegime regime = !is_priv ? TranslationRegime::EL10 : state.currRegime;
     if (hasUnprivRegime(regime)) {
         bool pr = false;
@@ -774,6 +770,16 @@ MMU::s1PermBits64(TlbEntry *te, const RequestPtr &req, Mode mode,
         // Locations writable by unprivileged cannot be executed by privileged
         const bool px = !(pxn || uw);
         const bool ux = !xn;
+
+        // PAN does not affect CMOs other than DC ZVA
+        bool pan_access = !req->isCacheMaintenance() ||
+            req->getFlags() & Request::CACHE_BLOCK_ZERO;
+
+        if (_release->has(ArmExtension::FEAT_PAN) && pan_access) {
+            bool pan = state.cpsr.pan && (ur || uw);
+            pr = pr && !pan;
+            pw = pw && !pan;
+        }
 
         grant_read = is_priv ? pr : ur;
         grant_write = is_priv ? pw : uw;
@@ -822,60 +828,6 @@ MMU::hasUnprivRegime(TranslationRegime regime)
       default:
         return false;
     }
-}
-
-bool
-MMU::faultPAN(ThreadContext *tc, uint8_t ap, const RequestPtr &req, Mode mode,
-              const bool is_priv, CachedState &state)
-{
-    bool exception = false;
-    switch (state.exceptionLevel) {
-      case EL0:
-        break;
-      case EL1:
-        if (checkPAN(tc, ap, req, mode, is_priv, state)) {
-            exception = true;;
-        }
-        break;
-      case EL2:
-        if (state.hcr.e2h && checkPAN(tc, ap, req, mode, is_priv, state)) {
-            exception = true;;
-        }
-        break;
-      case EL3:
-        break;
-    }
-
-    return exception;
-}
-
-bool
-MMU::checkPAN(ThreadContext *tc, uint8_t ap, const RequestPtr &req, Mode mode,
-              const bool is_priv, CachedState &state)
-{
-    // The PAN bit has no effect on:
-    // 1) Instruction accesses.
-    // 2) Data Cache instructions other than DC ZVA
-    // 3) Address translation instructions, other than ATS1E1RP and
-    // ATS1E1WP when ARMv8.2-ATS1E1 is implemented. (Unimplemented in
-    // gem5)
-    // 4) Instructions to be treated as unprivileged, unless
-    // HCR_EL2.{E2H, TGE} == {1, 0}
-    if (_release->has(ArmExtension::FEAT_PAN) && state.cpsr.pan &&
-        (ap & 0x1) && mode != BaseMMU::Execute) {
-
-        if (req->isCacheMaintenance() &&
-            !(req->getFlags() & Request::CACHE_BLOCK_ZERO)) {
-            // Cache maintenance other than DC ZVA
-            return false;
-        } else if (!is_priv && !(state.hcr.e2h && !state.hcr.tge)) {
-            // Treated as unprivileged unless HCR_EL2.{E2H, TGE} == {1, 0}
-            return false;
-        }
-        return true;
-    }
-
-    return false;
 }
 
 Addr
