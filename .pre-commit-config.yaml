@@ -102,3 +102,6 @@ repos:
             language: system
             stages: [commit-msg]
             description: The gem5 commit message checker hook.
+
+ci:
+    autoupdate_branch: develop
