@@ -991,7 +991,10 @@ def obtain_resource(
             )
         return CustomResource(local_path=to_path, downloader=downloader)
 
-    assert resources_category in _get_resource_json_type_map
+    assert resources_category in _get_resource_json_type_map, (
+        f"Resource category '{resources_category}' not found.\n"
+        f"Valid categories are {', '.join(_get_resource_json_type_map.keys())}."
+    )
     resource_class = _get_resource_json_type_map[resources_category]
 
     if resources_category == "suite":
