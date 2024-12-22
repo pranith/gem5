@@ -16,7 +16,7 @@ jobs:
         steps:
             - name: Get the current date
               id: date
-              run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+              run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
     # start running the very-long tests
     testlib-very-long-tests:

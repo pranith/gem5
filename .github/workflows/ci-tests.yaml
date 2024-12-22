@@ -37,7 +37,7 @@ jobs:
         steps:
             - name: Get the current date
               id: date
-              run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+              run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
     unittests-all-opt:
         runs-on: [self-hosted, linux, x64]
