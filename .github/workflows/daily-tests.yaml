@@ -88,6 +88,8 @@ jobs:
         container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
         timeout-minutes: 60
         steps:
+            - uses: actions/checkout@v4
+
             - name: ALL/unittests.${{ matrix.type }} UnitTests
               run: scons build/ALL/unittests.${{ matrix.type }} -j $(nproc)
 
