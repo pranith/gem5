@@ -1706,7 +1706,7 @@ class Rancho_BTB(SimpleBTB):
 class Rancho_BP(TAGE_SC_L_64KB):
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
-    delayedBranchPred = True
+    delayedBranchPred = False
 
 
 class Rancho_ICache(Cache):
@@ -1791,7 +1791,7 @@ class Rancho(ArmO3CPU):
     LSQCheckLoads = True
     store_set_clear_period = 250000
     LFSTSize = 1024
-    SSITSize = 1024
+    SSITSize = "1024"
     SSITAssoc = SSITSize
     SSITReplPolicy = LRURP()
     SSITIndexingPolicy = SetAssociative(

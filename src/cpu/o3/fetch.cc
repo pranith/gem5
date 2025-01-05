@@ -506,8 +506,8 @@ Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
     predict_taken = branchPred->predict(inst->staticInst, inst->seqNum,
                                         next_pc, tid);
 
-    bool bpverif_taken = branchPred->verifyPrediction(inst->staticInst, inst->seqNum,
-                                                      *mispredict_pc, tid);
+    //bool bpverif_taken = branchPred->verifyPrediction(inst->staticInst, inst->seqNum,
+    //                                                  *mispredict_pc, tid);
 
     if (predict_taken) {
         DPRINTF(Fetch, "[tid:%i] [sn:%llu] Branch at PC %#x "
@@ -523,8 +523,8 @@ Fetch::lookupAndUpdateNextPC(const DynInstPtr &inst, PCStateBase &next_pc)
             "predicted to go to %s\n",
             tid, inst->seqNum, inst->pcState().instAddr(), next_pc);
 
-    inst->setPredTarg(*mispredict_pc);
-    inst->setPredTaken(bpverif_taken);
+    inst->setPredTarg(next_pc);
+    inst->setPredTaken(predict_taken);
 
     cpu->fetchStats[tid]->numBranches++;
 
