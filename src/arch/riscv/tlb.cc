@@ -310,15 +310,18 @@ TLB::createPagefault(Addr vaddr, BaseMMU::Mode mode,
                      Addr gvaddr, bool gpf, bool virt)
 {
     ExceptionCode code;
-    if (mode == BaseMMU::Read)
+    if (mode == BaseMMU::Read) {
         code = gpf ? ExceptionCode::LOAD_GUEST_PAGE :
                      ExceptionCode::LOAD_PAGE;
-    else if (mode == BaseMMU::Write)
+    }
+    else if (mode == BaseMMU::Write) {
         code = gpf ? ExceptionCode::STORE_GUEST_PAGE :
                      ExceptionCode::STORE_PAGE;
-    else
+    }
+    else {
         code = gpf ? ExceptionCode::INST_GUEST_PAGE :
                      ExceptionCode::INST_PAGE;
+    }
 
     if (gpf) { assert(virt); }
     return std::make_shared<AddressFault>(vaddr, code, gvaddr, virt);

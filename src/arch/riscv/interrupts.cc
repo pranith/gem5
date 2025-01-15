@@ -298,9 +298,12 @@ Interrupts::unserialize(CheckpointIn &cp)
     unsigned long ip_ulong;
     unsigned long hvip_ulong;
     unsigned long ie_ulong;
-    UNSERIALIZE_SCALAR(ip_ulong);   ip = ip_ulong;
-    UNSERIALIZE_SCALAR(hvip_ulong); hvip = hvip_ulong;
-    UNSERIALIZE_SCALAR(ie_ulong);   ie = ie_ulong;
+    UNSERIALIZE_SCALAR(ip_ulong);
+    ip = ip_ulong;
+    UNSERIALIZE_SCALAR(hvip_ulong);
+    hvip = hvip_ulong;
+    UNSERIALIZE_SCALAR(ie_ulong);
+    ie = ie_ulong;
 }
 
 Port &

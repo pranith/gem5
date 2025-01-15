@@ -183,8 +183,7 @@ RiscvFault::invoke(ThreadContext *tc, const StaticInstPtr &inst)
                 }
                 // Going to M-mode for handling, disable V if it's on
                 if (virtualizationEnabled(tc)) { resetV(tc); }
-            }
-            else if (prv == PRV_S &&
+            } else if (prv == PRV_S &&
                     !virtualizationEnabled(tc)) { // essentially HS-mode
                 HSTATUS hstatus = tc->readMiscReg(MISCREG_HSTATUS);
                 hstatus.spv = pv;
@@ -198,8 +197,7 @@ RiscvFault::invoke(ThreadContext *tc, const StaticInstPtr &inst)
                 }
                 // Write changes to hstatus
                 tc->setMiscReg(MISCREG_HSTATUS, hstatus);
-            }
-            else if (prv == PRV_S &&
+            } else if (prv == PRV_S &&
                     virtualizationEnabled(tc)) { // essentially VS-mode
                 STATUS vsstatus = tc->readMiscReg(MISCREG_VSSTATUS);
                 cause = MISCREG_VSCAUSE;
@@ -225,8 +223,7 @@ RiscvFault::invoke(ThreadContext *tc, const StaticInstPtr &inst)
                     default:
                         break;
                 }
-            }
-            else {
+            } else {
                 panic("Unknown case in hypervisor fault handler."
                       "prv = %d, V = %d", prv, virtualizationEnabled(tc));
             }

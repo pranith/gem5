@@ -69,7 +69,7 @@ namespace RiscvISA
 {
 
 [[maybe_unused]]
-const std::array<const char *, NUM_MISC_AND_HELPER_REGS> MiscRegNames = {{
+const std::array<const char *, NUM_MISCREGS> MiscRegNames = {{
     [MISCREG_PRV]           = "PRV",
     [MISCREG_ISA]           = "ISA",
     [MISCREG_VENDORID]      = "VENDORID",
@@ -282,7 +282,7 @@ const std::array<const char *, NUM_MISC_AND_HELPER_REGS> MiscRegNames = {{
 
     [MISCREG_JVT] = "JVT",
 
-    [HELPER_FFLAGS_EXE]    = "FFLAGS_EXE",
+    [MISCREG_FFLAGS_EXE]    = "FFLAGS_EXE",
 }};
 
 namespace
@@ -319,7 +319,7 @@ ISA::ISA(const Params &p) : BaseISA(p, "riscv"),
     inform("RVV enabled, VLEN = %d bits, ELEN = %d bits",
             p.vlen, p.elen);
 
-    miscRegFile.resize(NUM_MISCREGS);
+    miscRegFile.resize(NUM_PHYS_MISCREGS);
     clear();
 }
 
@@ -347,7 +347,7 @@ ISA::copyRegsFrom(ThreadContext *src)
     }
 
     // Copying Misc Regs
-    for (int i = 0; i < NUM_MISCREGS; i++)
+    for (int i = 0; i < NUM_PHYS_MISCREGS; i++)
         tc->setMiscRegNoEffect(i, src->readMiscRegNoEffect(i));
 
     // Lastly copy PC/NPC
@@ -488,7 +488,7 @@ RegVal
 ISA::readMiscRegNoEffect(RegIndex idx) const
 {
     // Illegal CSR
-    panic_if(idx > NUM_MISCREGS, "Illegal CSR index %#x\n", idx);
+    panic_if(idx > NUM_PHYS_MISCREGS, "Illegal CSR index %#x\n", idx);
     DPRINTF(RiscvMisc, "Reading MiscReg %s (%d): %#x.\n",
             MiscRegNames[idx], idx, miscRegFile[idx]);
     return miscRegFile[idx];
@@ -673,7 +673,7 @@ ISA::readMiscReg(RegIndex idx)
             return nstatus;
         }
 
-      case HELPER_FFLAGS_EXE:
+      case MISCREG_FFLAGS_EXE:
         {
             return readMiscRegNoEffect(MISCREG_FFLAGS) & FFLAGS_MASK;
         }
@@ -697,7 +697,7 @@ void
 ISA::setMiscRegNoEffect(RegIndex idx, RegVal val)
 {
     // Illegal CSR
-    panic_if(idx > NUM_MISCREGS, "Illegal CSR index %#x\n", idx);
+    panic_if(idx > NUM_PHYS_MISCREGS, "Illegal CSR index %#x\n", idx);
     DPRINTF(RiscvMisc, "Setting MiscReg %s (%d) to %#x.\n",
             MiscRegNames[idx], idx, val);
     miscRegFile[idx] = val;
@@ -985,7 +985,7 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
             }
             break;
 
-          case HELPER_FFLAGS_EXE:
+          case MISCREG_FFLAGS_EXE:
             {
                 RegVal new_val = readMiscRegNoEffect(MISCREG_FFLAGS);
                 new_val |= (val & FFLAGS_MASK);
@@ -1143,8 +1143,7 @@ ISA::tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst)
                     "SATP access with TVM enabled\n",
                     machInst);
         }
-    }
-    else if (csr == CSR_VSATP) {
+    } else if (csr == CSR_VSATP) {
         if (virtualizationEnabled()) {
         HSTATUS hstatus = readMiscReg(MISCREG_HSTATUS);
         if (hstatus.vtvm == 1)
@@ -1152,8 +1151,7 @@ ISA::tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst)
                 "VSATP access with hstatus.vtvm enabled",
                 machInst);
         }
-    }
-    else if (csr == CSR_HGATP) {
+    } else if (csr == CSR_HGATP) {
         STATUS status = readMiscReg(MISCREG_STATUS);
         if (pm != PRV_M && status.tvm == 1) {
             return std::make_shared<IllegalInstFault>(
@@ -1167,8 +1165,8 @@ ISA::tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst)
 }
 
 RegVal
-ISA::backdoorReadCSRAllBits(uint64_t csr) {
-
+ISA::backdoorReadCSRAllBits(uint64_t csr)
+{
     auto csr_it = CSRData.find(csr);
 
     // panic if the method was used with bad csr idx
@@ -1381,9 +1379,9 @@ void resetV(ThreadContext *tc) {
 }
 
 // FPU status update function
-Fault updateFPUStatus(ExecContext *xc, ExtMachInst machInst, bool set_dirty) {
-
-
+Fault
+updateFPUStatus(ExecContext *xc, ExtMachInst machInst, bool set_dirty)
+{
     MISA misa = xc->readMiscReg(MISCREG_ISA);
     STATUS status = xc->readMiscReg(MISCREG_STATUS);
     STATUS vsstatus = misa.rvh && virtualizationEnabled(xc) ?
@@ -1408,9 +1406,10 @@ Fault updateFPUStatus(ExecContext *xc, ExtMachInst machInst, bool set_dirty) {
 }
 
 // VPU status update function
-Fault updateVPUStatus(
-    ExecContext *xc, ExtMachInst machInst, bool set_dirty, bool check_vill) {
-
+Fault
+updateVPUStatus(
+    ExecContext *xc, ExtMachInst machInst, bool set_dirty, bool check_vill)
+{
     MISA misa = xc->readMiscReg(MISCREG_ISA);
     STATUS status = xc->readMiscReg(MISCREG_STATUS);
     STATUS vsstatus = misa.rvh && virtualizationEnabled(xc) ?
@@ -1418,14 +1417,14 @@ Fault updateVPUStatus(
 
     if (!misa.rvv || status.vs == VPUStatus::OFF ||
         (misa.rvh && virtualizationEnabled(xc) &&
-         vsstatus.vs == VPUStatus::OFF))
+         vsstatus.vs == VPUStatus::OFF)) {
         return std::make_shared<IllegalInstFault>(
             "RVV is disabled or VPU is off", machInst);
+    }
 
-
-    if (check_vill && machInst.vill)
+    if (check_vill && machInst.vill) {
         return std::make_shared<IllegalInstFault>("VILL is set", machInst);
-
+    }
 
     if (set_dirty) {
         status.vs = VPUStatus::DIRTY;

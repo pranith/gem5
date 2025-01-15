@@ -109,7 +109,8 @@ class RiscvISA(BaseISA):
     )
     privilege_mode_set = Param.PrivilegeModeSet(
         "MSU",  # set MHSU to enable hypervisor (H-extension)
-        # All timing CPUs are NOT supported in MHSU currently
+        # No timing CPUs are supported in MHSU currently
+        # *ONLY THE ATOMIC CPU / ATOMIC MEMORY* is supported
         # PTW does not yet implement timing walks with H extension on
         # (P.S.: look at the change for MIDELEG in isa.cc:readMiscReg
         # if working with old bbl bootloader)

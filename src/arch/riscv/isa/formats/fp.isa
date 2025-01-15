@@ -46,7 +46,7 @@ def template FloatExecute {{
         std::feclearexcept(FE_ALL_EXCEPT);
         %(code)s;
 
-        xc->setMiscReg(HELPER_FFLAGS_EXE, softfloat_exceptionFlags);
+        xc->setMiscReg(MISCREG_FFLAGS_EXE, softfloat_exceptionFlags);
         softfloat_exceptionFlags = 0;
 
         %(op_wb)s;
