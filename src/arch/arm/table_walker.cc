@@ -127,6 +127,20 @@ TableWalker::getAvailableWalk(BaseMMU::Mode mode, bool stage2,
     return nullptr;
 }
 
+WalkUnit *
+TableWalker::busyOnSamePage(Addr iaddr, BaseMMU::Mode mode, bool stage2) const
+{
+    for (auto walk_unit : walkUnits) {
+        if ((walk_unit->type() & modeToType(mode)) &&
+            walk_unit->stage2() == stage2 &&
+            walk_unit->busyOnSamePage(iaddr)) {
+            return walk_unit;
+        }
+    }
+
+    return nullptr;
+}
+
 Fault
 TableWalker::walk(const RequestPtr &req, ThreadContext *tc, uint16_t asid,
                   vmid_t vmid, BaseMMU::Mode mode, BaseMMU::Translation *trans,
@@ -283,8 +297,12 @@ TableWalker::walk(const RequestPtr &req, ThreadContext *tc, uint16_t asid,
         ++stats.walksShortDescriptor;
     }
 
-    if (auto walk_unit = getAvailableWalk(mode, stage2, functional);
-        !walk_unit) {
+    bool wait_for_other =
+        curr_state->timing && busyOnSamePage(curr_state->vaddr, mode, stage2);
+
+    auto walk_unit = getAvailableWalk(mode, stage2, functional);
+
+    if (wait_for_other || !walk_unit) {
         // No available walk unit at the moment. Stall the table walker
         // This can only happen in timing mode
         assert(curr_state->timing);
@@ -2400,6 +2418,21 @@ WalkUnit::stashCurrState(WalkerState *curr_state, int queue_idx)
             "queue size before adding: %d\n",
             stateQueues[queue_idx].size());
     stateQueues[queue_idx].push_back(curr_state);
+}
+
+bool
+WalkUnit::busyOnSamePage(Addr iaddr) const
+{
+    for (int lvl = 0; lvl < LookupLevel::Num_ArmLookupLevel; lvl++) {
+        panic_if(stateQueues[lvl].size() > 1, "How is this possible\n");
+        for (auto state : stateQueues[lvl]) {
+            if (auto tg = state->longDesc.grainSize;
+                state->vaddr >> tg == iaddr >> tg) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void

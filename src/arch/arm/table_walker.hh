@@ -1063,6 +1063,9 @@ class TableWalker : public ClockedObject
     WalkUnit *getAvailableWalk(BaseMMU::Mode mode, bool stage2,
                                bool functional) const;
 
+    WalkUnit *busyOnSamePage(Addr iaddr, BaseMMU::Mode mode,
+                             bool stage2) const;
+
     Port &getTableWalkerPort();
 
     Fault walk(const RequestPtr &req, ThreadContext *tc, uint16_t asid,
@@ -1229,6 +1232,7 @@ class WalkUnit : public ClockedObject
 
     /** Timing mode: saves the currState into the stateQueues */
     void stashCurrState(WalkerState *state, int queue_idx);
+    bool busyOnSamePage(Addr iaddr) const;
 
   protected:
 
