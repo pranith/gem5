@@ -140,7 +140,7 @@ TLB::~TLB()
 }
 
 void
-TLB::setTableWalker(TableWalker *table_walker)
+TLB::setTableWalker(TableWalker *table_walker, bool functional)
 {
     tableWalker = table_walker;
 }

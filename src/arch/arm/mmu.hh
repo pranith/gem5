@@ -70,17 +70,13 @@ class MMU : public BaseMMU
     ArmISA::TLB * getDTBPtr() const;
     ArmISA::TLB * getITBPtr() const;
 
-    TLB * getTlb(BaseMMU::Mode mode, bool stage2) const;
-    TableWalker * getTableWalker(BaseMMU::Mode mode, bool stage2) const;
+    TLB *getTlb(BaseMMU::Mode mode, bool stage2) const;
 
   protected:
     TLB *itbStage2;
     TLB *dtbStage2;
 
-    TableWalker *itbWalker;
-    TableWalker *dtbWalker;
-    TableWalker *itbStage2Walker;
-    TableWalker *dtbStage2Walker;
+    TableWalker *walker;
 
   public:
     TranslationGenPtr
@@ -301,6 +297,8 @@ class MMU : public BaseMMU
 
     void takeOverFrom(BaseMMU *old_mmu) override;
 
+    Port *getTableWalkerPort();
+
     void invalidateMiscReg();
 
     void flush(const TLBIOp &tlbi_op);
@@ -376,6 +374,8 @@ class MMU : public BaseMMU
                       bool functional, TlbEntry *mergeTe,
                       CachedState &state);
 
+    bool isCompleteTranslation(TlbEntry *te) const;
+
     Fault checkPermissions(TlbEntry *te, const RequestPtr &req, Mode mode,
                            bool stage2);
     Fault checkPermissions(TlbEntry *te, const RequestPtr &req, Mode mode,
@@ -415,8 +415,6 @@ class MMU : public BaseMMU
 
   protected:
     bool checkWalkCache() const;
-
-    bool isCompleteTranslation(TlbEntry *te) const;
 
     CachedState& updateMiscReg(
         ThreadContext *tc, ArmTranslationType tran_type,

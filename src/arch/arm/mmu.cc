@@ -59,18 +59,18 @@ namespace gem5
 using namespace ArmISA;
 
 MMU::MMU(const ArmMMUParams &p)
-  : BaseMMU(p),
-    itbStage2(p.stage2_itb), dtbStage2(p.stage2_dtb),
-    itbWalker(p.itb_walker), dtbWalker(p.dtb_walker),
-    itbStage2Walker(p.stage2_itb_walker),
-    dtbStage2Walker(p.stage2_dtb_walker),
-    test(nullptr),
-    miscRegContext(0),
-    s1State(this, false), s2State(this, true),
-    _attr(0),
-    _release(nullptr),
-    _hasWalkCache(false),
-    stats(this)
+    : BaseMMU(p),
+      itbStage2(p.stage2_itb),
+      dtbStage2(p.stage2_dtb),
+      walker(p.walker),
+      test(nullptr),
+      miscRegContext(0),
+      s1State(this, false),
+      s2State(this, true),
+      _attr(0),
+      _release(nullptr),
+      _hasWalkCache(false),
+      stats(this)
 {
     // Cache system-level properties
     if (FullSystem) {
@@ -93,16 +93,14 @@ MMU::MMU(const ArmMMUParams &p)
 void
 MMU::init()
 {
-    itbWalker->setMmu(this);
-    dtbWalker->setMmu(this);
-    itbStage2Walker->setMmu(this);
-    dtbStage2Walker->setMmu(this);
+    walker->setMmu(this);
 
-    itbStage2->setTableWalker(itbStage2Walker);
-    dtbStage2->setTableWalker(dtbStage2Walker);
+    itbStage2->setTableWalker(walker);
+    dtbStage2->setTableWalker(walker);
+    getITBPtr()->setTableWalker(walker);
+    getDTBPtr()->setTableWalker(walker);
 
-    getITBPtr()->setTableWalker(itbWalker);
-    getDTBPtr()->setTableWalker(dtbWalker);
+    getDTBPtr()->setTableWalker(walker, true);
 
     BaseMMU::init();
 
@@ -160,22 +158,6 @@ MMU::getTlb(BaseMMU::Mode mode, bool stage2) const
             return dtbStage2;
         else
             return getDTBPtr();
-    }
-}
-
-TableWalker *
-MMU::getTableWalker(BaseMMU::Mode mode, bool stage2) const
-{
-    if (mode == BaseMMU::Execute) {
-        if (stage2)
-            return itbStage2Walker;
-        else
-            return itbWalker;
-    } else {
-        if (stage2)
-            return dtbStage2Walker;
-        else
-            return dtbWalker;
     }
 }
 
@@ -1691,10 +1673,10 @@ MMU::getTE(TlbEntry **te, const RequestPtr &req, ThreadContext *tc, Mode mode,
                 vaddr_tainted, state.asid, state.vmid);
 
         Fault fault;
-        fault = getTableWalker(mode, state.isStage2)->walk(
-            req, tc, state.asid, state.vmid, mode,
-            translation, timing, functional, ss,
-            ipaspace, tran_type, state.stage2DescReq, *te);
+        fault =
+            walker->walk(req, tc, state.asid, state.vmid, mode, translation,
+                         timing, functional, ss, ipaspace, tran_type,
+                         state.stage2DescReq, state.isStage2, *te);
 
         // for timing mode, return and wait for table walk,
         if (timing || fault != NoFault) {
@@ -1796,15 +1778,24 @@ MMU::isCompleteTranslation(TlbEntry *entry) const
 void
 MMU::takeOverFrom(BaseMMU *old_mmu)
 {
-    BaseMMU::takeOverFrom(old_mmu);
-
     auto *ommu = dynamic_cast<MMU*>(old_mmu);
     assert(ommu);
+
+    Port *old_tbw_port = ommu->getTableWalkerPort();
+    Port *new_tbw_port = getTableWalkerPort();
+
+    new_tbw_port->takeOverFrom(old_tbw_port);
 
     _attr = ommu->_attr;
 
     s1State = ommu->s1State;
     s2State = ommu->s2State;
+}
+
+Port *
+MMU::getTableWalkerPort()
+{
+    return &walker->getTableWalkerPort();
 }
 
 void
@@ -1816,10 +1807,7 @@ MMU::setTestInterface(SimObject *_ti)
         TlbTestInterface *ti(dynamic_cast<TlbTestInterface *>(_ti));
         fatal_if(!ti, "%s is not a valid ARM TLB tester\n", _ti->name());
         test = ti;
-        itbWalker->setTestInterface(test);
-        dtbWalker->setTestInterface(test);
-        itbStage2Walker->setTestInterface(test);
-        dtbStage2Walker->setTestInterface(test);
+        walker->setTestInterface(ti);
     }
 }
 
