@@ -268,6 +268,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
     if (inst->isUncondCtrl()) {
         // Unconditional branches -----
         hist->condPred = true;
+	hist->predTaken = true;
     } else {
         // Conditional branches -------
         predictCondBranch(inst, seqNum, pc, tid, hist);
