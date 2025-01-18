@@ -1182,8 +1182,6 @@ class TableWalker : public ClockedObject
                const TlbEntry *walk_entry);
 
     void setMmu(MMU *_mmu);
-    void setTlb(TLB *_tlb) { tlb = _tlb; }
-    TLB* getTlb() { return tlb; }
     void memAttrs(ThreadContext *tc, TlbEntry &te, SCTLR sctlr,
                   uint8_t texcb, bool s);
     void memAttrsLPAE(ThreadContext *tc, TlbEntry &te,

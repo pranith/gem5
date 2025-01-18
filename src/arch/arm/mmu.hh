@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013, 2016, 2019-2024 Arm Limited
+ * Copyright (c) 2010-2013, 2016, 2019-2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -354,6 +354,8 @@ class MMU : public BaseMMU
                      SecurityState ss, bool functional,
                      bool ignore_asn, TranslationRegime target_regime,
                      bool stage2, BaseMMU::Mode mode);
+
+    void insert(TlbEntry &pte, BaseMMU::Mode mode, bool stage2);
 
     Fault getTE(TlbEntry **te, const RequestPtr &req,
                 ThreadContext *tc, Mode mode,

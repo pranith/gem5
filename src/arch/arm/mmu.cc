@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013, 2016-2024 Arm Limited
+ * Copyright (c) 2010-2013, 2016-2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -1639,6 +1639,13 @@ MMU::lookup(Addr va, uint16_t asid, vmid_t vmid, SecurityState ss,
     lookup_data.mode = mode;
 
     return tlb->multiLookup(lookup_data);
+}
+
+void
+MMU::insert(TlbEntry &entry, BaseMMU::Mode mode, bool stage2)
+{
+    TLB *tlb = getTlb(mode, stage2);
+    tlb->multiInsert(TlbEntry::KeyType(entry), entry);
 }
 
 Fault

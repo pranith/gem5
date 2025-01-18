@@ -143,7 +143,6 @@ void
 TLB::setTableWalker(TableWalker *table_walker)
 {
     tableWalker = table_walker;
-    tableWalker->setTlb(this);
 }
 
 TlbEntry*
