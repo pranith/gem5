@@ -1062,7 +1062,6 @@ class TableWalker : public ClockedObject
 
     WalkUnit *getAvailableWalk(BaseMMU::Mode mode, bool stage2,
                                bool functional) const;
-    WalkUnit *getWalkUnit(BaseMMU::Mode mode, bool stage2) const;
 
     Port &getTableWalkerPort();
 
@@ -1112,10 +1111,7 @@ class TableWalker : public ClockedObject
     MMU *mmu;
 
     /** Pool of walking units */
-    WalkUnit *itbWalker;
-    WalkUnit *dtbWalker;
-    WalkUnit *itbStage2Walker;
-    WalkUnit *dtbStage2Walker;
+    std::vector<WalkUnit *> walkUnits;
 
     /** walking unit for functional walks*/
     WalkUnit *walkUnitFunctionalS1;

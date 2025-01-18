@@ -70,17 +70,14 @@ class ArmTableWalker(ClockedObject):
 
     sys = Param.System(Parent.any, "system object parameter")
 
-    itb_walker = Param.ArmWalkUnit(
-        ArmWalkUnit(walk_type="instruction"), "HW Table walker"
-    )
-    dtb_walker = Param.ArmWalkUnit(
-        ArmWalkUnit(walk_type="data"), "HW Table walker"
-    )
-    stage2_itb_walker = Param.ArmWalkUnit(
-        ArmWalkUnit(walk_type="instruction", is_stage2=True), "HW Table walker"
-    )
-    stage2_dtb_walker = Param.ArmWalkUnit(
-        ArmWalkUnit(walk_type="data", is_stage2=True), "HW Table walker"
+    walk_units = VectorParam.ArmWalkUnit(
+        [
+            ArmWalkUnit(walk_type="instruction"),
+            ArmWalkUnit(walk_type="data"),
+            ArmWalkUnit(walk_type="instruction", is_stage2=True),
+            ArmWalkUnit(walk_type="data", is_stage2=True),
+        ],
+        "Walk Units",
     )
     walk_unit_func_s1 = Param.ArmWalkUnit(
         ArmWalkUnit(walk_type="unified", functional=True),

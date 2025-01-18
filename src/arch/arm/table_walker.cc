@@ -65,28 +65,20 @@ using namespace ArmISA;
 TableWalker::TableWalker(const Params &p)
     : ClockedObject(p),
       mmu(nullptr),
-      itbWalker(p.itb_walker),
-      dtbWalker(p.dtb_walker),
-      itbStage2Walker(p.stage2_itb_walker),
-      dtbStage2Walker(p.stage2_dtb_walker),
+      walkUnits(p.walk_units),
       walkUnitFunctionalS1(p.walk_unit_func_s1),
       walkUnitFunctionalS2(p.walk_unit_func_s2),
       requestorId(p.sys->getRequestorId(this)),
       port(new Port(*this, requestorId)),
       stats(this)
 {
-    itbWalker->setPort(port);
-    dtbWalker->setPort(port);
-    itbStage2Walker->setPort(port);
-    dtbStage2Walker->setPort(port);
+    for (auto walk_unit : walkUnits) {
+        walk_unit->setPort(port);
+        walk_unit->setTableWalker(this);
+    }
     walkUnitFunctionalS1->setPort(port);
-    walkUnitFunctionalS2->setPort(port);
-
-    itbWalker->setTableWalker(this);
-    dtbWalker->setTableWalker(this);
-    itbStage2Walker->setTableWalker(this);
-    dtbStage2Walker->setTableWalker(this);
     walkUnitFunctionalS1->setTableWalker(this);
+    walkUnitFunctionalS2->setPort(port);
     walkUnitFunctionalS2->setTableWalker(this);
 
     // Cache system-level properties
@@ -105,30 +97,11 @@ void
 TableWalker::setMmu(MMU *_mmu)
 {
     mmu = _mmu;
-    itbWalker->setMmu(mmu);
-    dtbWalker->setMmu(mmu);
-    itbStage2Walker->setMmu(mmu);
-    dtbStage2Walker->setMmu(mmu);
+    for (auto walk_unit : walkUnits) {
+        walk_unit->setMmu(mmu);
+    }
     walkUnitFunctionalS1->setMmu(mmu);
     walkUnitFunctionalS2->setMmu(mmu);
-}
-
-WalkUnit *
-TableWalker::getWalkUnit(BaseMMU::Mode mode, bool stage2) const
-{
-    if (mode == BaseMMU::Execute) {
-        if (stage2) {
-            return itbStage2Walker;
-        } else {
-            return itbWalker;
-        }
-    } else {
-        if (stage2) {
-            return dtbStage2Walker;
-        } else {
-            return dtbWalker;
-        }
-    }
 }
 
 TypeTLB
@@ -145,11 +118,13 @@ TableWalker::getAvailableWalk(BaseMMU::Mode mode, bool stage2,
         return stage2 ? walkUnitFunctionalS2 : walkUnitFunctionalS1;
     }
 
-    if (auto walk_unit = getWalkUnit(mode, stage2); walk_unit->isAvailable()) {
-        return walk_unit;
-    } else {
-        return nullptr;
+    for (auto *walk_unit : walkUnits) {
+        if ((walk_unit->type() & modeToType(mode)) &&
+            walk_unit->stage2() == stage2 && walk_unit->isAvailable()) {
+            return walk_unit;
+        }
     }
+    return nullptr;
 }
 
 Fault
@@ -460,9 +435,11 @@ TableWalker::nextWalk(WalkUnit *walk_unit)
 void
 TableWalker::completeDrain()
 {
-    if (drainState() == DrainState::Draining && itbWalker->completeDrain() &&
-        dtbWalker->completeDrain() && itbStage2Walker->completeDrain() &&
-        dtbStage2Walker->completeDrain() && pendingQueue.empty()) {
+    auto drain_completed = [](WalkUnit *wu) { return wu->completeDrain(); };
+
+    if (drainState() == DrainState::Draining &&
+        std::all_of(walkUnits.begin(), walkUnits.end(), drain_completed) &&
+        pendingQueue.empty()) {
 
         DPRINTF(Drain, "TableWalker done draining, processing drain event\n");
         signalDrainDone();
@@ -596,10 +573,9 @@ TableWalker::Port::handleResp(TableWalkerState *state, Addr addr,
 void
 TableWalker::setTestInterface(TlbTestInterface *test)
 {
-    itbWalker->setTestInterface(test);
-    dtbWalker->setTestInterface(test);
-    itbStage2Walker->setTestInterface(test);
-    dtbStage2Walker->setTestInterface(test);
+    for (auto walk_unit : walkUnits) {
+        walk_unit->setTestInterface(test);
+    }
 
     walkUnitFunctionalS1->setTestInterface(test);
     walkUnitFunctionalS2->setTestInterface(test);
