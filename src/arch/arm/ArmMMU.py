@@ -74,8 +74,12 @@ class ArmTableWalker(ClockedObject):
         [
             ArmWalkUnit(walk_type="instruction"),
             ArmWalkUnit(walk_type="data"),
+            ArmWalkUnit(walk_type="unified"),
+            ArmWalkUnit(walk_type="unified"),
             ArmWalkUnit(walk_type="instruction", is_stage2=True),
             ArmWalkUnit(walk_type="data", is_stage2=True),
+            ArmWalkUnit(walk_type="unified", is_stage2=True),
+            ArmWalkUnit(walk_type="unified", is_stage2=True),
         ],
         "Walk Units",
     )
