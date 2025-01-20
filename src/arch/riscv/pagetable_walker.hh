@@ -87,6 +87,15 @@ namespace RiscvISA
         {
           friend class Walker;
           private:
+
+            struct WalkFlags
+            {
+              bool doEndWalk = false;
+              bool doTLBInsert = false;
+              bool doWrite = false;
+              bool pteIsLeaf = false;
+            };
+
             enum WalkType
             {
                 OneStage,
@@ -145,7 +154,6 @@ namespace RiscvISA
                            bool _isTiming = false);
 
             Fault walk();
-            Fault walkGStage(Addr guest_paddr, Addr& host_paddr);
             Fault startFunctional(Addr &addr, unsigned &logBytes);
             bool recvPacket(PacketPtr pkt);
             unsigned numInflight() const;
@@ -157,11 +165,18 @@ namespace RiscvISA
             std::string name() const {return walker->name();}
 
           private:
+            Fault checkPTEPermissions(
+              PTESv39 pte, WalkFlags& stepWalkFlags, int level);
             Addr setupWalk(Addr vaddr);
             Fault stepWalk(PacketPtr &write);
+            Fault stepWalkGStage(PacketPtr &write);
+            Fault walkGStage(Addr guest_paddr, Addr& host_paddr);
+            Fault walkOneStage(Addr vaddr);
+            Fault walkTwoStage(Addr vaddr);
             void sendPackets();
             void endWalk();
             Fault pageFault();
+            Fault guestToHostPage(Addr vaddr);
             PacketPtr createReqPacket(Addr paddr, MemCmd cmd, size_t bytes);
         };
 
