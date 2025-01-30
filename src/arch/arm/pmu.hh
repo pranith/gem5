@@ -284,16 +284,26 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
 
   protected: /* Probe handling and counter state */
     struct CounterState;
+    struct Stats;
 
     /**
      * Event definition base class
      */
     struct PMUEvent
     {
+       /**
+        * PMUEvent constructor
+        * @param id event_id associated with the PMU event
+        * @param pmu_stats pointer to PMU stats if there is a
+        *                  gem5 stat associated with this event.
+        *                  nullptr otherwise
+        */
+        PMUEvent(EventTypeId _id, Stats *pmu_stats)
+          : id(_id), pmuStats(pmu_stats)
+        {}
 
-        PMUEvent() {}
-
-        virtual ~PMUEvent() {}
+        virtual ~PMUEvent()
+        {}
 
         /**
          * attach this event to a given counter
@@ -335,6 +345,11 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
         virtual void updateAttachedCounters() {}
 
       protected:
+        /** ID of this event  **/
+        const EventTypeId id;
+
+        /** True is event is reported as a stat  **/
+        Stats * const pmuStats;
 
         /** set of counters using this event  **/
         std::set<PMU::CounterState*> userCounters;
@@ -393,6 +408,8 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
          */
         std::vector<ProbeListenerPtr<>> attachedProbePointList;
 
+        using PMUEvent::PMUEvent;
+
         void enable() override;
 
         void disable() override;
@@ -404,6 +421,7 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
         void disable() override {}
 
       public:
+        using PMUEvent::PMUEvent;
 
         /**
          * write on the sw increment register inducing an increment of the
@@ -588,6 +606,12 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
     /** Determine whether to use 64-bit or 32-bit counters. */
     bool use64bitCounters;
 
+    /**
+     * Determine whether we merge event counting with
+     * the stats framework.
+     */
+    std::set<EventTypeId> statCounters;
+
     /** Performance Monitor Count Enable Register */
     RegVal reg_pmcnten;
 
@@ -654,6 +678,22 @@ class PMU : public SimObject, public ArmISA::BaseISADevice
      * Exit simloop on PMU interrupt
      */
     bool exitOnPMUInterrupt;
+
+    struct Stats : public statistics::Group
+    {
+      public:
+        Stats(PMU *parent);
+
+	/** Increment the map[id] stat by value */
+        void add(EventTypeId id, uint64_t value);
+
+      private:
+        void registerEvent(EventTypeId id, const char *stat_name);
+
+      private:
+        PMU *pmu;
+        std::unordered_map<EventTypeId, statistics::Scalar> map;
+    } stats;
 };
 
 } // namespace ArmISA
