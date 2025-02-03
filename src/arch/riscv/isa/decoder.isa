@@ -488,6 +488,15 @@ decode QUADRANT default Unknown::unknown() {
         format CompressedStore {
             0x5: decode ENABLE_ZCD {
                 0x0: decode CFUNCT6LOW3 {
+                    0x0: decode JTINDEX5TO7 {
+                        0x0: CmJalt::cm_jt({{
+                            NPC = rvSext((base + imm) & (~0x1));
+                        }}, IsIndirectControl, IsUncondControl);
+                        default: CmJalt::cm_jalt({{
+                            ra = rvSext(NPC);
+                            NPC = rvSext((base + imm) & (~0x1));
+                        }}, IsIndirectControl, IsUncondControl, IsCall);
+                    }
                     0x3: decode CFUNCT2LOW {
                         0x1: CmMvsa01::cm_mvsa01();
                         0x3: CmMva01s::cm_mva01s();
@@ -3100,7 +3109,7 @@ decode QUADRANT default Unknown::unknown() {
                     Vd_vu[0] = reduce_loop([](const vu& src1, const vu& src2) {
                         return fadd<et>(ftype<et>(src1), ftype<et>(src2));
                     }, Vs1_vu, Vs2_vu);
-                }}, OPFVV, SimdFloatReduceAddOp);
+                }}, OPFVV, SimdFloatReduceAddOp, IsSerializeAfter);
                 0x04: VectorFloatFormat::vfmin_vv({{
                     auto fd = fmin<et>(ftype<et>(Vs2_vu[i]),
                                        ftype<et>(Vs1_vu[i]));
@@ -3368,7 +3377,7 @@ decode QUADRANT default Unknown::unknown() {
                                     f_to_wf<et>(ftype<et>(src2))
                                 );
                             }, Vs1_vwu, Vs2_vu);
-                    }}, OPFVV, SimdFloatReduceAddOp);
+                    }}, OPFVV, SimdFloatReduceAddOp, IsSerializeAfter);
                 }
                 format VectorFloatWideningFormat {
                     0x30: vfwadd_vv({{
@@ -4971,6 +4980,7 @@ decode QUADRANT default Unknown::unknown() {
                                 NPC = NPC;
                             } else {
                                 xc->setMiscReg(MISCREG_PRV, status.spp);
+                                status.mprv = 0;
                                 status.sie = status.spie;
                                 status.spie = 1;
                                 status.spp = PRV_U;
@@ -5041,6 +5051,9 @@ decode QUADRANT default Unknown::unknown() {
                             NPC = NPC;
                         } else {
                             STATUS status = xc->readMiscReg(MISCREG_STATUS);
+                            if (status.mpp != PRV_M) {
+                                status.mprv = 0;
+                            }
                             xc->setMiscReg(MISCREG_PRV, status.mpp);
                             // Always enable NMIE if smrnmi is not enabled
                             if (!isa->enableSmrnmi()) {
