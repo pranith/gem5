@@ -92,7 +92,8 @@ Execute::Execute(const std::string &name_,
             ExecuteThreadInfo(params.executeCommitLimit)),
     interruptPriority(0),
     issuePriority(0),
-    commitPriority(0)
+    commitPriority(0),
+    issueStats(&cpu_)
 {
     if (commitLimit < 1) {
         fatal("%s: executeCommitLimit must be >= 1 (%d)\n", name_,
@@ -760,6 +761,12 @@ Execute::issue(ThreadID thread_id)
                             DPRINTF(MinorExecute, "Pushing mem inst: %s\n",
                                 *inst);
                             thread.inFUMemInsts->push(fu_inst);
+                        }
+
+                        /* Update the # of insts. issued per OpClass type */
+                        if (!inst->isFault()) {
+                           auto opclass = inst->staticInst->opClass();
+                           issueStats.statIssuedInstType[thread_id][opclass]++;
                         }
 
                         /* Issue to FU */
@@ -1933,6 +1940,18 @@ MinorCPU::MinorCPUPort &
 Execute::getDcachePort()
 {
     return lsq.getDcachePort();
+}
+
+Execute::IssueStats::IssueStats(MinorCPU *cpu)
+        : statistics::Group(cpu),
+        ADD_STAT(statIssuedInstType, statistics::units::Count::get(),
+                 "Number of instructions issued per FU type, per thread")
+{
+        statIssuedInstType
+            .init(cpu->numThreads, enums::Num_OpClass)
+            .flags(statistics::total | statistics::pdf | statistics::dist);
+        statIssuedInstType.ysubnames(enums::OpClassStrings);
+
 }
 
 } // namespace minor
