@@ -308,6 +308,14 @@ class Simulator:
         for core in self._board.get_processor().get_cores():
             core._set_inst_stop_any_thread(inst, self._instantiated)
 
+    def get_instruction_count(self) -> int:
+        """
+        Returns the number of instructions executed by all cores.
+
+        Note: This total is the sum since the last call to reset stats.
+        """
+        return self._board.get_processor().get_total_instructions()
+
     def get_workload(self) -> WorkloadResource:
         """
         Returns the workload of the board.
