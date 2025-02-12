@@ -413,18 +413,20 @@ Fetch2::evaluate()
                     DPRINTF(Fetch, "decoder inst %s\n", *dyn_inst);
 
                     // Collect some basic inst class stats
-                    if (decoded_inst->isLoad())
+                    if (decoded_inst->isLoad()) {
                         stats.loadInstructions++;
-                    else if (decoded_inst->isStore())
+                    } else if (decoded_inst->isStore()) {
                         stats.storeInstructions++;
-                    else if (decoded_inst->isAtomic())
+                    } else if (decoded_inst->isAtomic()) {
                         stats.amoInstructions++;
-                    else if (decoded_inst->isVector())
+                    } else if (decoded_inst->isVector()) {
                         stats.vecInstructions++;
-                    else if (decoded_inst->isFloating())
+                    } else if (decoded_inst->isFloating()) {
                         stats.fpInstructions++;
-                    else if (decoded_inst->isInteger())
+                    } else if (decoded_inst->isInteger()) {
                         stats.intInstructions++;
+                    }
+
                     stats.totalInstructions++;
 
                     DPRINTF(Fetch, "Instruction extracted from line %s"
