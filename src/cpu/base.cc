@@ -1039,7 +1039,12 @@ CommitCPUStats::CommitCPUStats(statistics::Group *parent, int thread_id)
     ADD_STAT(committedInstType, statistics::units::Count::get(),
             "Class of committed instruction."),
     ADD_STAT(committedControl, statistics::units::Count::get(),
-             "Class of control type instructions committed")
+             "Class of control type instructions committed"),
+    ADD_STAT(functionCalls, statistics::units::Count::get(),
+             "Number of function calls committed"),
+    ADD_STAT(numCallsReturns, statistics::units::Count::get(),
+             "Number of function calls and returns committed")
+
 {
     numInsts
         .prereq(numInsts);

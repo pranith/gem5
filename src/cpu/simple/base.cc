@@ -456,7 +456,12 @@ BaseSimpleCPU::postExecute()
 
     //number of function calls/returns to get window accesses
     if (curStaticInst->isCall() || curStaticInst->isReturn()){
-        t_info.execContextStats.numCallsReturns++;
+        commitStats[t_info.thread->threadId()]->numCallsReturns++;
+    }
+
+    // same as above, but *just* calls
+    if (curStaticInst->isCall()){
+        commitStats[t_info.thread->threadId()]->functionCalls++;
     }
 
     //result bus acceses

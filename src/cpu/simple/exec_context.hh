@@ -88,8 +88,6 @@ class SimpleExecContext : public ExecContext
                                     thread->threadId()).c_str()),
               ADD_STAT(numMatAluAccesses, statistics::units::Count::get(),
                        "Number of matrix alu accesses"),
-              ADD_STAT(numCallsReturns, statistics::units::Count::get(),
-                       "Number of times a function call or return occured"),
               ADD_STAT(numMatInsts, statistics::units::Count::get(),
                        "Number of matrix instructions"),
               ADD_STAT(numIdleCycles, statistics::units::Cycle::get(),
@@ -137,9 +135,6 @@ class SimpleExecContext : public ExecContext
 
         // Number of matrix alu accesses
         statistics::Scalar numMatAluAccesses;
-
-        // Number of function calls/returns
-        statistics::Scalar numCallsReturns;
 
         // Number of matrix instructions
         statistics::Scalar numMatInsts;

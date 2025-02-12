@@ -916,6 +916,14 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
             cpu.commitStats[inst->id.threadId]->numStoreInsts++;
         }
 
+        if (inst->staticInst->isCall() || inst->staticInst->isReturn()) {
+            cpu.commitStats[inst->id.threadId]->numCallsReturns++;
+        }
+
+        if (inst->staticInst->isCall()) {
+            cpu.commitStats[inst->id.threadId]->functionCalls++;
+        }
+
         cpu.baseStats.numInsts++;
 
         /* Act on events related to instruction counts */
