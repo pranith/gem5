@@ -1403,6 +1403,10 @@ Commit::updateComInstStats(const DynInstPtr &inst)
         cpu->commitStats[tid]->functionCalls++;
     }
 
+    if (inst->isCall() || inst->isReturn()) {
+        cpu->commitStats[tid]->numCallsReturns++;
+    }
+
 }
 
 ////////////////////////////////////////
