@@ -1140,6 +1140,11 @@ CPU::instDone(ThreadID tid, const DynInstPtr &inst)
         // Check for instruction-count-based events.
         thread[tid]->comInstEventQueue.serviceEvents(thread[tid]->numInst);
     }
+
+    if (inst->isMemRef()) {
+        thread[tid]->threadStats.numMemRefs++;
+    }
+
     thread[tid]->numOp++;
     thread[tid]->threadStats.numOps++;
     commitStats[tid]->numOpsNotNOP++;

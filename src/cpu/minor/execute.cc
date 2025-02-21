@@ -931,6 +931,9 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
     }
     thread->numOp++;
     thread->threadStats.numOps++;
+    if (inst->staticInst->isMemRef()) {
+        thread->threadStats.numMemRefs++;
+    }
     cpu.commitStats[inst->id.threadId]->numOps++;
     cpu.commitStats[inst->id.threadId]
         ->committedInstType[inst->staticInst->opClass()]++;

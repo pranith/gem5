@@ -181,6 +181,7 @@ BaseSimpleCPU::countCommitInst()
         commitStats[t_info.thread->threadId()]->numInsts++;
         baseStats.numInsts++;
     }
+
     // increment thread level numOps count
     commitStats[t_info.thread->threadId()]->numOps++;
 }
@@ -419,6 +420,8 @@ BaseSimpleCPU::postExecute()
 
     if (curStaticInst->isMemRef()) {
         executeStats[t_info.thread->threadId()]->numMemRefs++;
+        commitStats[t_info.thread->threadId()]->numMemRefs++;
+        t_info.thread->threadStats.numMemRefs++;
     }
 
     if (curStaticInst->isLoad()) {
