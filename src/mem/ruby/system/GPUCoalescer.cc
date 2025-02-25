@@ -530,16 +530,34 @@ GPUCoalescer::readCallback(Addr address,
     fatal_if(crequest->getRubyType() != RubyRequestType_LD,
              "readCallback received non-read type response\n");
 
+    // Iterate over the coalesced requests to respond to as many loads as
+    // possible until another request type is seen. Models MSHR for
+    // Coalescer. Do not respond to pending loads that have SLC/GLC flags
+    // set; issue them instead
+    while (crequest->getRubyType() == RubyRequestType_LD) {
     hitCallback(crequest, mach, data, true, crequest->getIssueTime(),
                 forwardRequestTime, firstResponseTime, isRegion, externalHit);
 
-    delete crequest;
-    coalescedTable.at(address).pop_front();
+        delete crequest;
+        coalescedTable.at(address).pop_front();
+        if (coalescedTable.at(address).empty()) {
+            break;
+        }
+
+        crequest = coalescedTable.at(address).front();
+
+        PacketPtr pkt = crequest->getFirstPkt();
+        bool is_request_local = !pkt->isGLCSet() && !pkt->isSLCSet();
+        if (!is_request_local) {
+            break;
+        }
+    }
+
     if (coalescedTable.at(address).empty()) {
-      coalescedTable.erase(address);
+        coalescedTable.erase(address);
     } else {
-      auto nextRequest = coalescedTable.at(address).front();
-      issueRequest(nextRequest);
+        auto nextRequest = coalescedTable.at(address).front();
+        issueRequest(nextRequest);
     }
 }
 
