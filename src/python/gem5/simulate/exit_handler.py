@@ -24,6 +24,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import json
+import socket
 from abc import (
     ABCMeta,
     abstractmethod,
@@ -356,6 +358,47 @@ class WorkEndExitHandler(ExitHandler, hypercall_num=5):
     @overrides(ExitHandler)
     def _process(self, simulator: "Simulator") -> None:
         m5.stats.dump()
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
+class OrchestratorExitHandler(ExitHandler, hypercall_num=1000):
+
+    def _get_status(self, simulator: "Simulator") -> Dict[str, str]:
+        return {
+            "workload": simulator.get_workload().get_id(),
+            "tick": simulator.get_current_tick(),
+            "sim_id": simulator.get_id(),
+            "instruction_count": simulator.get_instruction_count(),
+        }
+
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        try:
+            socket_path = self._payload.get("response_socket")
+            function = self._payload.get("function", "status")
+
+            if socket_path:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.connect(socket_path)
+
+                if function == "status":
+                    response = json.dumps(self._get_status(simulator))
+                elif function == "get_stats":
+                    stats = simulator.get_stats()
+                    response = json.dumps(stats)
+                else:
+                    response = json.dumps(
+                        {"error": f"Unknown function: {function}"}
+                    )
+
+                sock.send(response.encode())
+                sock.close()
+
+        except Exception as e:
+            print(f"Error in OrchestratorExitHandler: {e}")
 
     @overrides(ExitHandler)
     def _exit_simulation(self) -> bool:
