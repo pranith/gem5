@@ -213,6 +213,13 @@ class Simulator:
         # hit)
         self._exit_event_id_log = {}
 
+    def switch_processor(self) -> None:
+        """
+        Switch the processor. This is a convenience function to call the
+        processor's switch function.
+        """
+        self._board.get_processor().switch()
+
     def get_exit_handler_id_map(self) -> Dict[int, Type[ExitHandler]]:
         """
         Returns the exit handler ID map. This is a dictionary mapping exit
