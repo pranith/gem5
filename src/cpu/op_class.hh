@@ -138,9 +138,12 @@ static const OpClass SimdStrideSegmentedStoreOp
 static const OpClass SimdExtOp = enums::SimdExt;
 static const OpClass SimdFloatExtOp = enums::SimdFloatExt;
 static const OpClass SimdConfigOp = enums::SimdConfig;
+static const OpClass SimdBf16AddOp = enums::SimdBf16Add;
+static const OpClass SimdBf16CmpOp = enums::SimdBf16Cmp;
 static const OpClass SimdBf16CvtOp = enums::SimdBf16Cvt;
 static const OpClass SimdBf16DotProdOp = enums::SimdBf16DotProd;
 static const OpClass SimdBf16MatMultAccOp = enums::SimdBf16MatMultAcc;
+static const OpClass SimdBf16MultOp = enums::SimdBf16Mult;
 static const OpClass SimdBf16MultAccOp = enums::SimdBf16MultAcc;
 static const OpClass Bf16CvtOp = enums::Bf16Cvt;
 static const OpClass Num_OpClasses = enums::Num_OpClass;
