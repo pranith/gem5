@@ -78,8 +78,9 @@ Interrupts::globalMask() const
                 INTERRUPT hideleg = tc->readMiscReg(MISCREG_HIDELEG);
 
                 mask.local = ~hideleg.local | ~mideleg.local;
-                if (status.uie)
+                if (status.uie) {
                     mask.local = mask.local | (hideleg.local & mideleg.local);
+                }
 
                 mask.vsei = (~hideleg.vsei)|(hideleg.vsei & vsstatus.sie);
                 mask.vssi = (~hideleg.vssi)|(hideleg.vssi & vsstatus.sie);
@@ -107,8 +108,9 @@ Interrupts::globalMask() const
             // status.uie is always 0 if misa.rvn is disabled
             else if (misa.rvs) {
                 mask.local = ~sideleg.local;
-                if (status.uie)
+                if (status.uie) {
                     mask.local = mask.local | sideleg.local;
+                }
                 mask.mei = (~sideleg.mei) | (sideleg.mei & status.uie);
                 mask.mti = (~sideleg.mti) | (sideleg.mti & status.uie);
                 mask.msi = (~sideleg.msi) | (sideleg.msi & status.uie);
@@ -121,15 +123,17 @@ Interrupts::globalMask() const
                 // support, setting mideleg/medeleg bits will delegate the
                 // trap to U-mode trap handler
                 mask.local = ~mideleg.local;
-                if (status.uie)
+                if (status.uie) {
                     mask.local = mask.local | mideleg.local;
+                }
                 mask.mei = (~mideleg.mei) | (mideleg.mei & status.uie);
                 mask.mti = (~mideleg.mti) | (mideleg.mti & status.uie);
                 mask.msi = (~mideleg.msi) | (mideleg.msi & status.uie);
                 mask.sei = mask.sti = mask.ssi = 0;
             }
-            if (status.uie)
+            if (status.uie) {
                 mask.uei = mask.uti = mask.usi = 1;
+            }
             break;
         case PRV_S:
             if (misa.rvh && virtualizationEnabled(tc)) {
@@ -137,8 +141,9 @@ Interrupts::globalMask() const
                 INTERRUPT hideleg = tc->readMiscReg(MISCREG_HIDELEG);
 
                 mask.local = ~hideleg.local | ~mideleg.local;
-                if (status.sie)
+                if (status.sie) {
                     mask.local = mask.local | (hideleg.local & mideleg.local);
+                }
 
                 mask.vsei = (~hideleg.vsei)|(hideleg.vsei & vsstatus.sie);
                 mask.vssi = (~hideleg.vssi)|(hideleg.vssi & vsstatus.sie);
@@ -181,7 +186,8 @@ Interrupts::globalMask() const
             break;
         case PRV_M:
             if (status.mie) {
-                mask = ~mideleg;
+                mask.local = gem5::mask(48);
+                mask.mei = mask.mti = mask.msi = 1;
             }
             break;
         default:

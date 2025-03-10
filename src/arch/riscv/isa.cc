@@ -863,7 +863,9 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
 
                 if (new_val.mode != AddrXlateMode::BARE &&
                     new_val.mode != AddrXlateMode::SV39)
+                {
                     new_val.mode = cur_val.mode;
+                }
 
                 setMiscRegNoEffect(idx, new_val);
 
