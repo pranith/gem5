@@ -356,77 +356,221 @@ let {{
             }
         }
 
-        uint8_t op_code = (bits(machInst, 25) << 1)
-                          | bits(machInst, 21);
-
+        uint8_t bit_31_24 = bits(machInst, 31, 24);
+        uint8_t bit_11_8 = bits(machInst, 11, 8);
+        uint8_t op1_op2 = (bits(machInst, 23) << 2)
+                          | bits(machInst, 21, 20);
+        bool q = bits(machInst, 6);
+        bool u = bits(machInst, 4);
         RegIndex vd = (RegIndex)(2 * (bits(machInst, 15, 12) |
-                               (bits(machInst, 22) << 4)));
+                              (bits(machInst, 22) << 4)));
         RegIndex vn = (RegIndex)(2 * (bits(machInst, 19, 16) |
-                               (bits(machInst, 7) << 4)));
+                              (bits(machInst, 7) << 4)));
         RegIndex vm = (RegIndex)(2 * (bits(machInst, 3, 0) |
-                               (bits(machInst, 5) << 4)));
-        bool q = bits (machInst, 6);
-        switch (op_code) {
-          case 0x0:
-          {
-            // VCADD
-            bool s = bits (machInst, 20);
-            if (s) {
-               if (q)
-                   return new VcaddQ<uint32_t>(machInst, vd, vn, vm);
-               else
-                   return new VcaddD<uint32_t>(machInst, vd, vn, vm);
-            } else {
-               if (q)
-                   return new VcaddQ<uint16_t>(machInst, vd, vn, vm);
-               else
-                   return new VcaddD<uint16_t>(machInst, vd, vn, vm);
+                              (bits(machInst, 5) << 4)));
+
+        if (bit_31_24 == 0xFC && bit_11_8 == 0x8) {
+            switch (op1_op2) {
+              case 2: case 3: case 6: case 7:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    // VCMLA
+                    bool s = bits (machInst, 20);
+                    if (s) {
+                      if (q)
+                          return new VcmlaQ<uint32_t>(machInst, vd, vn, vm);
+                      else
+                          return new VcmlaD<uint32_t>(machInst, vd, vn, vm);
+                    } else {
+                      if (q)
+                          return new VcmlaQ<uint16_t>(machInst, vd, vn, vm);
+                      else
+                          return new VcmlaD<uint16_t>(machInst, vd, vn, vm);
+                    }
+                }
+              case 4: case 5:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    bool s = bits (machInst, 20);
+                    if (s) {
+                        if (q)
+                            return new VcaddQ<uint32_t>(machInst, vd, vn, vm);
+                        else
+                            return new VcaddD<uint32_t>(machInst, vd, vn, vm);
+                    } else {
+                        if (q)
+                            return new VcaddQ<uint16_t>(machInst, vd, vn, vm);
+                        else
+                            return new VcaddD<uint16_t>(machInst, vd, vn, vm);
+                    }
+                }
+              default:
+                return new Unknown64(machInst);
             }
-          }
-          case 0x1:
-          {
-            // VCMLA
-            bool s = bits (machInst, 20);
-            if (s) {
-               if (q)
-                   return new VcmlaQ<uint32_t>(machInst, vd, vn, vm);
-               else
-                   return new VcmlaD<uint32_t>(machInst, vd, vn, vm);
-            } else {
-               if (q)
-                   return new VcmlaQ<uint16_t>(machInst, vd, vn, vm);
-               else
-                   return new VcmlaD<uint16_t>(machInst, vd, vn, vm);
+        } else if (bit_31_24 == 0xFC && bit_11_8 == 0xc) {
+            switch (op1_op2) {
+              case 2:
+                if (u) {
+                    if (q)
+                        return new VummlaQ<uint32_t>(machInst, vd, vn, vm);
+                    else
+                        return new Unknown64(machInst);
+                } else {
+                    if (q)
+                        return new VsmmlaQ<int32_t>(machInst, vd, vn, vm);
+                    else
+                        return new Unknown64(machInst);
+                }
+              case 6:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    if (q)
+                        return new VusmmlaQ<int32_t>(machInst, vd, vn, vm);
+                    else
+                        return new Unknown64(machInst);
+                }
+              default:
+                return new Unknown64(machInst);
             }
-          }
-          case 0x2:
-          case 0x3:
-          {
-            // VCMLA by element
-            bool s = bits (machInst, 23);
-            if (s) {
-               uint8_t index_fp = 0;
-               if (q)
-                   return new VcmlaElemQ<uint32_t>(machInst, vd, vn, vm,
-                                                   index_fp);
-               else
-                   return new VcmlaElemD<uint32_t>(machInst, vd, vn, vm,
-                                                   index_fp);
-            } else {
-               vm = (RegIndex)(uint8_t)(2* bits(machInst, 3, 0));
-               uint8_t index_fp = bits(machInst, 5);
-               if (q)
-                   return new VcmlaElemQ<uint16_t>(machInst, vd, vn, vm,
-                                                   index_fp);
-               else
-                   return new VcmlaElemD<uint16_t>(machInst, vd, vn, vm,
-                                                   index_fp);
+        } else if (bit_31_24 == 0xFC && bit_11_8 == 0xd) {
+            switch (op1_op2) {
+              case 2:
+                if (u) {
+                    if (q)
+                        return new VudotQ<uint32_t>(machInst, vd, vn, vm);
+                    else
+                        return new VudotD<uint32_t>(machInst, vd, vn, vm);
+                } else {
+                    if (q)
+                        return new VsdotQ<int32_t>(machInst, vd, vn, vm);
+                    else
+                        return new VsdotD<int32_t>(machInst, vd, vn, vm);
+                }
+              case 6:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    if (q)
+                        return new VusdotQ<int32_t>(machInst, vd, vn, vm);
+                    else
+                        return new VusdotD<int32_t>(machInst, vd, vn, vm);
+                }
+              default:
+                return new Unknown64(machInst);
             }
-          }
-          default:
+        } else if (bit_31_24 == 0xFD && bit_11_8 == 0x8) {
+            switch (op1_op2) {
+              case 2: case 3: case 6: case 7:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    // VCMLA
+                    bool s = bits (machInst, 20);
+                    if (s) {
+                      if (q)
+                          return new VcmlaQ<uint32_t>(machInst, vd, vn, vm);
+                      else
+                          return new VcmlaD<uint32_t>(machInst, vd, vn, vm);
+                    } else {
+                      if (q)
+                          return new VcmlaQ<uint16_t>(machInst, vd, vn, vm);
+                      else
+                          return new VcmlaD<uint16_t>(machInst, vd, vn, vm);
+                    }
+                }
+              case 4: case 5:
+                if (u) {
+                    return new Unknown64(machInst);
+                } else {
+                    bool s = bits (machInst, 20);
+                    if (s) {
+                        if (q)
+                            return new VcaddQ<uint32_t>(machInst, vd, vn, vm);
+                        else
+                            return new VcaddD<uint32_t>(machInst, vd, vn, vm);
+                    } else {
+                        if (q)
+                            return new VcaddQ<uint16_t>(machInst, vd, vn, vm);
+                        else
+                            return new VcaddD<uint16_t>(machInst, vd, vn, vm);
+                    }
+                }
+              default:
+                return new Unknown64(machInst);
+            }
+        } else if (bit_31_24 == 0xFE && bit_11_8 == 0x8) {
+            vm = (RegIndex)(2 * bits(machInst, 2, 0));
+
+            if (u) {
+                return new Unknown64(machInst);
+            } else {
+                // VCMLA by element
+                bool s = bits (machInst, 23);
+                if (s) {
+                    uint8_t index_fp = 0;
+                    if (q)
+                        return new VcmlaElemQ<uint32_t>(machInst, vd, vn, vm,
+                                                        index_fp);
+                    else
+                        return new VcmlaElemD<uint32_t>(machInst, vd, vn, vm,
+                                                        index_fp);
+                } else {
+                    vm = (RegIndex)(uint8_t)(2* bits(machInst, 3, 0));
+                    uint8_t index_fp = bits(machInst, 5);
+                    if (q)
+                        return new VcmlaElemQ<uint16_t>(machInst, vd, vn, vm,
+                                                        index_fp);
+                    else
+                        return new VcmlaElemD<uint16_t>(machInst, vd, vn, vm,
+                                                        index_fp);
+                }
+            }
+        } else if (bit_31_24 == 0xFE && bit_11_8 == 0xd) {
+            vm = (RegIndex)(2 * bits(machInst, 3, 0));
+            uint8_t index = bits(machInst, 5);
+
+            switch (op1_op2) {
+              case 2:
+                if (u) {
+                    if (q)
+                        return new VudotElemQ<uint32_t>(
+                            machInst, vd, vn, vm, index);
+                    else
+                        return new VudotElemD<uint32_t>(
+                            machInst, vd, vn, vm, index);
+                } else {
+                    if (q)
+                        return new VsdotElemQ<int32_t>(
+                            machInst, vd, vn, vm, index);
+                    else
+                        return new VsdotElemD<int32_t>(
+                            machInst, vd, vn, vm, index);
+                }
+              case 4:
+                if (u) {
+                    if (q)
+                        return new VsudotElemQ<int32_t>(
+                            machInst, vd, vn, vm, index);
+                    else
+                        return new VsudotElemD<int32_t>(
+                            machInst, vd, vn, vm, index);
+                } else {
+                    if (q)
+                        return new VusdotElemQ<int32_t>(
+                            machInst, vd, vn, vm, index);
+                    else
+                        return new VusdotElemD<int32_t>(
+                            machInst, vd, vn, vm, index);
+                }
+              default:
+                return new Unknown64(machInst);
+            }
+        } else {
             return new Unknown64(machInst);
         }
-
     }
     '''
 

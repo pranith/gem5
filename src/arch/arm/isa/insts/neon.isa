@@ -3323,6 +3323,80 @@ let {{
             "SimdMultOp", smallSignedTypes, 4, vqrdmlshCode, readDest=True,
             extra=rdm_check)
 
+    vdotCode = '''
+        int way = sizeof(Element) / sizeof(%(src1_type)s);
+
+        Element res = destElem;
+        for (int w = 0; w < way; w ++) {
+            Element src1_elem = (%(src1_type)s)
+                (srcElem1 >> (8 * sizeof(%(src1_type)s) * w));
+            Element src2_elem = (%(src2_type)s)
+                (srcElem2 >> (8 * sizeof(%(src2_type)s) * w));
+            res = res + src1_elem * src2_elem;
+        }
+        destElem = res;
+    '''
+    twoEqualRegInst("vudot", "VudotElemD", "SimdMultOp", ("uint32_t",), 2,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "uint8_t"}, True)
+    twoEqualRegInst("vudot", "VudotElemQ", "SimdMultOp", ("uint32_t",), 4,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "uint8_t"}, True)
+    twoEqualRegInst("vsdot", "VsdotElemD", "SimdMultOp", ("int32_t",), 2,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "int8_t"}, True)
+    twoEqualRegInst("vsdot", "VsdotElemQ", "SimdMultOp", ("int32_t",), 4,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "int8_t"}, True)
+
+    threeEqualRegInst("vudot", "VudotD", "SimdMultOp", ("uint32_t",), 2,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "uint8_t"}, True)
+    threeEqualRegInst("vudot", "VudotQ", "SimdMultOp", ("uint32_t",), 4,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "uint8_t"}, True)
+    threeEqualRegInst("vsdot", "VsdotD", "SimdMultOp", ("int32_t",), 2,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "int8_t"}, True)
+    threeEqualRegInst("vsdot", "VsdotQ", "SimdMultOp", ("int32_t",), 4,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "int8_t"}, True)
+
+    twoEqualRegInst("vusdot", "VusdotElemD", "SimdMultOp", ("int32_t",), 2,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "int8_t"}, True)
+    twoEqualRegInst("vusdot", "VusdotElemQ", "SimdMultOp", ("int32_t",), 4,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "int8_t"}, True)
+    twoEqualRegInst("vsudot", "VsudotElemD", "SimdMultOp", ("int32_t",), 2,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "uint8_t"}, True)
+    twoEqualRegInst("vsudot", "VsudotElemQ", "SimdMultOp", ("int32_t",), 4,
+        vdotCode % {"src1_type": "int8_t", "src2_type": "uint8_t"}, True)
+
+    threeEqualRegInst("vusdot", "VusdotD", "SimdMultOp", ("int32_t",), 2,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "int8_t"}, True)
+    threeEqualRegInst("vusdot", "VusdotQ", "SimdMultOp", ("int32_t",), 4,
+        vdotCode % {"src1_type": "uint8_t", "src2_type": "int8_t"}, True)
+
+    vmmla8bCode = '''
+        for (int i = 0; i < 2; i ++) {
+            for (int j = 0; j < 2; j ++) {
+                Element sum = letoh(destReg.elements[2 * i + j]);
+                for (int e = 0; e < 2; e ++) {
+                    Element srcElem1 = letoh(srcReg1.elements[2 * i + e]);
+                    Element srcElem2 = letoh(srcReg2.elements[2 * j + e]);
+                    for (int w = 0; w < 4; w ++) {
+                        Element src1_elem = (%(src1_type)s)
+                            (srcElem1 >> (8 * sizeof(%(src1_type)s) * w));
+                        Element src2_elem = (%(src2_type)s)
+                            (srcElem2 >> (8 * sizeof(%(src2_type)s) * w));
+                        sum = sum + src1_elem * src2_elem;
+                    }
+                }
+                destReg.elements[2 * i + j] = htole(sum);
+            }
+        }
+    '''
+    threeEqualRegInst("vummla", "VummlaQ", "SimdMultOp", ("uint32_t",), 4,
+        vmmla8bCode % {"src1_type": "uint8_t", "src2_type": "uint8_t"},
+        readDest=True, complex=True)
+    threeEqualRegInst("vsmmla", "VsmmlaQ", "SimdMultOp", ("int32_t",), 4,
+        vmmla8bCode % {"src1_type": "int8_t", "src2_type": "int8_t"},
+        readDest=True, complex=True)
+    threeEqualRegInst("vusmmla", "VusmmlaQ", "SimdMultOp", ("int32_t",), 4,
+        vmmla8bCode % {"src1_type": "uint8_t", "src2_type": "int8_t"},
+        readDest=True, complex=True)
+
     vshrCode = '''
         if (imm >= sizeof(srcElem1) * 8) {
             if (ltz(srcElem1))
