@@ -1125,8 +1125,8 @@ ISA::swapToVirtCSR(
     }
 
     // Lookup new midx and csrName
-    auto csr_data_it = CSRData.find(csr);
-    if (csr_data_it == CSRData.end()) {
+    auto csr_data_it = getCSRDataMap().find(csr);
+    if (csr_data_it == getCSRDataMap().end()) {
         panic("Bad remapping of virtualized CSR");
     }
     midx = csr_data_it->second.physIndex;
@@ -1167,10 +1167,10 @@ ISA::tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst)
 RegVal
 ISA::backdoorReadCSRAllBits(uint64_t csr)
 {
-    auto csr_it = CSRData.find(csr);
+    auto csr_it = getCSRDataMap().find(csr);
 
     // panic if the method was used with bad csr idx
-    panic_if(csr_it == CSRData.end(),
+    panic_if(csr_it == getCSRDataMap().end(),
         "Illegal CSR passed to backdoorReadCSRAllBits");
 
     auto midx = csr_it->second.physIndex;
@@ -1189,10 +1189,10 @@ ISA::backdoorReadCSRAllBits(uint64_t csr)
 RegVal
 ISA::readCSR(uint64_t csr)
 {
-    auto csr_it = CSRData.find(csr);
+    auto csr_it = getCSRDataMap().find(csr);
 
     // panic if the method was used with bad csr idx
-    panic_if(csr_it == CSRData.end(), "Illegal CSR passed to readCSR");
+    panic_if(csr_it == getCSRDataMap().end(), "Illegal CSR passed to readCSR");
 
 
     auto mask_it = getCSRMaskMap().find(csr);
@@ -1237,10 +1237,11 @@ ISA::readCSR(uint64_t csr)
 void
 ISA::writeCSR(uint64_t csr, RegVal writeData)
 {
-    auto csr_it = CSRData.find(csr);
+    auto csr_it = getCSRDataMap().find(csr);
 
     // panic if the method was used with bad csr idx
-    panic_if(csr_it == CSRData.end(), "Illegal CSR passed to writeCSR");
+    panic_if(csr_it == getCSRDataMap().end(),
+        "Illegal CSR passed to writeCSR");
 
     // find physical register id (MISCREG == physical)
     auto midx = csr_it->second.physIndex;
