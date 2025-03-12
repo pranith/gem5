@@ -1562,6 +1562,21 @@ IEW::updateExeInstStats(const DynInstPtr& inst)
 #endif
 
     //
+    // ALU Operations
+    //
+    if (inst->isInteger()) {
+        cpu->executeStats[tid]->numIntAluAccesses++;
+    }
+
+    if (inst->isFloating()) {
+        cpu->executeStats[tid]->numFpAluAccesses++;
+    }
+
+    if (inst->isVector()) {
+        cpu->executeStats[tid]->numVecAluAccesses++;
+    }
+
+    //
     //  Control operations
     //
     if (inst->isControl()) {
