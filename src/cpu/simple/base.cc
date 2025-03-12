@@ -470,6 +470,7 @@ BaseSimpleCPU::postExecute()
     //result bus acceses
     if (curStaticInst->isLoad()){
         commitStats[t_info.thread->threadId()]->numLoadInsts++;
+        executeStats[t_info.thread->threadId()]->numLoadInsts++;
     }
 
     if (curStaticInst->isStore() || curStaticInst->isAtomic()){

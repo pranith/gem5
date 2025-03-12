@@ -606,16 +606,23 @@ Execute::issue(ThreadID thread_id)
                 FUPipeline *fu = funcUnits[fu_index];
 
                 // Update ALU access stats.
-                if (!inst->isFault() && inst->staticInst->isVector()) {
-                    cpu.executeStats[inst->id.threadId]->numVecAluAccesses++;
-                }
-
-                if (!inst->isFault() && inst->staticInst->isFloating()) {
-                    cpu.executeStats[inst->id.threadId]->numFpAluAccesses++;
-                }
-
-                if (!inst->isFault() && inst->staticInst->isInteger()) {
-                    cpu.executeStats[inst->id.threadId]->numIntAluAccesses++;
+                if (!inst->isFault()) {
+                    cpu.executeStats[thread_id]->numInsts++;
+                    if (inst->staticInst->isInteger()) {
+                        cpu.executeStats[thread_id]->numIntAluAccesses++;
+                    }
+                    if (inst->staticInst->isFloating()) {
+                        cpu.executeStats[thread_id]->numFpAluAccesses++;
+                    }
+                    if (inst->staticInst->isVector()) {
+                        cpu.executeStats[thread_id]->numVecAluAccesses++;
+                    }
+                    if (inst->staticInst->isLoad()) {
+                        cpu.executeStats[thread_id]->numLoadInsts++;
+                    }
+                    if (inst->staticInst->isControl()) {
+                        cpu.executeStats[thread_id]->numBranches++;
+                    }
                 }
 
                 if (inst->isMemRef()) {
