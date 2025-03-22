@@ -1,5 +1,4 @@
-# Copyright (c) 2021 The Regents of the University of California
-# All Rights Reserved.
+# Copyright (c) 2025 REDS institute of the HEIG-VD
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -24,15 +23,30 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Import('*')
 
-from gem5_scons import warning
+# Rename config into _config in PciDevice and a new fields for pxcap
+def upgrader(cpt):
+    import re
 
-import gem5_scons
+    for sec in cpt.sections():
+        # pmcap.pid is a unique option in PciDevice. So it allows to
+        # detect any PciDevice.
+        if cpt.has_option(sec, "pmcap.pid"):
+            cpt.set(sec, "_config.data", cpt.get(sec, "config.data"))
+            cpt.remove_option(sec, "config.data")
+            pxdc2 = cpt.getint(sec, "pxcap.pxdc2")
+            cpt.set(sec, "pxcap.pxdc2", str(pxdc2 & 0xFFFF))
+            cpt.set(sec, "pxcap.pxds2", str((pxdc2 >> 16) & 0xFFFF))
 
-with gem5_scons.Configure(main) as conf:
-    have_shm_open = \
-        conf.CheckLibWithHeader([None, 'rt'], 'sys/mman.h', 'C',
-                                call='shm_open("/test", 0, 0);')
-    if not have_shm_open:
-        warning("Can't find library for sys/mman.")
+            cpt.set(sec, "pxcap.pxscap", "0")
+            cpt.set(sec, "pxcap.pxsc", "0")
+            cpt.set(sec, "pxcap.pxss", "0")
+            cpt.set(sec, "pxcap.pxrcap", "0")
+            cpt.set(sec, "pxcap.pxrc", "0")
+            cpt.set(sec, "pxcap.pxrs", "0")
+            cpt.set(sec, "pxcap.pxlcap2", "0")
+            cpt.set(sec, "pxcap.pxlc2", "0")
+            cpt.set(sec, "pxcap.pxls2", "0")
+            cpt.set(sec, "pxcap.pxscap2", "0")
+            cpt.set(sec, "pxcap.pxsc2", "0")
+            cpt.set(sec, "pxcap.pxss2", "0")
