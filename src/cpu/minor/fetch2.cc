@@ -428,6 +428,7 @@ Fetch2::evaluate()
                     }
 
                     stats.totalInstructions++;
+                    cpu.fetchStats[tid]->numInsts++;
 
                     DPRINTF(Fetch, "Instruction extracted from line %s"
                         " lineWidth: %d output_index: %d inputIndex: %d"
