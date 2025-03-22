@@ -165,12 +165,28 @@ class SimpleExecContext : public ExecContext
 
     } execContextStats;
 
+    struct IssueStats : public statistics::Group
+    {
+        IssueStats(BaseSimpleCPU *cpu)
+            : statistics::Group(cpu),
+            ADD_STAT(issuedInstType, statistics::units::Count::get(),
+                     "Number of insts issued per FU, per thread")
+            {
+                issuedInstType
+                .init(cpu->numThreads, enums::Num_OpClass)
+                .flags(statistics::total | statistics::pdf | statistics::dist);
+                issuedInstType.ysubnames(enums::OpClassStrings);
+
+            }
+            statistics::Vector2d issuedInstType;
+
+    } issueStats;
   public:
     /** Constructor */
     SimpleExecContext(BaseSimpleCPU* _cpu, SimpleThread* _thread)
         : cpu(_cpu), thread(_thread), fetchOffset(0), stayAtPC(false),
         numInst(0), numOp(0), numLoad(0), lastIcacheStall(0),
-        lastDcacheStall(0), execContextStats(cpu, thread)
+        lastDcacheStall(0), execContextStats(cpu, thread), issueStats(cpu)
     { }
 
     RegVal

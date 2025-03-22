@@ -417,6 +417,9 @@ BaseSimpleCPU::postExecute()
     assert(curStaticInst);
 
     Addr instAddr = threadContexts[curThread]->pcState().instAddr();
+    auto opclass = curStaticInst->opClass();
+    t_info.issueStats.issuedInstType[curThread][opclass]++;
+
 
     if (curStaticInst->isMemRef()) {
         executeStats[t_info.thread->threadId()]->numMemRefs++;

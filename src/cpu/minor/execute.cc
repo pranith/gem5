@@ -773,7 +773,7 @@ Execute::issue(ThreadID thread_id)
                         /* Update the # of insts. issued per OpClass type */
                         if (!inst->isFault()) {
                            auto opclass = inst->staticInst->opClass();
-                           issueStats.statIssuedInstType[thread_id][opclass]++;
+                           issueStats.issuedInstType[thread_id][opclass]++;
                         }
 
                         /* Issue to FU */
@@ -1962,13 +1962,13 @@ Execute::getDcachePort()
 
 Execute::IssueStats::IssueStats(MinorCPU *cpu)
         : statistics::Group(cpu),
-        ADD_STAT(statIssuedInstType, statistics::units::Count::get(),
+        ADD_STAT(issuedInstType, statistics::units::Count::get(),
                  "Number of instructions issued per FU type, per thread")
 {
-        statIssuedInstType
+        issuedInstType
             .init(cpu->numThreads, enums::Num_OpClass)
             .flags(statistics::total | statistics::pdf | statistics::dist);
-        statIssuedInstType.ysubnames(enums::OpClassStrings);
+        issuedInstType.ysubnames(enums::OpClassStrings);
 
 }
 

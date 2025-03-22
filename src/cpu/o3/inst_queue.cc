@@ -209,7 +209,7 @@ InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
              "Number of insts issued each cycle"),
     ADD_STAT(statFuBusy, statistics::units::Count::get(),
              "attempts to use FU when none available"),
-    ADD_STAT(statIssuedInstType, statistics::units::Count::get(),
+    ADD_STAT(issuedInstType, statistics::units::Count::get(),
              "Number of instructions issued per FU type, per thread"),
     ADD_STAT(issueRate, statistics::units::Rate<
                 statistics::units::Count, statistics::units::Cycle>::get(),
@@ -280,11 +280,11 @@ InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
         dist_unissued.subname(i, unissued_names[i]);
     }
 */
-    statIssuedInstType
+    issuedInstType
         .init(cpu->numThreads,enums::Num_OpClass)
         .flags(statistics::total | statistics::pdf | statistics::dist)
         ;
-    statIssuedInstType.ysubnames(enums::OpClassStrings);
+    issuedInstType.ysubnames(enums::OpClassStrings);
 
     //
     //  How long did instructions for a particular FU type wait prior to issue
@@ -907,7 +907,7 @@ InstructionQueue::scheduleReadyInsts()
             }
 
             listOrder.erase(order_it++);
-            iqStats.statIssuedInstType[tid][op_class]++;
+            iqStats.issuedInstType[tid][op_class]++;
         } else {
             assert(idx == FUPool::NoFreeFU);
             iqStats.statFuBusy[op_class]++;

@@ -360,7 +360,7 @@ class Execute : public Named
     struct IssueStats : public statistics::Group
     {
         IssueStats(MinorCPU *cpu);
-        statistics::Vector2d statIssuedInstType;
+        statistics::Vector2d issuedInstType;
     } issueStats;
 };
 
