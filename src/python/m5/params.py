@@ -57,6 +57,7 @@
 import copy
 import datetime
 import math
+import pprint
 import re
 import sys
 import time
@@ -286,6 +287,34 @@ class VectorParamValue(list, metaclass=MetaParamValue):
             return [v.unproxy(base) for v in self]
 
 
+class DictParamValue(dict, metaclass=MetaParamValue):
+    def __setattr__(self, attr, value):
+        raise AttributeError(
+            f"Not allowed to set {attr} on '{type(self).__name__}'"
+        )
+
+    def config_value(self):
+        return {
+            key.config_value(): value.config_value()
+            for key, value in self.items()
+        }
+
+    def ini_str(self):
+        # This is flattening the dictionary as a sequence of key, value pairs
+        return " ".join([elem.ini_str() for kv in self.items() for elem in kv])
+
+    def getValue(self):
+        return {
+            key.getValue(): value.getValue() for key, value in self.items()
+        }
+
+    def unproxy(self, base):
+        return {
+            key.unproxy(base): value.unproxy(base)
+            for key, value in self.items()
+        }
+
+
 class SimObjectVector(VectorParamValue):
     # support clone operation
     def __call__(self, **kwargs):
@@ -435,7 +464,7 @@ class VectorParamDesc(SingleTypeParamDesc):
         code("std::vector< ${{self.ptype.cxx_type}} > ${{self.name}};")
 
 
-class OptionalParamDesc(ParamDesc):
+class OptionalParamDesc(SingleTypeParamDesc):
     def __init__(self, ptype_str, ptype, *args, **kwargs):
         if len(args) != 1:
             raise TypeError(
@@ -452,7 +481,7 @@ class OptionalParamDesc(ParamDesc):
         if isNullOpt(value):
             return value
         else:
-            return ParamDesc.convert(self, value)
+            return SingleTypeParamDesc.convert(self, value)
 
     def cxx_predecls(self, code):
         code("#include <optional>", add_once=True)
@@ -464,6 +493,93 @@ class OptionalParamDesc(ParamDesc):
 
     def cxx_decl(self, code):
         code("std::optional< ${{self.ptype.cxx_type}} > ${{self.name}};")
+
+
+class DictParamDesc(ParamDesc):
+    def __init__(
+        self,
+        key_ptype_str,
+        key_ptype,
+        val_ptype_str,
+        val_ptype,
+        *args,
+        **kwargs,
+    ):
+        if isSimObjectClass(key_ptype) or isSimObjectClass(val_ptype):
+            raise TypeError(
+                f"Can't use a SimObject in '{type(self).__name__}'"
+            )
+
+        super().__init__(*args, **kwargs)
+        self.key_desc = SingleTypeParamDesc(
+            key_ptype_str, key_ptype, desc=self.desc
+        )
+        self.val_desc = SingleTypeParamDesc(
+            val_ptype_str, val_ptype, desc=self.desc
+        )
+
+    @property
+    def ptypes(self):
+        return [self.key_desc.ptype, self.val_desc.ptype]
+
+    # Convert assigned value to appropriate type.  If the RHS is not a
+    # list or tuple, it generates a single-element list.
+    def convert(self, value):
+        if not isinstance(value, dict):
+            raise TypeError("Should be a dict")
+
+        tmp_dict = {
+            self.key_desc.convert(key): self.val_desc.convert(val)
+            for key, val in value.items()
+        }
+
+        return DictParamValue(tmp_dict)
+
+    # Produce a human readable example string that describes
+    # how to set this vector parameter in the absence of a default
+    # value.
+    def example_str(self):
+        k = self.key_desc.example_str()
+        v = self.val_desc.example_str()
+        help_str = "{" + k + ":" + v + ", ...}"
+        return help_str
+
+    # Is the param available to be exposed on the command line
+    def isCmdLineSettable(self):
+        return getattr(
+            self.key_desc.ptype, "cmd_line_settable", False
+        ) and getattr(self.val_desc.ptype, "cmd_line_settable", False)
+
+    # Produce a human readable representation of the value of this vector param.
+    def pretty_print(self, value):
+        if not isinstance(value, dict):
+            raise TypeError("Should be a dict")
+
+        tmp_dict = {
+            self.key_desc.pretty_print(key): self.val_desc.pretty_print(val)
+            for key, val in value.items()
+        }
+
+        return pprint.pformat(tmp_dict)
+
+    # This is a helper function for the new config system
+    def __call__(self, value):
+        return self.convert(value)
+
+    def cxx_predecls(self, code):
+        code("#include <unordered_map>", add_once=True)
+        self.key_desc.ptype.cxx_predecls(code)
+        self.val_desc.ptype.cxx_predecls(code)
+
+    def pybind_predecls(self, code):
+        code("#include <unordered_map>", add_once=True)
+        self.key_desc.ptype.pybind_predecls(code)
+        self.val_desc.ptype.pybind_predecls(code)
+
+    def cxx_decl(self, code):
+        ktype = self.key_desc.ptype.cxx_type
+        vtype = self.val_desc.ptype.cxx_type
+        code("std::unordered_map<${{ktype}}, ${{vtype}}> ${{self.name}};")
 
 
 class ParamFactory:
@@ -488,9 +604,77 @@ class ParamFactory:
         return self.param_desc_class(self.ptype_str, ptype, *args, **kwargs)
 
 
+class DictParamFactory:
+    """
+    Factory class whose purpose is to store the (descriptor
+    class+key_type+value_type), and to generate the descriptor object
+    once arguments are passed (via the __call__). Last item in the
+    chain of factory classes
+
+    DictParamKeyFactory -> DictParamValueFactory -> DictParamFactory
+    """
+
+    def __init__(self, param_desc_class, key_ptype_str, val_ptype_str):
+        self.param_desc_class = param_desc_class
+        self.key_ptype_str = key_ptype_str
+        self.val_ptype_str = val_ptype_str
+
+    # E.g., DictParam.Int.String({5: "example string"}, "map of widgets")
+    def __call__(self, *args, **kwargs):
+        key_ptype = None
+        val_ptype = None
+        try:
+            key_ptype = allParams[self.key_ptype_str]
+            val_ptype = allParams[self.val_ptype_str]
+        except KeyError:
+            # if name isn't defined yet, assume it's a SimObject, and
+            # try to resolve it later
+            pass
+        return self.param_desc_class(
+            self.key_ptype_str,
+            key_ptype,
+            self.val_ptype_str,
+            val_ptype,
+            *args,
+            **kwargs,
+        )
+
+
+class DictParamValueFactory:
+    """
+    Factory class whose purpose is to store the (descriptor
+    class+key_type), and to generate a new factory object (DictParamFactory)
+    once a value type is given (via the __getattr__)
+    """
+
+    def __init__(self, param_desc_class, key_ptype_str):
+        self.param_desc_class = param_desc_class
+        self.key_ptype_str = key_ptype_str
+
+    def __getattr__(self, val_ptype_str):
+        return DictParamFactory(
+            self.param_desc_class, self.key_ptype_str, val_ptype_str
+        )
+
+
+class DictParamKeyFactory:
+    """
+    Factory class whose purpose is to store the (descriptor class) and to
+    generate a new factory object DictParamValueFactory once a key type is
+    given (via the __getattr__)
+    """
+
+    def __init__(self, param_desc_class):
+        self.param_desc_class = param_desc_class
+
+    def __getattr__(self, key_ptype_str):
+        return DictParamValueFactory(self.param_desc_class, key_ptype_str)
+
+
 Param = ParamFactory(SingleTypeParamDesc)
 VectorParam = ParamFactory(VectorParamDesc)
 OptionalParam = ParamFactory(OptionalParamDesc)
+DictParam = DictParamKeyFactory(DictParamDesc)
 
 #####################################################################
 #
@@ -2565,6 +2749,7 @@ __all__ = [
     "Param",
     "VectorParam",
     "OptionalParam",
+    "DictParam",
     "Enum",
     "ScopedEnum",
     "Bool",
