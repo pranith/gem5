@@ -605,30 +605,6 @@ Execute::issue(ThreadID thread_id)
             do {
                 FUPipeline *fu = funcUnits[fu_index];
 
-                // Update ALU access stats.
-                if (!inst->isFault()) {
-                    cpu.executeStats[thread_id]->numInsts++;
-                    if (inst->staticInst->isInteger()) {
-                        cpu.executeStats[thread_id]->numIntAluAccesses++;
-                    }
-                    if (inst->staticInst->isFloating()) {
-                        cpu.executeStats[thread_id]->numFpAluAccesses++;
-                    }
-                    if (inst->staticInst->isVector()) {
-                        cpu.executeStats[thread_id]->numVecAluAccesses++;
-                    }
-                    if (inst->staticInst->isLoad()) {
-                        cpu.executeStats[thread_id]->numLoadInsts++;
-                    }
-                    if (inst->staticInst->isControl()) {
-                        cpu.executeStats[thread_id]->numBranches++;
-                    }
-                }
-
-                if (inst->isMemRef()) {
-                    cpu.executeStats[inst->id.threadId]->numMemRefs++;
-                }
-
 
                 DPRINTF(MinorExecute, "Trying to issue inst: %s to FU: %d\n",
                     *inst, fu_index);
@@ -708,7 +684,19 @@ Execute::issue(ThreadID thread_id)
                         DPRINTF(MinorExecute, "Issuing inst: %s"
                             " into FU %d\n", *inst,
                             fu_index);
-
+                        // Update ALU access stats.
+                        if (!inst->isFault()) {
+                            auto tid = thread_id;
+                            if (inst->staticInst->isInteger()) {
+                                cpu.executeStats[tid]->numIntAluAccesses++;
+                            }
+                            if (inst->staticInst->isFloating()) {
+                                cpu.executeStats[tid]->numFpAluAccesses++;
+                            }
+                            if (inst->staticInst->isVector()) {
+                                cpu.executeStats[tid]->numVecAluAccesses++;
+                            }
+                        }
                         Cycles extra_dest_retire_lat = Cycles(0);
                         TimingExpr *extra_dest_retire_lat_expr = NULL;
                         Cycles extra_assumed_lat = Cycles(0);
@@ -898,49 +886,58 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
         thread->numInst++;
         thread->threadStats.numInsts++;
         cpu.commitStats[inst->id.threadId]->numInsts++;
+        cpu.executeStats[inst->id.threadId]->numInsts++;
 
-        if (inst->staticInst->isInteger()) {
-            cpu.commitStats[inst->id.threadId]->numIntInsts++;
-        }
 
-        if (inst->staticInst->isFloating()) {
-            cpu.commitStats[inst->id.threadId]->numFpInsts++;
-        }
+        //if (inst->staticInst->isMemRef()) {
+        //}
 
-        if (inst->staticInst->isVector()) {
-            cpu.commitStats[inst->id.threadId]->numVecInsts++;
-        }
 
-        if (inst->staticInst->isMemRef()) {
-            cpu.commitStats[inst->id.threadId]->numMemRefs++;
-        }
 
-        if (inst->staticInst->isLoad()) {
-            cpu.commitStats[inst->id.threadId]->numLoadInsts++;
-        }
-
-        if (inst->staticInst->isStore() || inst->staticInst->isAtomic()) {
-            cpu.commitStats[inst->id.threadId]->numStoreInsts++;
-        }
-
-        if (inst->staticInst->isCall() || inst->staticInst->isReturn()) {
-            cpu.commitStats[inst->id.threadId]->numCallsReturns++;
-        }
-
-        if (inst->staticInst->isCall()) {
-            cpu.commitStats[inst->id.threadId]->functionCalls++;
-        }
 
         cpu.baseStats.numInsts++;
 
         /* Act on events related to instruction counts */
         thread->comInstEventQueue.serviceEvents(thread->numInst);
     }
+
     thread->numOp++;
     thread->threadStats.numOps++;
+
     if (inst->staticInst->isMemRef()) {
+        cpu.executeStats[inst->id.threadId]->numMemRefs++;
+        cpu.commitStats[inst->id.threadId]->numMemRefs++;
         thread->threadStats.numMemRefs++;
     }
+    if (inst->staticInst->isLoad()) {
+            cpu.executeStats[inst->id.threadId]->numLoadInsts++;
+            cpu.commitStats[inst->id.threadId]->numLoadInsts++;
+    }
+
+    if (inst->staticInst->isStore() || inst->staticInst->isAtomic()) {
+            cpu.commitStats[inst->id.threadId]->numStoreInsts++;
+    }
+    if (inst->staticInst->isInteger()) {
+            cpu.commitStats[inst->id.threadId]->numIntInsts++;
+    }
+
+    if (inst->staticInst->isFloating()) {
+            cpu.commitStats[inst->id.threadId]->numFpInsts++;
+    }
+
+    if (inst->staticInst->isVector()) {
+            cpu.commitStats[inst->id.threadId]->numVecInsts++;
+    }
+    if (inst->staticInst->isControl()) {
+            cpu.executeStats[inst->id.threadId]->numBranches++;
+    }
+    if (inst->staticInst->isCall() || inst->staticInst->isReturn()) {
+            cpu.commitStats[inst->id.threadId]->numCallsReturns++;
+    }
+    if (inst->staticInst->isCall()) {
+            cpu.commitStats[inst->id.threadId]->functionCalls++;
+    }
+
     cpu.commitStats[inst->id.threadId]->numOps++;
     cpu.commitStats[inst->id.threadId]
         ->committedInstType[inst->staticInst->opClass()]++;

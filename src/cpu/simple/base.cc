@@ -153,6 +153,7 @@ BaseSimpleCPU::countInst()
     SimpleExecContext& t_info = *threadInfo[curThread];
 
     if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
+        executeStats[t_info.thread->threadId()]->numInsts++;
         t_info.numInst++;
     }
     t_info.numOp++;
@@ -468,6 +469,9 @@ BaseSimpleCPU::postExecute()
     // same as above, but *just* calls
     if (curStaticInst->isCall()){
         commitStats[t_info.thread->threadId()]->functionCalls++;
+    }
+    if (curStaticInst->isControl()){
+        executeStats[t_info.thread->threadId()]->numBranches++;
     }
 
     //result bus acceses
