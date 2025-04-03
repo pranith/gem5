@@ -5167,6 +5167,7 @@ decode QUADRANT default Unknown::unknown() {
                         Rd_ud = new_vl;
                         VL = new_vl;
                         Vtype = new_vtype;
+                        IsVset = true;
                     }}, VSetVlDeclare, VSetVliBranchTarget
                       , SimdConfigOp, IsUncondControl
                       , IsIndirectControl);
@@ -5182,6 +5183,7 @@ decode QUADRANT default Unknown::unknown() {
                             Rd_ud = new_vl;
                             VL = new_vl;
                             Vtype = new_vtype;
+                            IsVset = true;
                         }}, VSetVlDeclare, VSetVlBranchTarget
                           , SimdConfigOp, IsUncondControl
                           , IsIndirectControl);
@@ -5196,6 +5198,7 @@ decode QUADRANT default Unknown::unknown() {
                             Rd_ud = new_vl;
                             VL = new_vl;
                             Vtype = new_vtype;
+                            IsVset = true;
                         }}, VSetiVliDeclare, VSetiVliBranchTarget
                           , SimdConfigOp, IsUncondControl
                           , IsDirectControl);
