@@ -101,6 +101,45 @@ Walker::WalkerState::startFunctional(Addr base, Addr vaddr,
 }
 
 
+void Walker::insert(Addr paddr, PageTableEntry entry)
+{
+    paddr_pte_t *newEntry = nullptr;
+    if (!freeList.empty()) {
+        newEntry = freeList.front();
+        freeList.pop_front();
+    } else {
+        newEntry = entryList.back();
+        entryList.pop_back();
+    }
+    DPRINTF(GPUPTWalker, "Insert pte for paddr %#x. Current length: %d\n",
+            paddr, entryList.size());
+    *newEntry = std::make_pair(paddr, entry);
+    entryList.push_front(newEntry);
+}
+PageTableEntry* Walker::lookup(Addr paddr)
+{
+    auto entry = entryList.begin();
+
+    for ( ; entry != entryList.end(); ++entry)
+    {
+        if ((*entry)->first == paddr)
+        {
+            entryList.push_front(*entry);
+            entryList.erase(entry);
+            entry = entryList.begin();
+
+            break;
+        }
+    }
+    if (entry == entryList.end())
+    {
+        DPRINTF(GPUPTWalker, "pte at paddr %#x not found in buffer.\n", paddr);
+        return nullptr;
+    }
+    DPRINTF(GPUPTWalker, "pte at paddr %#x found in buffer.\n", paddr);
+    return &(*entry)->second;
+}
+
 /*
  * Timing mode methods
  */
@@ -165,8 +204,8 @@ Walker::WalkerState::startWalk()
         DPRINTF(GPUPTWalker, "Sending timing read to %#lx\n",
                 read->getAddr());
 
-        sendPackets();
         started = true;
+        sendPackets();
     } else {
         // This is mostly the same as stepWalk except we update the state and
         // send the new timing read request.
@@ -366,22 +405,35 @@ Walker::WalkerState::sendPackets()
     // If we're already waiting for the port to become available, just return.
     if (retrying)
         return;
-
+    auto addr = read->getAddr();
     if (!walker->sendTiming(this, read)) {
         DPRINTF(GPUPTWalker, "Timing request for %#lx failed\n",
-                read->getAddr());
+                addr);
 
         retrying = true;
-    } else {
-        DPRINTF(GPUPTWalker, "Timing request for %#lx successful\n",
-                read->getAddr());
     }
+    //No lines after sendTiming because the state might be freed
+    // else {
+    //     DPRINTF(GPUPTWalker, "Timing request for %#lx successful\n",
+    //             addr);
+    // }
 }
 
 bool Walker::sendTiming(WalkerState* sending_walker, PacketPtr pkt)
 {
     auto walker_state = new WalkerSenderState(sending_walker);
     pkt->pushSenderState(walker_state);
+
+    PageTableEntry *entry = lookup(pkt->getAddr());
+    if (entry != nullptr)
+    {
+        DPRINTF(GPUPTWalker, "PTE found in buffer, skipping timing request.");
+        pkt->setLE<uint64_t>(*entry);
+
+        recvTimingResp(pkt);
+
+        return true;
+    }
 
     if (port.sendTimingReq(pkt)) {
         DPRINTF(GPUPTWalker, "Sending timing read to %#lx from walker %p\n",
@@ -412,9 +464,22 @@ Walker::recvTimingResp(PacketPtr pkt)
 
     DPRINTF(GPUPTWalker, "Got response for %#lx from walker %p -- %#lx\n",
             pkt->getAddr(), senderState->senderWalk, pkt->getLE<uint64_t>());
+    if (pte_buffer && lookup(pkt->getAddr()) == nullptr) //not found, push
+        insert(pkt->getAddr(), pkt->getLE<uint64_t>());
+
     senderState->senderWalk->startWalk();
 
     delete senderState;
+}
+
+void
+Walker::invalidateBuffer()
+{
+    while (!entryList.empty()){
+        auto entry = entryList.front();
+        entryList.pop_front();
+        freeList.push_back(entry);
+    }
 }
 
 void
@@ -427,8 +492,9 @@ void
 Walker::recvReqRetry()
 {
     std::list<WalkerState *>::iterator iter;
-    for (iter = currStates.begin(); iter != currStates.end(); iter++) {
+    for (iter = currStates.begin(); iter != currStates.end(); ) {
         WalkerState * walkerState = *(iter);
+        iter++;
         if (walkerState->isRetrying()) {
             walkerState->retry();
         }

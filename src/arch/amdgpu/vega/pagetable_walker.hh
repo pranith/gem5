@@ -54,6 +54,11 @@ namespace VegaISA
 class Walker : public ClockedObject
 {
   protected:
+  typedef std::pair<Addr, PageTableEntry> paddr_pte_t;
+  std::vector<paddr_pte_t> buffer;
+  std::list<paddr_pte_t*> entryList;
+  std::list<paddr_pte_t*> freeList;
+
     // Port for accessing memory
     class WalkerPort : public RequestPort
     {
@@ -164,7 +169,13 @@ class Walker : public ClockedObject
     void setDevRequestor(RequestorID mid) { deviceRequestorId = mid; }
     RequestorID getDevRequestor() const { return deviceRequestorId; }
 
+    void invalidateBuffer();
+
   protected:
+    //enabling pte buffer
+    bool pte_buffer;
+    void insert(Addr paddr, PageTableEntry entry);
+    PageTableEntry* lookup(Addr paddr);
     // The TLB we're supposed to load.
     GpuTLB *tlb;
     RequestorID requestorId;
@@ -191,6 +202,11 @@ class Walker : public ClockedObject
         tlb = _tlb;
     }
 
+    void setEnablePTEBuffer(bool enable)
+    {
+      pte_buffer = enable;
+    }
+
     Walker(const VegaPagetableWalkerParams &p)
       : ClockedObject(p),
         port(name() + ".port", this),
@@ -199,6 +215,12 @@ class Walker : public ClockedObject
         deviceRequestorId(999), system(p.system)
     {
         DPRINTF(GPUPTWalker, "Walker::Walker %p\n", this);
+        pte_buffer = false;
+        int num_sets = 64;
+        buffer.assign(num_sets, std::make_pair((Addr)0, (PageTableEntry)0));
+        for (int set = 0; set < num_sets; ++set) {
+            freeList.push_back(&buffer.at(set));
+      }
     }
 };
 

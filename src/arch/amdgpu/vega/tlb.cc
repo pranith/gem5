@@ -84,6 +84,7 @@ GpuTLB::GpuTLB(const VegaGPUTLBParams &p)
     missLatency1 = p.missLatency1;
     missLatency2 = p.missLatency2;
 
+
     // create the response ports based on the number of connected ports
     for (size_t i = 0; i < p.port_cpu_side_ports_connection_count; ++i) {
         cpuSidePort.push_back(new CpuSidePort(csprintf("%s-port%d",
@@ -104,6 +105,8 @@ GpuTLB::GpuTLB(const VegaGPUTLBParams &p)
     if (gpuDevice) {
         gpuDevice->getVM().registerTLB(this);
     }
+
+    walker->setEnablePTEBuffer(true);
 }
 
 GpuTLB::~GpuTLB()
