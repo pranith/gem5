@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2014, 2017-2019, 2021, 2024 Arm Limited
+# Copyright (c) 2012-2014, 2017-2019, 2021, 2024-2025 Arm Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -152,12 +152,7 @@ class ParamValue(metaclass=MetaParamValue):
 
 # Regular parameter description.
 class ParamDesc:
-    def __init__(self, ptype_str, ptype, *args, **kwargs):
-        self.ptype_str = ptype_str
-        # remember ptype only if it is provided
-        if ptype != None:
-            self.ptype = ptype
-
+    def __init__(self, *args, **kwargs):
         if args:
             if len(args) == 1:
                 self.desc = args[0]
@@ -183,6 +178,23 @@ class ParamDesc:
         if not hasattr(self, "desc"):
             raise TypeError("desc attribute missing")
 
+
+class SingleTypeParamDesc(ParamDesc):
+    """
+    ParamDesc with a single type. This applies for example
+    to an Int Param, or a Vector<Int> Param, and not to
+    parameters with multiple data types, like a Dict Param,
+    which has more than one type (the type of the key and the
+    type of the value).
+    """
+
+    def __init__(self, ptype_str, ptype, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ptype_str = ptype_str
+        # remember ptype only if it is provided
+        if ptype != None:
+            self.ptype = ptype
+
     def __getattr__(self, attr):
         if attr == "ptype":
             from . import SimObject
@@ -195,6 +207,10 @@ class ParamDesc:
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{attr}'"
         )
+
+    @property
+    def ptypes(self):
+        return [self.ptype]
 
     def example_str(self):
         if hasattr(self.ptype, "ex_str"):
@@ -344,22 +360,22 @@ class SimObjectVector(VectorParamValue):
         return flags_dict
 
 
-class VectorParamDesc(ParamDesc):
+class VectorParamDesc(SingleTypeParamDesc):
     # Convert assigned value to appropriate type.  If the RHS is not a
     # list or tuple, it generates a single-element list.
     def convert(self, value):
         if isinstance(value, (list, tuple)):
             # list: coerce each element into new list
-            tmp_list = [ParamDesc.convert(self, v) for v in value]
+            tmp_list = [SingleTypeParamDesc.convert(self, v) for v in value]
         elif isinstance(value, str):
             # If input is a csv string
             tmp_list = [
-                ParamDesc.convert(self, v)
+                SingleTypeParamDesc.convert(self, v)
                 for v in value.strip("[").strip("]").split(",")
             ]
         else:
             # singleton: coerce to a single-element list
-            tmp_list = [ParamDesc.convert(self, value)]
+            tmp_list = [SingleTypeParamDesc.convert(self, value)]
 
         if isSimObjectSequence(tmp_list):
             return SimObjectVector(tmp_list)
@@ -377,13 +393,16 @@ class VectorParamDesc(ParamDesc):
     # Produce a human readable representation of the value of this vector param.
     def pretty_print(self, value):
         if isinstance(value, (list, tuple)):
-            tmp_list = [ParamDesc.pretty_print(self, v) for v in value]
+            tmp_list = [
+                SingleTypeParamDesc.pretty_print(self, v) for v in value
+            ]
         elif isinstance(value, str):
             tmp_list = [
-                ParamDesc.pretty_print(self, v) for v in value.split(",")
+                SingleTypeParamDesc.pretty_print(self, v)
+                for v in value.split(",")
             ]
         else:
-            tmp_list = [ParamDesc.pretty_print(self, value)]
+            tmp_list = [SingleTypeParamDesc.pretty_print(self, value)]
 
         return tmp_list
 
@@ -391,16 +410,16 @@ class VectorParamDesc(ParamDesc):
     def __call__(self, value):
         if isinstance(value, (list, tuple)):
             # list: coerce each element into new list
-            tmp_list = [ParamDesc.convert(self, v) for v in value]
+            tmp_list = [SingleTypeParamDesc.convert(self, v) for v in value]
         elif isinstance(value, str):
             # If input is a csv string
             tmp_list = [
-                ParamDesc.convert(self, v)
+                SingleTypeParamDesc.convert(self, v)
                 for v in value.strip("[").strip("]").split(",")
             ]
         else:
             # singleton: coerce to a single-element list
-            tmp_list = [ParamDesc.convert(self, value)]
+            tmp_list = [SingleTypeParamDesc.convert(self, value)]
 
         return VectorParamValue(tmp_list)
 
@@ -469,7 +488,7 @@ class ParamFactory:
         return self.param_desc_class(self.ptype_str, ptype, *args, **kwargs)
 
 
-Param = ParamFactory(ParamDesc)
+Param = ParamFactory(SingleTypeParamDesc)
 VectorParam = ParamFactory(VectorParamDesc)
 OptionalParam = ParamFactory(OptionalParamDesc)
 
