@@ -407,7 +407,6 @@ Execute::handleMemResponse(MinorDynInstPtr inst,
             context.readPredicate() : false));
     }
 
-    doInstCommitAccounting(inst);
 
     /* Generate output to account for branches */
     tryToBranch(inst, fault, branch);
@@ -878,6 +877,7 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
     assert(!inst->isFault());
 
     MinorThread *thread = cpu.threads[inst->id.threadId];
+    bool is_nop = inst->staticInst->isNop();
 
     /* Increment the many and various inst and op counts in the
      *  thread and system */
@@ -888,14 +888,11 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
         cpu.commitStats[inst->id.threadId]->numInsts++;
         cpu.executeStats[inst->id.threadId]->numInsts++;
 
-
-        //if (inst->staticInst->isMemRef()) {
-        //}
-
-
-
-
         cpu.baseStats.numInsts++;
+
+        if (!is_nop) {
+            cpu.commitStats[inst->id.threadId]->numInstsNotNOP++;
+        }
 
         /* Act on events related to instruction counts */
         thread->comInstEventQueue.serviceEvents(thread->numInst);
@@ -903,6 +900,9 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
 
     thread->numOp++;
     thread->threadStats.numOps++;
+    if (!is_nop) {
+        cpu.commitStats[inst->id.threadId]->numOpsNotNOP++;
+    }
 
     if (inst->staticInst->isMemRef()) {
         cpu.executeStats[inst->id.threadId]->numMemRefs++;
@@ -941,6 +941,7 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
     cpu.commitStats[inst->id.threadId]->numOps++;
     cpu.commitStats[inst->id.threadId]
         ->committedInstType[inst->staticInst->opClass()]++;
+    cpu.commitStats[inst->id.threadId]->updateComCtrlStats(inst->staticInst);
 
     /* Set the CP SeqNum to the numOps commit number */
     if (inst->traceData)
@@ -1057,7 +1058,6 @@ Execute::commitInst(MinorDynInstPtr inst, bool early_memory_issue,
             fault->invoke(thread, inst->staticInst);
         }
 
-        doInstCommitAccounting(inst);
         tryToBranch(inst, fault, branch);
     }
 
@@ -1471,6 +1471,10 @@ Execute::commit(ThreadID thread_id, bool only_commit_microops, bool discard,
 
             if (num_mem_refs_committed == memoryCommitLimit)
                 DPRINTF(MinorExecute, "Reached mem ref commit limit\n");
+
+            if (fault == NoFault)
+                doInstCommitAccounting(inst);
+
         }
     }
 }
