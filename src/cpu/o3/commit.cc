@@ -1347,7 +1347,7 @@ Commit::updateComInstStats(const DynInstPtr &inst)
             cpu->commitStats[tid]->numLoadInsts++;
         }
 
-        if (inst->isStore()) {
+        if (inst->isStore() || inst->isAtomic()) {
             cpu->commitStats[tid]->numStoreInsts++;
         }
     }
