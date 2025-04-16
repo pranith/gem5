@@ -38,28 +38,6 @@ jobs:
             - name: Build ALL/gem5.opt
               run: scons --no-compress-debug build/ALL/gem5.opt -j $(nproc)
 
-
-    build-vega-gem5:
-        runs-on: [self-hosted, linux, x64]
-        container: ghcr.io/gem5/gcn-gpu:latest
-        timeout-minutes: 180
-        needs: get-date
-
-        steps:
-            - uses: actions/checkout@v4
-
-            - name: Cache build/VEGA_X86
-              uses: actions/cache@v4
-              with:
-                  path: build/VEGA_X86
-                  key: testlib-build-vega-${{ needs.get-date.outputs.date }}
-                  restore-keys: |
-                      testlib-build-vega
-
-            - name: Build VEGA_X86/gem5.opt
-              run: scons --no-compress-debug build/VEGA_X86/gem5.opt -j $(nproc)
-
-
   # this builds both unittests.fast and unittests.debug
     unittests-fast-debug:
         strategy:
@@ -162,7 +140,6 @@ jobs:
         container: ghcr.io/gem5/gcn-gpu:latest
         timeout-minutes: 1440 # 24 hours
         needs:
-            - build-vega-gem5
             - get-date
 
         steps:
@@ -171,7 +148,7 @@ jobs:
                   ref: develop
 
             - name: Cache build/VEGA_X86
-              uses: actions/cache/restore@v4
+              uses: actions/cache@v4
               with:
                   path: build/VEGA_X86
                   key: testlib-build-vega-${{ needs.get-date.outputs.date }}
