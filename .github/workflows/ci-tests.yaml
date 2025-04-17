@@ -181,7 +181,7 @@ jobs:
             - name: Run "tests/${{ matrix.test-dir }}" TestLib quick tests
               id: run-tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run --skip-build -vv -j$(nproc) ${{ matrix.test-dir }}
+              run: ./main.py run --skip-build --exclude-tags gcn-gpu ${{ matrix.test-dir }}
 
         # Get the basename of the matrix.test-dir path (to name the artifact).
             - name: Sanatize test-dir for artifact name
@@ -225,7 +225,7 @@ jobs:
             - name: Run The pyunit tests
               id: run-tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run --skip-build -vv -j$(nproc) pyunit
+              run: ./main.py run --skip-build -vv pyunit
 
             # Upload the tests/testing-results directory as an artifact.
             - name: Upload pyunit test results
@@ -256,7 +256,7 @@ jobs:
             # Run the GPU tests.
             - name: Run Testlib GPU Tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run -j$(nproc) -t$(nproc) --host gcn_gpu gem5/gpu
+              run: ./main.py run -j$(nproc) -t$(nproc) --host gcn_gpu
 
             # Upload the tests/testing-results directory as an artifact.
             - name: Upload results

@@ -80,7 +80,7 @@ jobs:
 
             - name: long ${{ matrix.test-type }} tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run gem5/${{ matrix.test-type }} -j$(nproc) --length=long -vv -t $(nproc)
+              run: ./main.py run gem5/${{ matrix.test-type }} -j$(nproc) --length=long -vv -t $(nproc) --exclude-tags gcn_gpu
             - name: upload results
               if: success() || failure()
               uses: actions/upload-artifact@v4
@@ -123,7 +123,7 @@ jobs:
             - name: long ${{ matrix.test-type }} gem5_library_example_tests
               working-directory: ${{ github.workspace }}/tests
               run: ./main.py run --uid SuiteUID:tests/gem5/gem5_library_example_tests/test_gem5_library_examples.py:test-${{ matrix.test-type }} -j $(nproc)
-                  --length=long -vv
+                  --exclude-tags gcn-gpu --length=long -vv
             - name: upload results
               if: success() || failure()
               uses: actions/upload-artifact@v4
@@ -158,7 +158,7 @@ jobs:
 
             - name: Run Testlib GPU Tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run --length=long -vvv -j $(nproc) --host gcn_gpu  gem5/gpu
+              run: ./main.py run --length=long -vvv -j $(nproc) --host gcn_gpu
 
             - name: Upload results
               if: success() || failure()
