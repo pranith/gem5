@@ -50,8 +50,15 @@ gem5_verify_config(
     config=joinpath(
         config.base_dir, "configs", "example", "ruby_gpu_random_test.py"
     ),
-    config_args=["--test-length", "50000", "--num-dmas", "0"],
-    valid_isas=(constants.vega_x86_tag,),
+    config_args=[
+        "--test-length",
+        "50000",
+        "--num-dmas",
+        "0",
+        "--protocol",
+        "GPU_VIPER",
+    ],
+    valid_isas=(constants.all_compiled_tag,),
     valid_hosts=constants.supported_hosts,
     length=constants.quick_tag,
 )
@@ -77,8 +84,15 @@ gem5_verify_config(
     config=joinpath(
         config.base_dir, "configs", "example", "ruby_gpu_random_test.py"
     ),
-    config_args=["--test-length", "5000000", "--num-dmas", "0"],
-    valid_isas=(constants.vega_x86_tag,),
+    config_args=[
+        "--test-length",
+        "5000000",
+        "--num-dmas",
+        "0",
+        "--protocol",
+        "GPU_VIPER",
+    ],
+    valid_isas=(constants.all_compiled_tag,),
     valid_hosts=constants.supported_hosts,
     length=constants.long_tag,
 )
