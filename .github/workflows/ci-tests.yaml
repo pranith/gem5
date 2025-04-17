@@ -246,21 +246,17 @@ jobs:
 
             # Obtain the cache if available.
             - name: Cache build/VEGA_X86
-              uses: actions/cache/restore@v4
+              uses: actions/cache@v4
               with:
                   path: build/VEGA_X86
                   key: testlib-build-vega-${{ needs.get-date.outputs.date }}
                   restore-keys: |
                       testlib-build-vega
 
-            # Build the VEGA_X86/gem5.opt binary.
-            - name: Build VEGA_X86/gem5.opt
-              run: scons --no-compress-debug build/VEGA_X86/gem5.opt -j`nproc`
-
             # Run the GPU tests.
             - name: Run Testlib GPU Tests
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run  --skip-build -vvv -t $(nproc) --host gcn_gpu gem5/gpu
+              run: ./main.py run -j$(nproc) -t$(nproc) --host gcn_gpu gem5/gpu
 
             # Upload the tests/testing-results directory as an artifact.
             - name: Upload results
