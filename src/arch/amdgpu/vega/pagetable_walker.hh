@@ -54,10 +54,14 @@ namespace VegaISA
 class Walker : public ClockedObject
 {
   protected:
+  //PTE indexed by paddr
   typedef std::pair<Addr, PageTableEntry> paddr_pte_t;
-  std::vector<paddr_pte_t> buffer;
-  std::list<paddr_pte_t*> entryList;
-  std::list<paddr_pte_t*> freeList;
+  //the PTE buffer
+  std::vector<paddr_pte_t> pwcBuffer;
+  //List of valid entries in the buffer, LRU ordered
+  std::list<paddr_pte_t*> pwcEntryList;
+  //List of free entries in the buffer
+  std::list<paddr_pte_t*> pwcFreeList;
 
     // Port for accessing memory
     class WalkerPort : public RequestPort
@@ -174,8 +178,8 @@ class Walker : public ClockedObject
   protected:
     //enabling pte buffer
     bool pte_buffer;
-    void insert(Addr paddr, PageTableEntry entry);
-    PageTableEntry* lookup(Addr paddr);
+    void pwcInsert(Addr paddr, PageTableEntry entry);
+    PageTableEntry* pwcLookup(Addr paddr);
     // The TLB we're supposed to load.
     GpuTLB *tlb;
     RequestorID requestorId;
@@ -202,11 +206,6 @@ class Walker : public ClockedObject
         tlb = _tlb;
     }
 
-    void setEnablePTEBuffer(bool enable)
-    {
-      pte_buffer = enable;
-    }
-
     Walker(const VegaPagetableWalkerParams &p)
       : ClockedObject(p),
         port(name() + ".port", this),
@@ -215,11 +214,13 @@ class Walker : public ClockedObject
         deviceRequestorId(999), system(p.system)
     {
         DPRINTF(GPUPTWalker, "Walker::Walker %p\n", this);
-        pte_buffer = false;
-        int num_sets = 64;
-        buffer.assign(num_sets, std::make_pair((Addr)0, (PageTableEntry)0));
-        for (int set = 0; set < num_sets; ++set) {
-            freeList.push_back(&buffer.at(set));
+        pte_buffer = p.enable_pte_buffer;
+        int buf_size = p.b_size;
+        pwcBuffer.assign(buf_size, std::make_pair((Addr)0, (PageTableEntry)0));
+        for (int buf_i = 0; buf_i < buf_size; ++buf_i) {
+            pwcFreeList.push_back(&pwcBuffer.at(buf_i));
+        if (pte_buffer)
+          DPRINTF(GPUPTWalker, "PWC enabled, size %d\n", pwcBuffer.size());
       }
     }
 };

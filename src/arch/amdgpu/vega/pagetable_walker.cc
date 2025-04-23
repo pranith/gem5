@@ -101,38 +101,37 @@ Walker::WalkerState::startFunctional(Addr base, Addr vaddr,
 }
 
 
-void Walker::insert(Addr paddr, PageTableEntry entry)
+void Walker::pwcInsert(Addr paddr, PageTableEntry entry)
 {
     paddr_pte_t *newEntry = nullptr;
-    if (!freeList.empty()) {
-        newEntry = freeList.front();
-        freeList.pop_front();
+    if (!pwcFreeList.empty()) {
+        newEntry = pwcFreeList.front();
+        pwcFreeList.pop_front();
     } else {
-        newEntry = entryList.back();
-        entryList.pop_back();
+        newEntry = pwcEntryList.back();
+        pwcEntryList.pop_back();
     }
     DPRINTF(GPUPTWalker, "Insert pte for paddr %#x. Current length: %d\n",
-            paddr, entryList.size());
+            paddr, pwcEntryList.size());
     *newEntry = std::make_pair(paddr, entry);
-    entryList.push_front(newEntry);
+    pwcEntryList.push_front(newEntry);
 }
-PageTableEntry* Walker::lookup(Addr paddr)
+PageTableEntry* Walker::pwcLookup(Addr paddr)
 {
-    auto entry = entryList.begin();
+    auto entry = pwcEntryList.begin();
 
-    for ( ; entry != entryList.end(); ++entry)
-    {
-        if ((*entry)->first == paddr)
-        {
-            entryList.push_front(*entry);
-            entryList.erase(entry);
-            entry = entryList.begin();
+    //search the buffer for paddr
+    for ( ; entry != pwcEntryList.end(); ++entry) {
+        //found in the buffer, update LRU list
+        if ((*entry)->first == paddr) {
+            pwcEntryList.push_front(*entry);
+            pwcEntryList.erase(entry);
+            entry = pwcEntryList.begin();
 
             break;
         }
     }
-    if (entry == entryList.end())
-    {
+    if (entry == pwcEntryList.end()) {
         DPRINTF(GPUPTWalker, "pte at paddr %#x not found in buffer.\n", paddr);
         return nullptr;
     }
@@ -424,7 +423,7 @@ bool Walker::sendTiming(WalkerState* sending_walker, PacketPtr pkt)
     auto walker_state = new WalkerSenderState(sending_walker);
     pkt->pushSenderState(walker_state);
 
-    PageTableEntry *entry = lookup(pkt->getAddr());
+    PageTableEntry *entry = pwcLookup(pkt->getAddr());
     if (entry != nullptr)
     {
         DPRINTF(GPUPTWalker, "PTE found in buffer, skipping timing request.");
@@ -464,8 +463,8 @@ Walker::recvTimingResp(PacketPtr pkt)
 
     DPRINTF(GPUPTWalker, "Got response for %#lx from walker %p -- %#lx\n",
             pkt->getAddr(), senderState->senderWalk, pkt->getLE<uint64_t>());
-    if (pte_buffer && lookup(pkt->getAddr()) == nullptr) //not found, push
-        insert(pkt->getAddr(), pkt->getLE<uint64_t>());
+    if (pte_buffer && pwcLookup(pkt->getAddr()) == nullptr) //not found, push
+        pwcInsert(pkt->getAddr(), pkt->getLE<uint64_t>());
 
     senderState->senderWalk->startWalk();
 
@@ -475,10 +474,10 @@ Walker::recvTimingResp(PacketPtr pkt)
 void
 Walker::invalidateBuffer()
 {
-    while (!entryList.empty()){
-        auto entry = entryList.front();
-        entryList.pop_front();
-        freeList.push_back(entry);
+    while (!pwcEntryList.empty()){
+        auto entry = pwcEntryList.front();
+        pwcEntryList.pop_front();
+        pwcFreeList.push_back(entry);
     }
 }
 
@@ -494,7 +493,7 @@ Walker::recvReqRetry()
     std::list<WalkerState *>::iterator iter;
     for (iter = currStates.begin(); iter != currStates.end(); ) {
         WalkerState * walkerState = *(iter);
-        iter++;
+        iter++;//increment before it becomes invalid
         if (walkerState->isRetrying()) {
             walkerState->retry();
         }
