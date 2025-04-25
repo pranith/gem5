@@ -41,8 +41,8 @@ class VegaPagetableWalker(ClockedObject):
     cxx_header = "arch/amdgpu/vega/pagetable_walker.hh"
     port = RequestPort("Port for the hardware table walker")
     system = Param.System(Parent.any, "system object")
-    b_size = Param.Int(64, "Page walk cache size")
-    enable_pte_buffer = Param.Bool(True, "Enable page walk cache")
+    page_walk_cache_size = Param.Int(64, "Page walk cache size")
+    enable_pwc = Param.Bool(True, "Enable page walk cache")
 
 
 class VegaGPUTLB(ClockedObject):

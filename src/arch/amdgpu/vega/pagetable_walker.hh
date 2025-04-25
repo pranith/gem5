@@ -177,7 +177,7 @@ class Walker : public ClockedObject
 
   protected:
     //enabling pte buffer
-    bool pte_buffer;
+    bool enable_pwc;
     void pwcInsert(Addr paddr, PageTableEntry entry);
     PageTableEntry* pwcLookup(Addr paddr);
     // The TLB we're supposed to load.
@@ -214,12 +214,12 @@ class Walker : public ClockedObject
         deviceRequestorId(999), system(p.system)
     {
         DPRINTF(GPUPTWalker, "Walker::Walker %p\n", this);
-        pte_buffer = p.enable_pte_buffer;
-        int buf_size = p.b_size;
+        enable_pwc = p.enable_pwc;
+        int buf_size = p.page_walk_cache_size;
         pwcBuffer.assign(buf_size, std::make_pair((Addr)0, (PageTableEntry)0));
         for (int buf_i = 0; buf_i < buf_size; ++buf_i) {
             pwcFreeList.push_back(&pwcBuffer.at(buf_i));
-        if (pte_buffer)
+        if (enable_pwc)
           DPRINTF(GPUPTWalker, "PWC enabled, size %d\n", pwcBuffer.size());
       }
     }

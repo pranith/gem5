@@ -116,6 +116,7 @@ void Walker::pwcInsert(Addr paddr, PageTableEntry entry)
     *newEntry = std::make_pair(paddr, entry);
     pwcEntryList.push_front(newEntry);
 }
+
 PageTableEntry* Walker::pwcLookup(Addr paddr)
 {
     auto entry = pwcEntryList.begin();
@@ -404,7 +405,7 @@ Walker::WalkerState::sendPackets()
     // If we're already waiting for the port to become available, just return.
     if (retrying)
         return;
-    auto addr = read->getAddr();
+    [[maybe_unused]] auto addr = read->getAddr();
     if (!walker->sendTiming(this, read)) {
         DPRINTF(GPUPTWalker, "Timing request for %#lx failed\n",
                 addr);
@@ -463,7 +464,7 @@ Walker::recvTimingResp(PacketPtr pkt)
 
     DPRINTF(GPUPTWalker, "Got response for %#lx from walker %p -- %#lx\n",
             pkt->getAddr(), senderState->senderWalk, pkt->getLE<uint64_t>());
-    if (pte_buffer && pwcLookup(pkt->getAddr()) == nullptr) //not found, push
+    if (enable_pwc && pwcLookup(pkt->getAddr()) == nullptr) //not found, push
         pwcInsert(pkt->getAddr(), pkt->getLE<uint64_t>());
 
     senderState->senderWalk->startWalk();
@@ -493,7 +494,9 @@ Walker::recvReqRetry()
     std::list<WalkerState *>::iterator iter;
     for (iter = currStates.begin(); iter != currStates.end(); ) {
         WalkerState * walkerState = *(iter);
-        iter++;//increment before it becomes invalid
+        // retry() might finish the walk, thus the current iterator
+        // might be invalid after retry(). Need to update iter now
+        iter++;
         if (walkerState->isRetrying()) {
             walkerState->retry();
         }
