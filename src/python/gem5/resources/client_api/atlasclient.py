@@ -63,9 +63,6 @@ class AtlasClientHttpJsonRequestError(Exception):
         error_str = (
             f"Http Request to Atlas MongoDB failed.\n"
             f"Atlas URL: {client.url}\n"
-            f"Auth URL: {client.authUrl}\n"
-            f"Database: {client.database}\n"
-            f"Collection: {client.collection}\n\n"
             f"Data sent:\n\n{json.dumps(data,indent=4)}\n\n"
         )
 
@@ -85,26 +82,13 @@ class AtlasClient(AbstractClient):
         """
         self.apiKey = config["apiKey"]
         self.url = config["url"]
-        self.collection = config["collection"]
-        self.database = config["database"]
-        self.dataSource = config["dataSource"]
-        self.authUrl = config["authUrl"]
-
-    def get_token(self):
-        return self._atlas_http_json_req(
-            self.authUrl,
-            data_json={"key": self.apiKey},
-            headers={"Content-Type": "application/json"},
-            purpose_of_request="Get Access Token with API key",
-        )["access_token"]
 
     def _atlas_http_json_req(
         self,
         url: str,
-        data_json: Dict[str, Any],
-        headers: Dict[str, str],
+        data_json: List[Dict[str, str]],
         purpose_of_request: Optional[str],
-        max_failed_attempts: int = 4,
+        max_failed_attempts: int = 2,
         reattempt_pause_base: int = 2,
     ) -> Dict[str, Any]:
         """Sends a JSON object over HTTP to a given Atlas MongoDB server and
@@ -125,12 +109,19 @@ class AtlasClient(AbstractClient):
 
         **Warning**: This function assumes a JSON response.
         """
-        data = json.dumps(data_json).encode("utf-8")
 
+        for resource in data_json:
+            params = parse.urlencode(resource)
+            url += ("&" if parse.urlparse(url).query else "?") + params
+
+        print("final url:", url)
+        # TO enable after enabling api key in azure
+        # headers = {
+        #     "x-functions-key": "MySecretFunctionKey"
+        # }
         req = request.Request(
             url,
-            data=data,
-            headers=headers,
+            # headers=headers
         )
 
         for attempt in itertools.count(start=1):
@@ -148,7 +139,7 @@ class AtlasClient(AbstractClient):
                 warn(
                     f"Attempt {attempt} of Atlas HTTP Request failed.\n"
                     f"Purpose of Request: {purpose_of_request}.\n\n"
-                    f"Failed with Exception:\n{e}\n\n"
+                    f"Failed with Exception:\n{e.code}\n\n"
                     f"Retrying after {pause} seconds..."
                 )
                 time.sleep(pause)
@@ -159,12 +150,12 @@ class AtlasClient(AbstractClient):
         self,
         client_queries: List[ClientQuery],
     ) -> Dict[str, Any]:
-        url = f"{self.url}/action/find"
-        data = {
-            "dataSource": self.dataSource,
-            "collection": self.collection,
-            "database": self.database,
-        }
+        url = self.url
+
+        if len(client_queries) > 1:
+            url += "/find-resources-in-batch"
+        else:
+            url += "/find-resource-by-id"
 
         search_conditions = []
         for resource in client_queries:
@@ -178,22 +169,11 @@ class AtlasClient(AbstractClient):
                 condition["resource_version"] = resource.get_resource_version()
 
             search_conditions.append(condition)
-
-        filter = {"$or": search_conditions}
-        data["filter"] = filter
-
-        headers = {
-            "Authorization": f"Bearer {self.get_token()}",
-            "Content-Type": "application/json",
-        }
-
         resources = self._atlas_http_json_req(
             url,
-            data_json=data,
-            headers=headers,
+            data_json=search_conditions,
             purpose_of_request="Get Resources",
-        )["documents"]
-
+        )
         resources_by_id = {}
         for resource in resources:
             if resource["id"] in resources_by_id.keys():
