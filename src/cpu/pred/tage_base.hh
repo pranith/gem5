@@ -139,7 +139,6 @@ class TAGEBase : public SimObject
         const bool condBranch;
 
         int pathHist;
-        int ptGhist;
         int hitBank;
         int hitBankIndex;
         int altBank;
@@ -509,11 +508,7 @@ class TAGEBase : public SimObject
 
         // Speculative branch direction
         // history (circular buffer)
-        // @TODO Convert to std::vector<bool>
-        uint8_t *globalHistory;
-
-        // Pointer to most recent branch outcome
-        uint8_t* gHist;
+        std::vector<uint8_t> globalHist;
 
         // Index to most recent branch outcome
         int ptGhist;

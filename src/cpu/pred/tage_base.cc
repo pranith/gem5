@@ -111,9 +111,7 @@ TAGEBase::init()
     for (auto& history : threadHistory) {
         history.pathHist = 0;
         history.nonSpecPathHist = 0;
-        history.globalHistory = new uint8_t[histBufferSize];
-        history.gHist = history.globalHistory;
-        memset(history.gHist, 0, histBufferSize);
+        history.globalHist.resize(histBufferSize, 0);
         history.ptGhist = 0;
     }
 
@@ -310,32 +308,32 @@ TAGEBase::updateGHist(ThreadID tid, uint64_t bv, uint8_t n)
     ThreadHistory& tHist = threadHistory[tid];
     if (tHist.ptGhist < n) {
         DPRINTF(Tage, "Rolling over the histories\n");
-         // Copy beginning of globalHistoryBuffer to end, such that
-         // the last maxHist outcomes are still reachable
-         // through globalHistory[0 .. maxHist - 1].
+        // Copy beginning of globalHistoryBuffer to end, such that
+        // the last maxHist outcomes are still reachable
+        // through globalHist[0 .. maxHist - 1].
         for (int i = 0; i < maxHist; i++) {
-            tHist.globalHistory[histBufferSize - maxHist + i]
-                = tHist.globalHistory[tHist.ptGhist + i];
+            tHist.globalHist[histBufferSize - maxHist + i] =
+                tHist.globalHist[tHist.ptGhist + i];
         }
 
         tHist.ptGhist = histBufferSize - maxHist;
-        tHist.gHist = &tHist.globalHistory[tHist.ptGhist];
     }
 
     // Update the global history
     for (int i = 0; i < n; i++) {
-
         // Shift the next bit of the bit vector into the history
+        // Use `at` to check for out-of-bounds access.
         tHist.ptGhist--;
-        tHist.gHist--;
-        *(tHist.gHist) = (bv & 1) ? 1 : 0;
+        tHist.globalHist.at(tHist.ptGhist) = (bv & 1) ? 1 : 0;
         bv >>= 1;
 
         // Update the folded histories with the new bit.
+        uint8_t *gh_ptr = &(tHist.globalHist[tHist.ptGhist]);
+
         for (int i = 1; i <= nHistoryTables; i++) {
-            tHist.computeIndices[i].update(tHist.gHist);
-            tHist.computeTags[0][i].update(tHist.gHist);
-            tHist.computeTags[1][i].update(tHist.gHist);
+            tHist.computeIndices[i].update(gh_ptr);
+            tHist.computeTags[0][i].update(gh_ptr);
+            tHist.computeTags[1][i].update(gh_ptr);
         }
     }
 }
@@ -652,18 +650,17 @@ TAGEBase::updateHistories(ThreadID tid, Addr branch_pc, bool speculative,
                                branch_pc, target, bi);
     bi->modified = true;
 
-    DPRINTF(Tage, "Updating global histories with branch:%lx; taken?:%d, "
-            "path Hist: %x; pointer:%d\n", branch_pc, taken,
-            threadHistory[tid].pathHist, threadHistory[tid].ptGhist);
-    assert(threadHistory[tid].gHist ==
-            &threadHistory[tid].globalHistory[threadHistory[tid].ptGhist]);
+    DPRINTF(Tage,
+            "Updating global histories with branch:%lx; taken?:%d, "
+            "path Hist: %x; pointer:%d\n",
+            branch_pc, taken, threadHistory[tid].pathHist,
+            threadHistory[tid].ptGhist);
 }
 
 void
 TAGEBase::recordHistState(ThreadID tid, BranchInfo* bi)
 {
-    ThreadHistory& tHist = threadHistory[tid];
-    bi->ptGhist = tHist.ptGhist;
+    ThreadHistory &tHist = threadHistory[tid];
     bi->pathHist = tHist.pathHist;
 
     for (int i = 1; i <= nHistoryTables; i++) {
@@ -690,18 +687,18 @@ TAGEBase::restoreHistState(ThreadID tid, BranchInfo* bi)
         return;
 
     //  RESTORE HISTORIES
-    // Shift out the inserted bits
-    // from the folded history and the global history vector
+    // Shift out the inserted bits from the folded history
+    // and the global history vector
     for (int n = 0; n < bi->nGhist; n++) {
+        uint8_t *gh_ptr = &(tHist.globalHist[tHist.ptGhist]);
 
         // First revert the folded history
         for (int i = 1; i <= nHistoryTables; i++) {
-            tHist.computeIndices[i].restore(tHist.gHist);
-            tHist.computeTags[0][i].restore(tHist.gHist);
-            tHist.computeTags[1][i].restore(tHist.gHist);
+            tHist.computeIndices[i].restore(gh_ptr);
+            tHist.computeTags[0][i].restore(gh_ptr);
+            tHist.computeTags[1][i].restore(gh_ptr);
         }
         tHist.ptGhist++;
-        tHist.gHist++;
     }
     bi->nGhist = 0;
     bi->modified = false;
@@ -785,10 +782,8 @@ TAGEBase::getGHR(ThreadID tid) const
     unsigned val = 0;
     int gh_ptr = threadHistory[tid].ptGhist;
     for (unsigned i = 0; i < 16; i++) {
-        // Make sure we don't go out of bounds
-        assert(&(threadHistory[tid].globalHistory[gh_ptr + i]) <
-               threadHistory[tid].globalHistory + histBufferSize);
-        val |= ((threadHistory[tid].globalHistory[gh_ptr + i] & 0x1) << i);
+        // Make sure we don't go out of bounds with `at`.
+        val |= ((threadHistory[tid].globalHist.at(gh_ptr + i) & 0x1) << i);
     }
     return val;
 }
