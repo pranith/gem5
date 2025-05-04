@@ -223,44 +223,6 @@ jobs:
                   path: tests/testing-results
                   retention-days: 30
 
-    pyunit:
-        runs-on: [self-hosted, linux, x64]
-        if: github.event.pull_request.draft == false
-        container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
-        needs: [pre-commit, testlib-quick-gem5-builds]
-        timeout-minutes: 30
-        steps:
-
-            # Checkout the repository then download the builds.
-            - uses: actions/checkout@v4
-            - uses: actions/download-artifact@v4
-              with:
-                  pattern: ci-tests-${{ github.run_number }}-testlib-quick-all-gem5-builds*
-                  merge-multiple: true
-
-            # Check that the gem5 binaries exist and are executable.
-            - name: Chmod gem5.{opt,debug,fast} to be executable
-              run: |
-                  find . -name "gem5.opt" -exec chmod u+x {} \;
-                  find . -name "gem5.debug" -exec chmod u+x {} \;
-                  find . -name "gem5.fast" -exec chmod u+x {} \;
-
-            # Run the pyunit tests.
-            # Note: these are all quick tests.
-            - name: Run The pyunit tests
-              id: run-tests
-              working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run --skip-build -vv pyunit
-
-            # Upload the tests/testing-results directory as an artifact.
-            - name: Upload pyunit test results
-              if: success() || failure()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: ci-tests-run-${{ github.run_number }}-attempt-${{ github.run_attempt }}-pyunit-status-${{ steps.run-tests.outcome }}-output
-                  path: tests/testing-results
-                  retention-days: 30
-
     gpu-tests:
         runs-on: [self-hosted, linux, x64]
         container: ghcr.io/gem5/gcn-gpu:latest

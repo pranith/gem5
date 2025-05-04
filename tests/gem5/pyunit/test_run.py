@@ -1,4 +1,4 @@
-# Copyright (c) 2021 The Regents of the University of California
+# Copyright (c) 2021-2025 The Regents of the University of California
 # All Rights Reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -24,24 +24,23 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
 
-from testlib.configuration import constants
-
-from gem5.suite import *
+from testlib import (
+    config,
+    constants,
+    gem5_verify_config,
+    joinpath,
+)
 
 """
-As the filename begins with `test_`, it will be added to the TestLib testsuite
-when `../main.py` is run.
-
 The purpose of this file is to ensure the pyunit tests are executed as part
 of a typical TestLib execution. These have been added as part of the "quick"
-tests and will run with NULL/gem5.*
+tests and will run with ALL/gem5.
 """
 
 gem5_verify_config(
     name="pyunit-tests",
-    config=os.path.join(os.getcwd(), os.pardir, "run_pyunit.py"),
+    config=joinpath(config.base_dir, "tests", "run_pyunit.py"),
     verifiers=(),
     config_args=[],
     valid_isas=(constants.all_compiled_tag,),
