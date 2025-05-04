@@ -18,16 +18,47 @@ jobs:
               id: date
               run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
+    get-testlib-very-long-dirs:
+        name: Obtain target directories for Testlib very-long tests
+        runs-on: [self-hosted, linux, x64]
+        container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - name: Get directories for testlib-very-long
+              working-directory: ${{ github.workspace }}/tests
+              id: dir-matrix
+              run: |
+                  unset PREV
+                  echo "test-dirs-matrix=$(\
+                    ./main.py list gem5 \
+                    --suites \
+                    --length very-long \
+                    --exclude-tags gcn_gpu | \
+                    grep "$SUITEUID:" | \
+                    cut -d: -f2 | \
+                    cut -d/ -f 2- | \
+                    xargs dirname | \
+                    sort -u  | \
+                    while read x; do \
+                      if [ -z "${PREV}" ] || [ "$x" != "${PREV}/*" ]; then \
+                        PREV=$x; \
+                        echo $x; \
+                      fi; \
+                    done  | \
+                    jq -ncR '[inputs]'\
+                  )" >>$GITHUB_ENV
+
     # start running the very-long tests
     testlib-very-long-tests:
         strategy:
             fail-fast: false
             matrix:
-                test-type: [gem5_library_example_tests, gem5_resources, stdlib, parsec_benchmarks, x86_boot_tests]
+                test-type: ${{ fromJson(env.testlib-very-long-dirs) }}
         runs-on: [self-hosted, linux, x64]
         container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
         timeout-minutes: 4320 # 3 days
-        needs: get-date
+        needs: [get-date, get-testlib-very-long-dirs]
         steps:
             - name: Clean runner
               run: rm -rf ./* || true rm -rf ./.??* || true rm -rf ~/.cache || true
