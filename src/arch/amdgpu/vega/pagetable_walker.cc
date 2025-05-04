@@ -103,25 +103,26 @@ Walker::WalkerState::startFunctional(Addr base, Addr vaddr,
 
 void Walker::pwcInsert(Addr paddr, PageTableEntry entry)
 {
-    paddr_pte_t *newEntry = nullptr;
+    paddr_pte_t *new_entry = nullptr;
+
     if (!pwcFreeList.empty()) {
-        newEntry = pwcFreeList.front();
+        new_entry = pwcFreeList.front();
         pwcFreeList.pop_front();
     } else {
-        newEntry = pwcEntryList.back();
+        new_entry = pwcEntryList.back();
         pwcEntryList.pop_back();
     }
     DPRINTF(GPUPTWalker, "Insert pte for paddr %#x. Current length: %d\n",
             paddr, pwcEntryList.size());
-    *newEntry = std::make_pair(paddr, entry);
-    pwcEntryList.push_front(newEntry);
+    *new_entry = std::make_pair(paddr, entry);
+    pwcEntryList.push_front(new_entry);
 }
 
 PageTableEntry* Walker::pwcLookup(Addr paddr)
 {
     auto entry = pwcEntryList.begin();
 
-    //search the buffer for paddr
+    //search the cache and update LRU
     for ( ; entry != pwcEntryList.end(); ++entry) {
         //found in the buffer, update LRU list
         if ((*entry)->first == paddr) {
@@ -412,7 +413,7 @@ Walker::WalkerState::sendPackets()
 
         retrying = true;
     }
-    //No lines after sendTiming because the state might be freed
+    // No lines after sendTiming because the state might be freed
     // else {
     //     DPRINTF(GPUPTWalker, "Timing request for %#lx successful\n",
     //             addr);
@@ -424,9 +425,9 @@ bool Walker::sendTiming(WalkerState* sending_walker, PacketPtr pkt)
     auto walker_state = new WalkerSenderState(sending_walker);
     pkt->pushSenderState(walker_state);
 
+    // If hit, send the response pkt immediately.
     PageTableEntry *entry = pwcLookup(pkt->getAddr());
-    if (entry != nullptr)
-    {
+    if (entry != nullptr) {
         DPRINTF(GPUPTWalker, "PTE found in buffer, skipping timing request.");
         pkt->setLE<uint64_t>(*entry);
 
@@ -464,8 +465,10 @@ Walker::recvTimingResp(PacketPtr pkt)
 
     DPRINTF(GPUPTWalker, "Got response for %#lx from walker %p -- %#lx\n",
             pkt->getAddr(), senderState->senderWalk, pkt->getLE<uint64_t>());
-    if (enable_pwc && pwcLookup(pkt->getAddr()) == nullptr) //not found, push
+    // Cache miss, add the entry to cache
+    if (enable_pwc && pwcLookup(pkt->getAddr()) == nullptr) {
         pwcInsert(pkt->getAddr(), pkt->getLE<uint64_t>());
+    }
 
     senderState->senderWalk->startWalk();
 
@@ -473,7 +476,7 @@ Walker::recvTimingResp(PacketPtr pkt)
 }
 
 void
-Walker::invalidateBuffer()
+Walker::invalidatePWC()
 {
     while (!pwcEntryList.empty()){
         auto entry = pwcEntryList.front();

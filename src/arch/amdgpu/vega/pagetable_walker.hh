@@ -54,14 +54,14 @@ namespace VegaISA
 class Walker : public ClockedObject
 {
   protected:
-  //PTE indexed by paddr
-  typedef std::pair<Addr, PageTableEntry> paddr_pte_t;
-  //the PTE buffer
-  std::vector<paddr_pte_t> pwcBuffer;
-  //List of valid entries in the buffer, LRU ordered
-  std::list<paddr_pte_t*> pwcEntryList;
-  //List of free entries in the buffer
-  std::list<paddr_pte_t*> pwcFreeList;
+    //PTE indexed by paddr
+    typedef std::pair<Addr, PageTableEntry> paddr_pte_t;
+    //the PTE buffer
+    std::vector<paddr_pte_t> pwcBuffer;
+    //List of valid entries in the buffer, LRU ordered
+    std::list<paddr_pte_t*> pwcEntryList;
+    //List of free entries in the buffer
+    std::list<paddr_pte_t*> pwcFreeList;
 
     // Port for accessing memory
     class WalkerPort : public RequestPort
@@ -173,7 +173,7 @@ class Walker : public ClockedObject
     void setDevRequestor(RequestorID mid) { deviceRequestorId = mid; }
     RequestorID getDevRequestor() const { return deviceRequestorId; }
 
-    void invalidateBuffer();
+    void invalidatePWC();
 
   protected:
     //enabling pte buffer
@@ -219,8 +219,9 @@ class Walker : public ClockedObject
         pwcBuffer.assign(buf_size, std::make_pair((Addr)0, (PageTableEntry)0));
         for (int buf_i = 0; buf_i < buf_size; ++buf_i) {
             pwcFreeList.push_back(&pwcBuffer.at(buf_i));
-        if (enable_pwc)
+        if (enable_pwc) {
           DPRINTF(GPUPTWalker, "PWC enabled, size %d\n", pwcBuffer.size());
+        }
       }
     }
 };
