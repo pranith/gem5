@@ -30,6 +30,11 @@
 from m5.defines import buildEnv
 from m5.objects.AMDGPU import AMDGPUDevice
 from m5.objects.ClockedObject import ClockedObject
+from m5.objects.IndexingPolicies import (
+    BaseIndexingPolicy,
+    SetAssociative,
+)
+from m5.objects.ReplacementPolicies import LRURP
 from m5.params import *
 from m5.proxy import *
 from m5.SimObject import SimObject
@@ -41,7 +46,17 @@ class VegaPagetableWalker(ClockedObject):
     cxx_header = "arch/amdgpu/vega/pagetable_walker.hh"
     port = RequestPort("Port for the hardware table walker")
     system = Param.System(Parent.any, "system object")
-    page_walk_cache_size = Param.Int(64, "Page walk cache size")
+
+    page_walk_cache_entires = Param.Int(64, "Page walk cache entries")
+    pwc_replacement_policy = Param.BaseReplacementPolicy(
+        LRURP(), "Replacement policy of the PWC"
+    )
+    pwc_indexing_policy = Param.SetAssociative(
+        SetAssociative(
+            assoc=Parent.page_walk_cache_entires, size="512", entry_size=8
+        ),
+        "Indexing policy of the PWC, should be SetAssociative.",
+    )
     enable_pwc = Param.Bool(True, "Enable page walk cache")
 
 

@@ -100,47 +100,6 @@ Walker::WalkerState::startFunctional(Addr base, Addr vaddr,
     return fault;
 }
 
-
-void Walker::pwcInsert(Addr paddr, PageTableEntry entry)
-{
-    paddr_pte_t *new_entry = nullptr;
-
-    if (!pwcFreeList.empty()) {
-        new_entry = pwcFreeList.front();
-        pwcFreeList.pop_front();
-    } else {
-        new_entry = pwcEntryList.back();
-        pwcEntryList.pop_back();
-    }
-    DPRINTF(GPUPTWalker, "Insert pte for paddr %#x. Current length: %d\n",
-            paddr, pwcEntryList.size());
-    *new_entry = std::make_pair(paddr, entry);
-    pwcEntryList.push_front(new_entry);
-}
-
-PageTableEntry* Walker::pwcLookup(Addr paddr)
-{
-    auto entry = pwcEntryList.begin();
-
-    //search the cache and update LRU
-    for ( ; entry != pwcEntryList.end(); ++entry) {
-        //found in the buffer, update LRU list
-        if ((*entry)->first == paddr) {
-            pwcEntryList.push_front(*entry);
-            pwcEntryList.erase(entry);
-            entry = pwcEntryList.begin();
-
-            break;
-        }
-    }
-    if (entry == pwcEntryList.end()) {
-        DPRINTF(GPUPTWalker, "pte at paddr %#x not found in buffer.\n", paddr);
-        return nullptr;
-    }
-    DPRINTF(GPUPTWalker, "pte at paddr %#x found in buffer.\n", paddr);
-    return &(*entry)->second;
-}
-
 /*
  * Timing mode methods
  */
@@ -426,10 +385,11 @@ bool Walker::sendTiming(WalkerState* sending_walker, PacketPtr pkt)
     pkt->pushSenderState(walker_state);
 
     // If hit, send the response pkt immediately.
-    PageTableEntry *entry = pwcLookup(pkt->getAddr());
+    // PageTableEntry *entry = pwcLookup(pkt->getAddr());
+    PWCEntry *entry = pwc.findEntry(pkt->getAddr());
     if (entry != nullptr) {
         DPRINTF(GPUPTWalker, "PTE found in buffer, skipping timing request.");
-        pkt->setLE<uint64_t>(*entry);
+        pkt->setLE<uint64_t>((pwc.accessEntry(pkt->getAddr()))->pteEntry);
 
         recvTimingResp(pkt);
 
@@ -465,9 +425,9 @@ Walker::recvTimingResp(PacketPtr pkt)
 
     DPRINTF(GPUPTWalker, "Got response for %#lx from walker %p -- %#lx\n",
             pkt->getAddr(), senderState->senderWalk, pkt->getLE<uint64_t>());
-    // Cache miss, add the entry to cache
-    if (enable_pwc && pwcLookup(pkt->getAddr()) == nullptr) {
-        pwcInsert(pkt->getAddr(), pkt->getLE<uint64_t>());
+    // on PWC miss, add the entry to PWC
+    if (enable_pwc && pwc.findEntry(pkt->getAddr()) == nullptr) {
+        pwc.insert(pkt->getAddr(), pkt->getLE<uint64_t>());
     }
 
     senderState->senderWalk->startWalk();
@@ -478,10 +438,10 @@ Walker::recvTimingResp(PacketPtr pkt)
 void
 Walker::invalidatePWC()
 {
-    while (!pwcEntryList.empty()){
-        auto entry = pwcEntryList.front();
-        pwcEntryList.pop_front();
-        pwcFreeList.push_back(entry);
+    for (auto &i : pwc) {
+        if (i.valid) {
+            pwc.invalidate(&i);
+        }
     }
 }
 

@@ -36,8 +36,11 @@
 
 #include "arch/amdgpu/vega/pagetable.hh"
 #include "arch/amdgpu/vega/tlb.hh"
+#include "base/cache/associative_cache.hh"
 #include "base/types.hh"
 #include "debug/GPUPTWalker.hh"
+#include "mem/cache/replacement_policies/replaceable_entry.hh"
+#include "mem/cache/tags/indexing_policies/set_associative.hh"
 #include "mem/packet.hh"
 #include "params/VegaPagetableWalker.hh"
 #include "sim/clocked_object.hh"
@@ -54,14 +57,64 @@ namespace VegaISA
 class Walker : public ClockedObject
 {
   protected:
-    //PTE indexed by paddr
-    typedef std::pair<Addr, PageTableEntry> paddr_pte_t;
-    //the PTE buffer
-    std::vector<paddr_pte_t> pwcBuffer;
-    //List of valid entries in the buffer, LRU ordered
-    std::list<paddr_pte_t*> pwcEntryList;
-    //List of free entries in the buffer
-    std::list<paddr_pte_t*> pwcFreeList;
+
+    // Page walk cache entry
+    struct PWCEntry : public ReplaceableEntry
+    {
+      public:
+        using IndexingPolicy = SetAssociative;
+        using KeyType = Addr;
+
+        PageTableEntry pteEntry;
+        Addr paddr;
+
+        bool valid;
+
+        void
+        invalidate()
+        {
+          valid = false;
+        }
+
+        void insert(const KeyType &key) {}
+        bool isValid() const { return valid; }
+        bool
+        match(const KeyType &key) const
+        {
+          return valid && paddr == key;
+        }
+    };
+
+    // Page walk cache
+    class PageWalkCache : public AssociativeCache<PWCEntry>
+    {
+      public:
+        using AssociativeCache<PWCEntry>::AssociativeCache;
+        using AssociativeCache<PWCEntry>::accessEntry;
+
+        PWCEntry* accessEntry(const KeyType &key) override
+        {
+          auto entry = findEntry(key);
+          accessEntry(entry);
+          return entry;
+        }
+        PWCEntry* findEntry(const KeyType &key) const override
+        {
+          for (auto candidate : indexingPolicy->getPossibleEntries(key)) {
+            auto entry = static_cast<PWCEntry*>(candidate);
+            if (entry->match(key))
+              return entry;
+          }
+          return nullptr;
+        }
+        void insert(const KeyType &key, const PageTableEntry &pte_entry) {
+          PWCEntry *vict = findVictim(key);
+          vict->pteEntry = pte_entry;
+          vict->paddr = key;
+          vict->valid = true;
+          insertEntry(key, vict);
+        }
+    } pwc;
 
     // Port for accessing memory
     class WalkerPort : public RequestPort
@@ -176,10 +229,7 @@ class Walker : public ClockedObject
     void invalidatePWC();
 
   protected:
-    //enabling pte buffer
     bool enable_pwc;
-    void pwcInsert(Addr paddr, PageTableEntry entry);
-    PageTableEntry* pwcLookup(Addr paddr);
     // The TLB we're supposed to load.
     GpuTLB *tlb;
     RequestorID requestorId;
@@ -208,21 +258,16 @@ class Walker : public ClockedObject
 
     Walker(const VegaPagetableWalkerParams &p)
       : ClockedObject(p),
+        pwc(name()+".pwc", p.page_walk_cache_entires,
+            p.page_walk_cache_entires, p.pwc_replacement_policy,
+            p.pwc_indexing_policy),
         port(name() + ".port", this),
-        funcState(this, nullptr, true), tlb(nullptr),
+        funcState(this, nullptr, true),
+        enable_pwc(p.enable_pwc), tlb(nullptr),
         requestorId(p.system->getRequestorId(this)),
         deviceRequestorId(999), system(p.system)
     {
-        DPRINTF(GPUPTWalker, "Walker::Walker %p\n", this);
-        enable_pwc = p.enable_pwc;
-        int buf_size = p.page_walk_cache_size;
-        pwcBuffer.assign(buf_size, std::make_pair((Addr)0, (PageTableEntry)0));
-        for (int buf_i = 0; buf_i < buf_size; ++buf_i) {
-            pwcFreeList.push_back(&pwcBuffer.at(buf_i));
-        if (enable_pwc) {
-          DPRINTF(GPUPTWalker, "PWC enabled, size %d\n", pwcBuffer.size());
-        }
-      }
+      DPRINTF(GPUPTWalker, "Walker::Walker %p\n", this);
     }
 };
 
