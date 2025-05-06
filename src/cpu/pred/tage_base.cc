@@ -591,7 +591,8 @@ TAGEBase::updatePathAndGlobalHistory(ThreadID tid, int brtype, bool taken,
     ThreadHistory& tHist = threadHistory[tid];
 
     // Update path history
-    tHist.pathHist = calcNewPathHist(tid, branch_pc, tHist.pathHist);
+    tHist.pathHist =
+        calcNewPathHist(tid, branch_pc, tHist.pathHist, taken, brtype, target);
 
     // For normal direction history update the history by
     // whether the branch was taken or not.
@@ -610,8 +611,9 @@ TAGEBase::updateHistories(ThreadID tid, Addr branch_pc, bool speculative,
     if (speculative != speculativeHistUpdate) {
         if (!speculative) {
             // Save the speculative path history as non-speculative
-            threadHistory[tid].nonSpecPathHist
-                            = calcNewPathHist(tid, branch_pc, bi->pathHist);
+            threadHistory[tid].nonSpecPathHist =
+                calcNewPathHist(tid, branch_pc, bi->pathHist, taken,
+                                branchTypeExtra(inst), target);
         }
         return;
     }
@@ -705,7 +707,8 @@ TAGEBase::restoreHistState(ThreadID tid, BranchInfo* bi)
 }
 
 int
-TAGEBase::calcNewPathHist(ThreadID tid, Addr pc, int cur_phist) const
+TAGEBase::calcNewPathHist(ThreadID tid, Addr pc, int cur_phist, bool taken,
+                          int brtype, Addr target) const
 {
     int pathbit = ((pc >> instShiftAmt) & 1);
     cur_phist = (cur_phist << 1) + pathbit;

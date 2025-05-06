@@ -475,7 +475,8 @@ class TAGEBase : public SimObject
     int8_t getCtr(int hitBank, int hitBankIndex) const;
     unsigned getTageCtrBits() const;
     int getPathHist(ThreadID tid, bool speculative=true) const;
-    int calcNewPathHist(ThreadID tid, Addr pc, int cur_phist) const;
+    virtual int calcNewPathHist(ThreadID tid, Addr pc, int cur_phist,
+                                bool taken, int brtype, Addr target) const;
     bool isSpeculativeUpdateEnabled() const;
     size_t getSizeInBits() const;
 

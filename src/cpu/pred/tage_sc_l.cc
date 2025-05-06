@@ -257,32 +257,48 @@ TAGE_SC_L_TAGE::updatePathAndGlobalHistory(ThreadID tid, int brtype,
                                            TAGEBase::BranchInfo* bi)
 {
     ThreadHistory& tHist = threadHistory[tid];
-    // TAGE update
+
+    // Update path history
+    tHist.pathHist =
+        calcNewPathHist(tid, branch_pc, tHist.pathHist, taken, brtype, target);
+
     Addr shifted_pc = branch_pc >> instShiftAmt;
-    int tmp = ((shifted_pc ^ (shifted_pc >> 2))) ^ taken;
+    Addr shifted_target = target >> instShiftAmt;
+    bi->ghist = ((shifted_pc ^ (shifted_pc >> 2))) ^ taken;
+    if ((brtype == 3) & taken) {
+        bi->ghist = (bi->ghist ^ (shifted_target >> 2));
+    }
+    // some branch types use 3 bits in global history, the others just 2
+    bi->nGhist = (brtype == 2) ? 3 : 2;
+
+    // Update the global history
+    updateGHist(tid, bi->ghist, bi->nGhist);
+}
+
+int
+TAGE_SC_L_TAGE::calcNewPathHist(ThreadID tid, Addr pc, int cur_phist,
+                                bool taken, int brtype, Addr target) const
+{
+    Addr shifted_pc = pc >> instShiftAmt;
+    Addr shifted_target = target >> instShiftAmt;
     int path = shifted_pc ^ (shifted_pc >> 2) ^ (shifted_pc >> 4);
     if ((brtype == 3) & taken) {
-         tmp = (tmp ^ (target >> 2));
-         path = path ^ (target >> 2) ^ (target >> 4);
+        path = path ^ (shifted_target >> 2) ^ (shifted_target >> 4);
     }
 
     // some branch types use 3 bits in global history, the others just 2
     int maxt = (brtype == 2) ? 3 : 2;
 
     for (int t = 0; t < maxt; t++) {
-        int pathbit = (path & 127);
+        int pathbits = (path & 127);
         path >>= 1;
-        tHist.pathHist = (tHist.pathHist << 1) ^ pathbit;
+        cur_phist = (cur_phist << 1) ^ pathbits;
         if (truncatePathHist) {
             // The 8KB implementation does not do this truncation
-            tHist.pathHist = (tHist.pathHist & ((1ULL << pathHistBits) - 1));
+            cur_phist = (cur_phist & ((1ULL << pathHistBits) - 1));
         }
     }
-    // Record the update to be able to squash it later
-    bi->ghist = tmp;
-    bi->nGhist = maxt;
-    updateGHist(tid, tmp, maxt);
-    bi->modified = true;
+    return cur_phist;
 }
 
 void
