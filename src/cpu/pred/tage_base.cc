@@ -48,30 +48,30 @@ namespace gem5
 
 namespace branch_prediction
 {
-
 TAGEBase::TAGEBase(const TAGEBaseParams &p)
-   : SimObject(p),
-     logRatioBiModalHystEntries(p.logRatioBiModalHystEntries),
-     nHistoryTables(p.nHistoryTables),
-     tagTableCounterBits(p.tagTableCounterBits),
-     tagTableUBits(p.tagTableUBits),
-     histBufferSize(p.histBufferSize),
-     minHist(p.minHist),
-     maxHist(p.maxHist),
-     pathHistBits(p.pathHistBits),
-     tagTableTagWidths(p.tagTableTagWidths),
-     logTagTableSizes(p.logTagTableSizes),
-     threadHistory(p.numThreads),
-     logUResetPeriod(p.logUResetPeriod),
-     initialTCounterValue(p.initialTCounterValue),
-     numUseAltOnNa(p.numUseAltOnNa),
-     useAltOnNaBits(p.useAltOnNaBits),
-     maxNumAlloc(p.maxNumAlloc),
-     noSkip(p.noSkip),
-     speculativeHistUpdate(p.speculativeHistUpdate),
-     instShiftAmt(p.instShiftAmt),
-     initialized(false),
-     stats(this, nHistoryTables)
+    : SimObject(p),
+      logRatioBiModalHystEntries(p.logRatioBiModalHystEntries),
+      nHistoryTables(p.nHistoryTables),
+      tagTableCounterBits(p.tagTableCounterBits),
+      tagTableUBits(p.tagTableUBits),
+      histBufferSize(p.histBufferSize),
+      minHist(p.minHist),
+      maxHist(p.maxHist),
+      pathHistBits(p.pathHistBits),
+      tagTableTagWidths(p.tagTableTagWidths),
+      logTagTableSizes(p.logTagTableSizes),
+      threadHistory(p.numThreads),
+      logUResetPeriod(p.logUResetPeriod),
+      initialTCounterValue(p.initialTCounterValue),
+      numUseAltOnNa(p.numUseAltOnNa),
+      useAltOnNaBits(p.useAltOnNaBits),
+      maxNumAlloc(p.maxNumAlloc),
+      takenOnlyHistory(p.takenOnlyHistory),
+      noSkip(p.noSkip),
+      speculativeHistUpdate(p.speculativeHistUpdate),
+      instShiftAmt(p.instShiftAmt),
+      initialized(false),
+      stats(this, nHistoryTables)
 {
     if (noSkip.empty()) {
         // Set all the table to enabled by default
@@ -594,10 +594,26 @@ TAGEBase::updatePathAndGlobalHistory(ThreadID tid, int brtype, bool taken,
     tHist.pathHist =
         calcNewPathHist(tid, branch_pc, tHist.pathHist, taken, brtype, target);
 
-    // For normal direction history update the history by
-    // whether the branch was taken or not.
-    bi->ghist = taken ? 1 : 0;
-    bi->nGhist = 1;
+    if (takenOnlyHistory) {
+        // Taken-only history is implemented after the paper:
+        // https://ieeexplore.ieee.org/document/9246215
+        //
+        // For taken-only history two bits of a hash of pc and its target
+        // is shifted into the global history in case the branch was taken.
+        // For not-taken branches no history update will happen.
+        if (taken) {
+            bi->ghist = (((branch_pc >> instShiftAmt) >> 2) ^
+                         ((target >> instShiftAmt) >> 3));
+            bi->nGhist = 2;
+        }
+
+    } else {
+        // For normal direction history update the history by
+        // whether the branch was taken or not.
+        bi->ghist = taken ? 1 : 0;
+        bi->nGhist = 1;
+    }
+
     // Update the global history
     updateGHist(tid, bi->ghist, bi->nGhist);
 }
@@ -710,6 +726,10 @@ int
 TAGEBase::calcNewPathHist(ThreadID tid, Addr pc, int cur_phist, bool taken,
                           int brtype, Addr target) const
 {
+    if (takenOnlyHistory && !taken) {
+        // For taken-only history we update only if the branch was taken
+        return cur_phist;
+    }
     int pathbit = ((pc >> instShiftAmt) & 1);
     cur_phist = (cur_phist << 1) + pathbit;
     cur_phist = (cur_phist & ((1ULL << pathHistBits) - 1));
