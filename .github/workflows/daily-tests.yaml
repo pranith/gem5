@@ -57,6 +57,8 @@ jobs:
         runs-on: [self-hosted, linux, x64]
         container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
         timeout-minutes: 10
+        outputs:
+            test-dirs-matrix: ${{ steps.dir-matrix.outputs.test-dirs-matrix }}
         steps:
             - uses: actions/checkout@v4
             - name: Get directories for testlib-long
@@ -81,7 +83,7 @@ jobs:
                       fi; \
                     done  | \
                     jq -ncR '[inputs]'\
-                  )" >>$GITHUB_ENV
+                  )" >>$GITHUB_OUTPUT
 
   # start running all of the long tests
     testlib-long-tests:
@@ -95,7 +97,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                test-type: ${{ fromJson(env.testlib-long-dirs) }}
+                test-type: ${{ fromJson(needs.get-testlib-long-dirs.outputs.test-dirs-matrix) }}
 
         steps:
             - name: Clean runner
