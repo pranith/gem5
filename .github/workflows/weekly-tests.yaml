@@ -56,7 +56,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                test-type: ${{ fromJson(needs.get-testlib-very-long-dirs.outputs.test-dirs-matrix)) }}
+                test-type: ${{ fromJson(needs.get-testlib-very-long-dirs.outputs.test-dirs-matrix) }}
         runs-on: [self-hosted, linux, x64]
         container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
         timeout-minutes: 4320 # 3 days
