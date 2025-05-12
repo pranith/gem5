@@ -76,7 +76,7 @@ jobs:
 
             - name: very-long ${{ matrix.test-type }}
               working-directory: ${{ github.workspace }}/tests
-              run: ./main.py run gem5/${{ matrix.test-type }} --length very-long -j$(nproc) -vv --exclude-tags gcn_gpu
+              run: ./main.py run ${{ matrix.test-type }} --length very-long -j$(nproc) -vv --exclude-tags gcn_gpu
 
             - name: Sanitize test-dir for artifact name
               id: sanitize-test-dir
