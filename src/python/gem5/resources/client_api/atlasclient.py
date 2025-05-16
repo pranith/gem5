@@ -80,7 +80,6 @@ class AtlasClient(AbstractClient):
         :param db: The name of the database to connect to.
         :param collection: The name of the collection within the database.
         """
-        self.apiKey = config["apiKey"]
         self.url = config["url"]
 
     def _atlas_http_json_req(
@@ -114,15 +113,7 @@ class AtlasClient(AbstractClient):
             params = parse.urlencode(resource)
             url += ("&" if parse.urlparse(url).query else "?") + params
 
-        print("final url:", url)
-        # TO enable after enabling api key in azure
-        # headers = {
-        #     "x-functions-key": "MySecretFunctionKey"
-        # }
-        req = request.Request(
-            url,
-            # headers=headers
-        )
+        req = request.Request(url)
 
         for attempt in itertools.count(start=1):
             try:
@@ -139,7 +130,7 @@ class AtlasClient(AbstractClient):
                 warn(
                     f"Attempt {attempt} of Atlas HTTP Request failed.\n"
                     f"Purpose of Request: {purpose_of_request}.\n\n"
-                    f"Failed with Exception:\n{e.code}\n\n"
+                    f"Failed with Exception:\n{e}\n\n"
                     f"Retrying after {pause} seconds..."
                 )
                 time.sleep(pause)
@@ -151,11 +142,7 @@ class AtlasClient(AbstractClient):
         client_queries: List[ClientQuery],
     ) -> Dict[str, Any]:
         url = self.url
-
-        if len(client_queries) > 1:
-            url += "/find-resources-in-batch"
-        else:
-            url += "/find-resource-by-id"
+        url += "/find-resources-in-batch"
 
         search_conditions = []
         for resource in client_queries:
@@ -167,8 +154,11 @@ class AtlasClient(AbstractClient):
             # conditions.
             if resource.get_resource_version():
                 condition["resource_version"] = resource.get_resource_version()
+            else:
+                condition["resource_version"] = "None"
 
             search_conditions.append(condition)
+
         resources = self._atlas_http_json_req(
             url,
             data_json=search_conditions,
