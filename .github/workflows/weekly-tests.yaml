@@ -53,6 +53,7 @@ jobs:
 
     # start running the very-long tests
     testlib-very-long-tests:
+        name: very-long-tests
         strategy:
             fail-fast: false
             matrix:
