@@ -189,6 +189,8 @@ Interrupts::globalMask() const
                 mask.local = gem5::mask(48);
                 mask.mei = mask.mti = mask.msi = 1;
             }
+            mask.sei = mask.sti = mask.ssi = 0;
+            mask.uei = mask.uti = mask.usi = 0;
             break;
         default:
             panic("Unknown privilege mode %d.", prv);

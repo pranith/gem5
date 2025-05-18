@@ -82,14 +82,18 @@ class Interrupts : public BaseInterrupts
         return tc->readMiscReg(MISCREG_NMIP) & tc->readMiscReg(MISCREG_NMIE);
     }
 
-    bool checkInterrupt(int num) const { return ip[num] && ie[num]; }
+    bool checkInterrupt(int num) const {
+        return (ip[num] || hvip[num]) && ie[num];
+    }
+
     bool checkInterrupts() const override
     {
         ISA* isa = static_cast<ISA*>(tc->getIsaPtr());
         if (isa->enableSmrnmi() && tc->readMiscReg(MISCREG_NMIE) == 0) {
             return false;
         }
-        return checkNonMaskableInterrupt() || (ip & ie & globalMask()).any();
+        return checkNonMaskableInterrupt() ||
+               ((ip | hvip) & ie & globalMask()).any();
     }
 
     Fault getInterrupt() override;
@@ -108,7 +112,7 @@ class Interrupts : public BaseInterrupts
 
     bool isWakeUp() const override
     {
-        return checkNonMaskableInterrupt() || (ip & ie & hvip).any();
+        return checkNonMaskableInterrupt() || ((ip | hvip) & ie).any();
     }
 
     uint64_t readIP() const { return (uint64_t)ip.to_ulong() | readHVIP(); }
