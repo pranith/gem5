@@ -223,9 +223,9 @@ class ISA : public BaseISA
     Fault hpmCounterCheck(int counter, ExtMachInst machInst) const;
     Fault tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst);
 
-    RegVal backdoorReadCSRAllBits(uint64_t csr);
-    RegVal readCSR(uint64_t csr);
-    void writeCSR(uint64_t csr, RegVal writeData);
+    RegVal backdoorReadCSRAllBits(ExecContext *xc, uint64_t csr);
+    RegVal readCSR(ExecContext *xc, uint64_t csr);
+    void writeCSR(ExecContext *xc, uint64_t csr, RegVal writeData);
 };
 
 // V-bit utilities (H-extension)

@@ -1167,7 +1167,7 @@ ISA::tvmChecks(uint64_t csr, PrivilegeMode pm, ExtMachInst machInst)
 }
 
 RegVal
-ISA::backdoorReadCSRAllBits(uint64_t csr)
+ISA::backdoorReadCSRAllBits(ExecContext *xc, uint64_t csr)
 {
     auto csr_it = getCSRDataMap().find(csr);
 
@@ -1177,19 +1177,19 @@ ISA::backdoorReadCSRAllBits(uint64_t csr)
 
     auto midx = csr_it->second.physIndex;
 
-    RegVal readval = readMiscReg(midx);
+    RegVal readval = xc->readMiscReg(midx);
 
     // Special handling for FCSR
     if (csr == CSR_FCSR) {
-        readval = (readMiscReg(MISCREG_FFLAGS) |
-            (readMiscReg(MISCREG_FRM) << FRM_OFFSET));
+        readval = (xc->readMiscReg(MISCREG_FFLAGS) |
+            (xc->readMiscReg(MISCREG_FRM) << FRM_OFFSET));
     }
 
     return readval;
 }
 
 RegVal
-ISA::readCSR(uint64_t csr)
+ISA::readCSR(ExecContext *xc, uint64_t csr)
 {
     auto csr_it = getCSRDataMap().find(csr);
 
@@ -1201,7 +1201,7 @@ ISA::readCSR(uint64_t csr)
     RegVal maskVal = (mask_it == getCSRMaskMap().end()) ?
                         mask(64) : mask_it->second;
 
-    RegVal readval = backdoorReadCSRAllBits(csr) & maskVal;
+    RegVal readval = backdoorReadCSRAllBits(xc, csr) & maskVal;
 
 
     // Some registers need additional masking/shifting
@@ -1210,7 +1210,7 @@ ISA::readCSR(uint64_t csr)
         case CSR_SIP: case CSR_SIE:
         case CSR_HIP: case CSR_HIE:
         {
-            RegVal mideleg = readMiscReg(MISCREG_MIDELEG);
+            RegVal mideleg = xc->readMiscReg(MISCREG_MIDELEG);
             readval &= mideleg;
             break;
         }
@@ -1218,7 +1218,7 @@ ISA::readCSR(uint64_t csr)
         // However reads expect them in SIP and SIE positions!
         case CSR_VSIP: case CSR_VSIE:
         {
-            RegVal hideleg = readMiscReg(MISCREG_HIDELEG);
+            RegVal hideleg = xc->readMiscReg(MISCREG_HIDELEG);
             readval &= hideleg;
             readval >>= 1;
             break;
@@ -1226,7 +1226,7 @@ ISA::readCSR(uint64_t csr)
 
         case CSR_HVIP:
         {
-            INTERRUPT mip = readMiscReg(MISCREG_IP);
+            INTERRUPT mip = xc->readMiscReg(MISCREG_IP);
             readval |= (mip.vssi << 2);
             break;
         }
@@ -1237,7 +1237,7 @@ ISA::readCSR(uint64_t csr)
 }
 
 void
-ISA::writeCSR(uint64_t csr, RegVal writeData)
+ISA::writeCSR(ExecContext *xc, uint64_t csr, RegVal writeData)
 {
     auto csr_it = getCSRDataMap().find(csr);
 
@@ -1252,7 +1252,7 @@ ISA::writeCSR(uint64_t csr, RegVal writeData)
         case CSR_SIP: case CSR_SIE:
         case CSR_HIP: case CSR_HIE:
         {
-            RegVal mideleg = readMiscReg(MISCREG_MIDELEG);
+            RegVal mideleg = xc->readMiscReg(MISCREG_MIDELEG);
             writeData &= mideleg;
             break;
         }
@@ -1266,7 +1266,7 @@ ISA::writeCSR(uint64_t csr, RegVal writeData)
         // elsewhere.
         case CSR_VSIP: case CSR_VSIE:
         {
-            RegVal hideleg = readMiscReg(MISCREG_HIDELEG);
+            RegVal hideleg = xc->readMiscReg(MISCREG_HIDELEG);
             writeData <<= 1;
             writeData &= hideleg;
             break;
@@ -1304,7 +1304,7 @@ ISA::writeCSR(uint64_t csr, RegVal writeData)
     // they are used.
 
     // Read all the CSR bits
-    auto reg_data_all = backdoorReadCSRAllBits(csr);
+    auto reg_data_all = backdoorReadCSRAllBits(xc, csr);
 
     // Only modify those in writeMask
     auto new_reg_data_all = (reg_data_all & ~write_mask)
@@ -1313,22 +1313,22 @@ ISA::writeCSR(uint64_t csr, RegVal writeData)
 
     switch (csr) {
         case CSR_FCSR: {
-            setMiscReg(MISCREG_FFLAGS, bits(writeDataMasked, 4, 0));
-            setMiscReg(MISCREG_FRM, bits(writeDataMasked, 7, 5));
+            xc->setMiscReg(MISCREG_FFLAGS, bits(writeDataMasked, 4, 0));
+            xc->setMiscReg(MISCREG_FRM, bits(writeDataMasked, 7, 5));
             break;
         }
 
         case CSR_HVIP: {
             // vssi bit is an alias, propagate to mip
-            INTERRUPT mip = readMiscReg(MISCREG_IP);
+            INTERRUPT mip = xc->readMiscReg(MISCREG_IP);
             mip.vssi = (new_reg_data_all & VSSI_MASK) >> 2;
-            setMiscReg(MISCREG_IP, mip);
+            xc->setMiscReg(MISCREG_IP, mip);
 
             // turn off vssi for write to HVIP
             new_reg_data_all &= ~VSSI_MASK;
 
             // finally write hvip
-            setMiscReg(midx, new_reg_data_all);
+            xc->setMiscReg(midx, new_reg_data_all);
             break;
         }
         // case CSR_MIP: case CSR_MIE:
@@ -1340,7 +1340,7 @@ ISA::writeCSR(uint64_t csr, RegVal writeData)
         //     xc->setMiscReg(midx, new_reg_data_all);
         //     break;
         default:
-            setMiscReg(midx, new_reg_data_all);
+            xc->setMiscReg(midx, new_reg_data_all);
             break;
     }
 }

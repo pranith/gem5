@@ -428,7 +428,7 @@ def template CSRExecute {{
                 if (hpm_fault != NoFault)
                     return hpm_fault;
             }
-            data = rvZext(isa->readCSR(csr));
+            data = rvZext(isa->readCSR(xc, csr));
         }
 
         %(code)s;
@@ -440,7 +440,7 @@ def template CSRExecute {{
             }
             DPRINTF(RiscvMisc, "Writing %#x to CSR %s.\n",
                     data, csrName);
-            isa->writeCSR(csr, data);
+            isa->writeCSR(xc, csr, data);
         }
         %(op_wb)s;
         return NoFault;
