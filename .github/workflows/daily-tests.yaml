@@ -210,6 +210,29 @@ jobs:
             - name: Continue gem5 within SystemC test
               run: LD_LIBRARY_PATH=build/ARM/:/opt/systemc/lib-linux64/ ./util/systemc/gem5_within_systemc/gem5.opt.sc m5out/config.ini
 
+    dramsys-tests:
+        runs-on: [self-hosted, linux, x64]
+        container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
+        timeout-minutes: 4320 # 3 days
+        steps:
+            - uses: actions/checkout@v4
+            - name: Checkout DRAMSys
+              working-directory: ${{ github.workspace }}/ext/dramsys
+              run: git clone https://github.com/tukl-msd/DRAMSys --branch v5.1 --depth 1 DRAMSys
+
+              # gem5 is built separately because it depends on the DRAMSys library
+            - name: Build gem5
+              working-directory: ${{ github.workspace }}
+              run: scons build/ALL/gem5.opt -j $(nproc)
+
+            - name: Run DRAMSys Checks
+              working-directory: ${{ github.workspace }}
+              run: |
+                  ./build/ALL/gem5.opt configs/example/gem5_library/dramsys/arm-hello-dramsys.py
+                  ./build/ALL/gem5.opt configs/example/gem5_library/dramsys/dramsys-traffic.py
+                  ./build/ALL/gem5.opt configs/example/dramsys.py
+
+
     daily-tests:
         # The dummy job is used to indicate whether the daily tests have
         # passed or not. This can be used as status check for pull requests.
@@ -220,6 +243,7 @@ jobs:
         needs:
             - unittests-fast-debug
             - testlib-long-tests
+            - dramsys-tests
             - sst-test
             - systemc-test
             - gpu-tests

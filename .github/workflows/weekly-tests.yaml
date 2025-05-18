@@ -124,26 +124,3 @@ jobs:
                   name: gpu_tests_${{github.sha}}_RUN_${{github.run_id}}_ATTEMPT_${{github.run_attempt}}
                   path: tests/testing-results
                   retention-days: 7
-
-
-    dramsys-tests:
-        runs-on: [self-hosted, linux, x64]
-        container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
-        timeout-minutes: 4320 # 3 days
-        steps:
-            - uses: actions/checkout@v4
-            - name: Checkout DRAMSys
-              working-directory: ${{ github.workspace }}/ext/dramsys
-              run: git clone https://github.com/tukl-msd/DRAMSys --branch v5.1 --depth 1 DRAMSys
-
-              # gem5 is built separately because it depends on the DRAMSys library
-            - name: Build gem5
-              working-directory: ${{ github.workspace }}
-              run: scons build/ALL/gem5.opt -j $(nproc)
-
-            - name: Run DRAMSys Checks
-              working-directory: ${{ github.workspace }}
-              run: |
-                  ./build/ALL/gem5.opt configs/example/gem5_library/dramsys/arm-hello-dramsys.py
-                  ./build/ALL/gem5.opt configs/example/gem5_library/dramsys/dramsys-traffic.py
-                  ./build/ALL/gem5.opt configs/example/dramsys.py
