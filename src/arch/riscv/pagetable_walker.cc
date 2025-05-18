@@ -758,8 +758,17 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
                     (walkType == TwoStage && curstage == FIRST_STAGE))
                 {
                     // Fill in TLB entry
+                    // Check if N (contig bit) is set, if yes we have
+                    // a 64K page mapping (SVNAPOT Extension)
+                    assert(!(pte.n) || level == 0);
                     entry.pte = pte;
-                    entry.paddr = pte.ppn;
+                    entry.paddr = (pte.n) ?
+                        pte.ppn & ~mask(NapotShift) :
+                        pte.ppn;
+
+                    entry.logBytes = (pte.n) ?
+                        PageShift + NapotShift :
+                        PageShift + (level * SV39_LEVEL_BITS);
 
                     // Only truncate the address in non-two stage walks
                     // The truncation for two-stage is done in
@@ -919,16 +928,16 @@ Walker::WalkerState::stepWalkGStage(PacketPtr &write)
                 {
                     // Check if N (contig bit) is set, if yes we have
                     // a 64K page mapping (SVNAPOT Extension)
-                    assert(!(pte.n) || level == 0);
+                    assert(!(pte.n) || glevel == 0);
                     entry.pte = pte;
-                    entry.paddr = (pte.n) ? 
+                    entry.paddr = (pte.n) ?
                         pte.ppn & ~mask(NapotShift) :
                         pte.ppn;
 
-                    entry.logBytes = (pte.n) ? 
+                    entry.logBytes = (pte.n) ?
                         PageShift + NapotShift :
-                        PageShift + (level * SV39_LEVEL_BITS);
-                        
+                        PageShift + (glevel * SV39_LEVEL_BITS);
+
                     entry.vaddr &= ~((1 << entry.logBytes) - 1);
 
                     // put it non-writable into the TLB to detect
