@@ -99,9 +99,9 @@ jobs:
                 test-type: ${{ fromJson(needs.get-testlib-long-dirs.outputs.test-dirs-matrix) }}
 
         steps:
+            - uses: actions/checkout@v4
             - name: Restore build/ALL cache
               uses: actions/cache/restore@v4
-
               with:
                   path: build/ALL
                   key: testlib-build-all-${{ needs.get-date.outputs.date }}
