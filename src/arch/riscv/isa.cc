@@ -817,6 +817,26 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
             }
             break;
           case MISCREG_SATP:
+            {
+                // we only support bare and Sv39 mode; setting a different mode
+                // shall have no effect (see 4.1.12 in priv ISA manual)
+                SATP cur_val = readMiscRegNoEffect(idx);
+                SATP new_val = val;
+                if (new_val.mode != AddrXlateMode::BARE &&
+                    new_val.mode != AddrXlateMode::SV39)
+                    new_val.mode = cur_val.mode;
+
+                // TLB flush can be elided here
+                // --- From the RISCV Privileged Spec 20250508, p.129 ---
+                // "Not imposing upon implementations to flush
+                // address-translation caches upon satp writes reduces
+                // the cost of context switches provided a sufficiently
+                // large ASID space."
+
+                setMiscRegNoEffect(idx, new_val);
+            }
+            break;
+
           case MISCREG_VSATP:
             {
                 // we only support bare and Sv39 mode; setting a different mode
@@ -827,10 +847,8 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                     new_val.mode != AddrXlateMode::SV39)
                     new_val.mode = cur_val.mode;
 
-                // Flush TLB if satp changed as Spike does
-                if (new_val != cur_val) {
-                    tc->getMMUPtr()->flushAll();
-                }
+                tc->getMMUPtr()->flushAll();
+
                 setMiscRegNoEffect(idx, new_val);
             }
             break;
@@ -857,7 +875,16 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
             break;
           case MISCREG_HGATP:
             {
-                tc->getMMUPtr()->flushAll();
+                // TLB flush can be elided here
+                // --- From the RISCV Privileged Spec 20250508, p.171 ---
+                // Note that writing hgatp does not imply any ordering
+                // constraints between page-table updates and
+                // subsequent G-stage address translations.
+                // If the new virtual machine’s guest physical page tables have
+                // been modified, or if a VMID is reused,
+                // it may be necessary to execute an HFENCE.GVMA instruction
+                // (see Section 21.3.2) before or after writing hgatp.
+
                 SATP cur_val = readMiscRegNoEffect(idx);
                 SATP new_val = val;
 
