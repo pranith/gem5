@@ -48,21 +48,21 @@ from .abstract_client import AbstractClient
 from .client_query import ClientQuery
 
 
-class AtlasClientHttpJsonRequestError(Exception):
+class AzureFunctionsAPIClientHttpJsonRequestError(Exception):
     def __init__(
         self,
-        client: "AtlasClient",
+        client: "AzureFunctionsAPIClient",
         data: Dict[str, Any],
         purpose_of_request: Optional[str],
     ):
-        """An exception raised when an HTTP request to Atlas MongoDB fails.
-        :param client: The AtlasClient instance that raised the exception.
+        """An exception raised when an HTTP request to the Azure Functions API fails.
+        :param client: The AzureFunctionsAPI instance that raised the exception.
         :param purpose_of_request: A string describing the purpose of the
         request.
         """
         error_str = (
-            f"Http Request to Atlas MongoDB failed.\n"
-            f"Atlas URL: {client.url}\n"
+            f"Http Request to Azure Functions API failed.\n"
+            f"Azure Functions API URL: {client.url}\n"
             f"Data sent:\n\n{json.dumps(data,indent=4)}\n\n"
         )
 
@@ -71,26 +71,24 @@ class AtlasClientHttpJsonRequestError(Exception):
         super().__init__(error_str)
 
 
-class AtlasClient(AbstractClient):
+class AzureFunctionsAPIClient(AbstractClient):
     def __init__(self, config: Dict[str, str]):
         """
-        Initializes a connection to a MongoDB Atlas database.
+        Initializes a connection to the gem5 resources database via azure functions API.
 
-        :param uri: The URI for connecting to the MongoDB server.
-        :param db: The name of the database to connect to.
-        :param collection: The name of the collection within the database.
+        :param url: The base url for the azure functions API.
         """
         self.url = config["url"]
 
-    def _atlas_http_json_req(
+    def _functions_http_json_req(
         self,
         url: str,
         data_json: List[Dict[str, str]],
         purpose_of_request: Optional[str],
-        max_failed_attempts: int = 2,
+        max_failed_attempts: int = 3,
         reattempt_pause_base: int = 2,
     ) -> Dict[str, Any]:
-        """Sends a JSON object over HTTP to a given Atlas MongoDB server and
+        """Sends a JSON object over HTTP to a given Azure functions API and
         returns the response. This function will attempt to reconnect to the
         server if the connection fails a set number of times before raising an
         exception.
@@ -121,14 +119,14 @@ class AtlasClient(AbstractClient):
                 break
             except Exception as e:
                 if attempt >= max_failed_attempts:
-                    raise AtlasClientHttpJsonRequestError(
+                    raise AzureFunctionsAPIClientHttpJsonRequestError(
                         client=self,
                         data=data_json,
                         purpose_of_request=purpose_of_request,
                     )
                 pause = reattempt_pause_base**attempt
                 warn(
-                    f"Attempt {attempt} of Atlas HTTP Request failed.\n"
+                    f"Attempt {attempt} of Azure functions HTTP Request failed.\n"
                     f"Purpose of Request: {purpose_of_request}.\n\n"
                     f"Failed with Exception:\n{e}\n\n"
                     f"Retrying after {pause} seconds..."
@@ -159,7 +157,7 @@ class AtlasClient(AbstractClient):
 
             search_conditions.append(condition)
 
-        resources = self._atlas_http_json_req(
+        resources = self._functions_http_json_req(
             url,
             data_json=search_conditions,
             purpose_of_request="Get Resources",
