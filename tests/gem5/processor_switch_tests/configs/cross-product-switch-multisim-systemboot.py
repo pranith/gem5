@@ -216,7 +216,7 @@ if args.isa == "x86":
         ],
         readfile_contents=f"/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
         checkpoint=obtain_resource(
-            f"x86-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+            f"x86-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
         ),
     )
 
@@ -259,7 +259,7 @@ elif args.isa == "arm":
         ),
         readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
         checkpoint=obtain_resource(
-            f"arm-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+            f"arm-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
         ),
     )
 
@@ -296,7 +296,7 @@ elif args.isa == "riscv":
         ),
         readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
         checkpoint=obtain_resource(
-            f"riscv-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+            f"riscv-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
         ),
     )
 

@@ -89,39 +89,44 @@ class ScheduledProcessorSwitchHandler(ExitHandler, hypercall_num=6):
 
     @overrides(ExitHandler)
     def _process(self, simulator: "Simulator") -> None:
+        start_core = (
+            simulator._board.get_processor()
+            ._switchable_cores["start"][0]
+            ._cpu_type.value
+        )
+        switch_core = (
+            simulator._board.get_processor()
+            ._switchable_cores["switch"][0]
+            ._cpu_type.value
+        )
         if self.__class__.process_count == 0:
+
             print(
-                f"processor's start core is {simulator._board.get_processor()._current_cores[0]._cpu_type}, "
-                f"processor's switch core is {simulator._board.get_processor()._switchable_cores["switch"][0]._cpu_type}"
+                f"processor's start core is {start_core}, "
+                f"processor's switch core is {switch_core}"
             )
             print(
-                f"Before processor switch, is the processor on the starting cores? {simulator._board.get_processor()._current_is_start}"
+                f"Before processor switch, is the processor on the starting "
+                f"cores? {simulator._board.get_processor()._current_is_start}"
             )
             print(f"Switching processors!")
             simulator.switch_processor()
             print(
-                f"After processor switch, is the processor on the starting cores? {simulator._board.get_processor()._current_is_start}"
+                f"After processor switch, is the processor on the starting "
+                f"cores? {simulator._board.get_processor()._current_is_start}"
             )
             print(f"self.process_count: {self.process_count}")
         else:
             isa = simulator._board.get_processor().get_isa().value
-            start_core = (
-                simulator._board.get_processor()
-                ._switchable_cores["start"][0]
-                ._cpu_type.value
-            )
-            switch_core = (
-                simulator._board.get_processor()
-                ._switchable_cores["switch"][0]
-                ._cpu_type.value
-            )
+
             num_cores = len(simulator._board.get_processor()._current_cores)
             print(
                 "This is not the first time a scheduled tick exit has been"
                 "handled, will exit after stats dump."
             )
             print(
-                f"Successful completion of {start_core} to {switch_core} {num_cores} core {isa} processor switch test"
+                f"Successful completion of {start_core} to {switch_core} "
+                f"{num_cores} core {isa} processor switch test"
             )
         m5.stats.dump()
         self.__class__.process_count += 1
@@ -171,9 +176,9 @@ simulator = Simulator(board=board, id=name)
 m5.scheduleTickExitAbsolute(
     1_000_000, "Reached 1 million ticks, switching processors now!"
 )
-# allow simulations to run for another million ticks after switch to ensure simulation doesn't immediately crash
+# allow simulations to run for another million ticks after switch to ensure
+# simulation doesn't immediately crash
 m5.scheduleTickExitAbsolute(2_000_000, "Reached 2 million ticks!")
 m5.scheduleTickExitAbsolute(3_000_000, "Reached 3 million ticks!, exiting")
 
 simulator.run()
-# multisim.add_simulator(simulator=simulator)
