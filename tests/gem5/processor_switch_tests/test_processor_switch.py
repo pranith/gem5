@@ -105,7 +105,8 @@ def test_processor_switch_matmul(
     )
 
 
-for isa in ["arm", "x86", "riscv"]:
+# disable riscv tests for now because checkpoints aren't available yet
+for isa in ["arm", "x86"]:  # "riscv"
     for num_cores in [4, 8, 16]:
         for start_cores in ["atomic", "timing", "o3", "minor"]:  # , "kvm",
             for switch_cores in ["atomic", "timing", "o3", "minor"]:  # "kvm",
