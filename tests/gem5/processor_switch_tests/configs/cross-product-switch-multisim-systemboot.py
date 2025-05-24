@@ -77,13 +77,6 @@ parser.add_argument("--isa", type=str, required=True)
 
 args = parser.parse_args()
 
-# In the final version, we will want to upload the checkpoint to gem5 resources
-# instead of having a local path
-print(f"Current working directory: {os.getcwd()}")
-checkpoint_path = Path(
-    f"/home/bees/gem5-14th-worktree/tests/gem5/processor_switch_tests/configs/checkpoint/{args.isa}-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
-)
-
 
 class WorkBeginExit(WorkBeginExitHandler):
     def _process(self, simulator: "Simulator") -> None:
@@ -222,10 +215,9 @@ if args.isa == "x86":
             "root=/dev/sda2",
         ],
         readfile_contents=f"/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
-        # replace with
-        # checkpoint=obtain_resource(f"x86-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint")
-        # later
-        checkpoint=checkpoint_path,
+        checkpoint=obtain_resource(
+            f"x86-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+        ),
     )
 
 elif args.isa == "arm":
@@ -266,9 +258,9 @@ elif args.isa == "arm":
             "arm64-bootloader-foundation", resource_version="1.0.0"
         ),
         readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
-        # replace with
-        # checkpoint = obtain_resource(f"arm-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint")
-        checkpoint=checkpoint_path,
+        checkpoint=obtain_resource(
+            f"arm-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+        ),
     )
 
 elif args.isa == "riscv":
@@ -303,10 +295,9 @@ elif args.isa == "riscv":
             "riscv-bootloader-opensbi-1.3.1", resource_version="1.0.0"
         ),
         readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
-        # replace with
-        # checkpoint=obtain_resource(f"riscv-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint")
-        # later
-        checkpoint=checkpoint_path,
+        checkpoint=obtain_resource(
+            f"riscv-ubuntu-24.04-boot-" f"{args.num_cores}-core-checkpoint"
+        ),
     )
 
 else:
