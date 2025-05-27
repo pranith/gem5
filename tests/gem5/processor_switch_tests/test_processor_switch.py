@@ -50,7 +50,7 @@ def test_processor_switch_systemboot(
             "gem5",
             "processor_switch_tests",
             "configs",
-            f"cross-product-switch-multisim-systemboot.py",
+            f"cross-product-switch-afterboot.py",
         ),
         config_args=[
             "--num_cores",
@@ -88,7 +88,7 @@ def test_processor_switch_matmul(
             "gem5",
             "processor_switch_tests",
             "configs",
-            f"cross-product-switch-multisim-matmul.py",
+            f"cross-product-switch-matmul.py",
         ),
         config_args=[
             "--start_cores",
