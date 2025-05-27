@@ -179,6 +179,7 @@ BaseSimpleCPU::countCommitInst()
 
     if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
         // increment thread level and core level numInsts count
+        t_info.thread->threadStats.numInsts++;
         commitStats[t_info.thread->threadId()]->numInsts++;
         executeStats[t_info.thread->threadId()]->numInsts++;
         if (!is_nop) {
@@ -189,6 +190,7 @@ BaseSimpleCPU::countCommitInst()
 
     // increment thread level numOps count
     commitStats[t_info.thread->threadId()]->numOps++;
+    t_info.thread->threadStats.numOps++;
     if (!is_nop) {
         commitStats[t_info.thread->threadId()]->numOpsNotNOP++;
     }
