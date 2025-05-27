@@ -43,6 +43,8 @@
 
 #include "cpu/o3/cpu.hh"
 
+#include <sys/resource.h>
+
 #include "cpu/activity.hh"
 #include "cpu/checker/cpu.hh"
 #include "cpu/checker/thread_context.hh"
@@ -53,6 +55,7 @@
 #include "cpu/thread_context.hh"
 #include "debug/Activity.hh"
 #include "debug/Drain.hh"
+#include "debug/Heartbeat.hh"
 #include "debug/O3CPU.hh"
 #include "debug/Quiesce.hh"
 #include "enums/MemoryMode.hh"
@@ -365,9 +368,59 @@ CPU::CPUStats::CPUStats(CPU *cpu)
 }
 
 void
+CPU::heartbeat() const
+{
+    static size_t prev_total_insts = 0;
+    static Cycles prev_interval_cycles(0);
+    static Cycles start_cycles(0);
+
+    constexpr Cycles step(1000000);
+
+    const auto get_interval = [&step] (Cycles cycles) -> size_t {
+        return cycles / step;
+    };
+
+    if (start_cycles == 0) {
+        // Initialize baselines on first entry (handles checkpoints too).
+        start_cycles = curCycle();
+        prev_interval_cycles = curCycle();
+        prev_total_insts = totalInsts();
+        return;
+    }
+
+    if (get_interval(prev_interval_cycles) == get_interval(curCycle())) {
+        return;
+    }
+
+    Cycles elapsed = curCycle() - prev_interval_cycles;
+    Cycles tot_cycles = curCycle() - start_cycles;
+    if (elapsed == 0 || tot_cycles == 0) {
+        return;
+    }
+
+    float ipc = (totalInsts() - prev_total_insts) * 1.0 / elapsed;
+    float cipc = totalInsts() * 1.0 / tot_cycles;
+
+    prev_interval_cycles = curCycle();
+    prev_total_insts = totalInsts();
+
+    // Print heartbeat.
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) < 0) {
+        panic("heartbeat error: getrusage failed\n");
+    }
+
+    long mb = ru.ru_maxrss / 1024;
+    DPRINTF(Heartbeat, "curCycles=%u Heartbeat O3CPU maxrss=%uMiB "
+                       "totalInsts=%u IPC=%.2f CIPC=%.2f\n",
+            curCycle(), mb, totalInsts(), ipc, cipc);
+}
+
+void
 CPU::tick()
 {
     DPRINTF(O3CPU, "\n\nO3CPU: Ticking main, O3CPU.\n");
+    heartbeat();
     assert(!switchedOut());
     assert(drainState() != DrainState::Drained);
 
