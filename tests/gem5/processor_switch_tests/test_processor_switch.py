@@ -41,7 +41,7 @@ def test_processor_switch_systemboot(
     verifiers.append(verifier.MatchRegex(exit_regex))
 
     gem5_verify_config(
-        name=f"processor_switch_{start_cores}_to_{switch_cores}_systemboot_{isa}_{num_cores}core",
+        name=f"processor_switch_{start_cores}_to_{switch_cores}_afterboot_{isa}_{num_cores}core",
         fixtures=(),
         verifiers=verifiers,
         config=joinpath(
@@ -105,8 +105,7 @@ def test_processor_switch_matmul(
     )
 
 
-# disable riscv tests for now because checkpoints aren't available yet
-for isa in ["arm", "x86"]:  # "riscv"
+for isa in ["arm", "x86", "riscv"]:
     for num_cores in [4, 8, 16]:
         for start_cores in ["atomic", "timing", "o3", "minor"]:  # , "kvm",
             for switch_cores in ["atomic", "timing", "o3", "minor"]:  # "kvm",
