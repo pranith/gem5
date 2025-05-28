@@ -225,7 +225,7 @@ jobs:
 
             # Obtain the cache if available.
             - name: Cache build/VEGA_X86
-              uses: actions/cache@v4
+              uses: actions/cache/restore@v4
               with:
                   path: build/VEGA_X86
                   key: testlib-build-vega-${{ needs.get-date.outputs.date }}
