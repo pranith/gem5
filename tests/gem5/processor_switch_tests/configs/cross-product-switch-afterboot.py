@@ -26,7 +26,6 @@
 
 
 import argparse
-import os
 from pathlib import Path
 
 import m5
@@ -53,15 +52,8 @@ from gem5.components.processors.cpu_types import get_cpu_type_from_str
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
-from gem5.isas import (
-    ISA,
-    get_isa_from_str,
-)
-from gem5.resources.resource import (
-    DiskImageResource,
-    KernelResource,
-    obtain_resource,
-)
+from gem5.isas import ISA
+from gem5.resources.resource import obtain_resource
 from gem5.simulate.exit_handler import (
     ExitHandler,
     WorkBeginExitHandler,
@@ -225,7 +217,6 @@ elif args.isa == "arm":
         l1d_size="16KiB", l1i_size="16KiB", l2_size="256KiB"
     )
 
-    # Memory: Dual Channel DDR4 2400 DRAM device.
     memory = DualChannelDDR4_2400(size="2GiB")
     processor = SimpleSwitchableProcessor(
         starting_core_type=get_cpu_type_from_str(args.start_cores),

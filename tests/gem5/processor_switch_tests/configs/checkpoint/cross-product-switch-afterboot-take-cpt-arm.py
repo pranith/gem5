@@ -1,4 +1,4 @@
-# Copyright (c) 2022-23 The Regents of the University of California
+# Copyright (c) 2022-25 The Regents of the University of California
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -24,22 +24,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""
-This script further shows an example of booting an ARM based full system Ubuntu
-disk image. This simulation boots the disk image using 2 TIMING CPU cores. The
-simulation ends when the startup is completed successfully (i.e. when an
-`m5_exit instruction is reached on successful boot).
-
-Usage
------
-
-```
-scons build/ARM/gem5.opt -j<NUM_CPUS>
-./build/ARM/gem5.opt configs/example/gem5_library/arm-ubuntu-run-with-kvm.py
-```
-
-"""
-
 import argparse
 
 import m5
@@ -48,32 +32,16 @@ from m5.objects import (
     VExpress_GEM5_V1,
 )
 
-import gem5.utils.multisim as multisim
-from gem5.coherence_protocol import CoherenceProtocol
 from gem5.components.boards.arm_board import ArmBoard
 from gem5.components.memory import DualChannelDDR4_2400
-from gem5.components.processors.cpu_types import (
-    CPUTypes,
-    get_cpu_type_from_str,
-)
+from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
 from gem5.isas import ISA
-from gem5.resources.resource import (
-    DiskImageResource,
-    KernelResource,
-    obtain_resource,
-)
-from gem5.simulate.exit_event import ExitEvent
-from gem5.simulate.exit_handler import (
-    AfterBootExitHandler,
-    ExitHandler,
-    KernelBootedExitHandler,
-    WorkBeginExitHandler,
-)
+from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import AfterBootExitHandler
 from gem5.simulate.simulator import Simulator
-from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This runs a check to ensure the gem5 binary is compiled for ARM.
@@ -92,7 +60,6 @@ args = parser.parse_args()
 
 class AfterBootTakeCheckpoint(AfterBootExitHandler):
     def _process(self, simulator: "Simulator") -> None:
-        # checkpoint_path = f"./arm-{args.num_cores}core-systemboot-checkpoint"
         checkpoint_path = (
             f"./arm-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
         )
@@ -126,7 +93,8 @@ memory = DualChannelDDR4_2400(size="2GiB")
 # cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
-    switch_core_type=CPUTypes.ATOMIC,  # this one doesn't matter since we never switch cores
+    # The value of switch_core_type doesn't matter, since we never switch cores
+    switch_core_type=CPUTypes.ATOMIC,
     isa=ISA.ARM,
     num_cores=args.num_cores,
 )
@@ -149,14 +117,7 @@ board = ArmBoard(
     release=release,
     platform=platform,
 )
-# board.set_kernel_disk_workload(
-#     kernel=KernelResource("/projects/gem5/new-base-imgs-w-hypercalls/arm-disk-image-24-04/arm64-vmlinux-6.8.12"),
-#     disk_image=DiskImageResource("/projects/gem5/new-base-imgs-w-hypercalls/disk-image-arm-npb/arm-ubuntu", root_partition="2"),
-#     bootloader=obtain_resource("arm64-bootloader-foundation", resource_version="1.0.0"),
-#     readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
-# )
 
-# board.set_workload(obtain_resource("arm-ubuntu-24.04-npb-cg-s", resource_version="2.0.0"))
 board.set_kernel_disk_workload(
     kernel=obtain_resource(
         "arm64-linux-kernel-6.8.12", resource_version="1.0.0"
@@ -169,8 +130,6 @@ board.set_kernel_disk_workload(
     ),
     readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
 )
-
-simulator = Simulator(board=board)
 
 simulator = Simulator(board=board)
 

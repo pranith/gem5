@@ -1,4 +1,4 @@
-# Copyright (c) 2021 The Regents of the University of California
+# Copyright (c) 2021-2025 The Regents of the University of California
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -24,55 +24,24 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""
-This script shows an example of running a full system RISCV Ubuntu boot
-simulation using the gem5 library. This simulation boots Ubuntu 20.04 using
-2 TIMING CPU cores. The simulation ends when the startup is completed
-successfully.
-
-Usage
------
-
-```
-scons build/RISCV/gem5.opt
-./build/RISCV/gem5.opt \
-    configs/example/gem5_library/riscv-ubuntu-run.py
-```
-"""
 
 import argparse
 
 import m5
-from m5.objects import Root
 
-import gem5.utils.multisim as multisim
 from gem5.components.boards.riscv_board import RiscvBoard
 from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
     PrivateL1PrivateL2WalkCacheHierarchy,
 )
 from gem5.components.memory import DualChannelDDR4_2400
-from gem5.components.processors.cpu_types import (
-    CPUTypes,
-    get_cpu_type_from_str,
-)
-from gem5.components.processors.simple_processor import SimpleProcessor
+from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
 from gem5.isas import ISA
-from gem5.resources.resource import (
-    DiskImageResource,
-    KernelResource,
-    obtain_resource,
-)
-from gem5.simulate.exit_event import ExitEvent
-from gem5.simulate.exit_handler import (
-    AfterBootExitHandler,
-    ExitHandler,
-    WorkBeginExitHandler,
-)
+from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import AfterBootExitHandler
 from gem5.simulate.simulator import Simulator
-from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This runs a check to ensure the gem5 binary is compiled for RISCV.
@@ -88,7 +57,6 @@ args = parser.parse_args()
 
 class AfterBootTakeCheckpoint(AfterBootExitHandler):
     def _process(self, simulator: "Simulator") -> None:
-        # checkpoint_path = f"./riscv-{args.num_cores}core-systemboot-checkpoint"
         checkpoint_path = (
             f"./riscv-ubuntu-24.04-boot-{args.num_cores}-core-checkpoint"
         )
@@ -115,7 +83,8 @@ memory = DualChannelDDR4_2400(size="3GiB")
 # Here we setup the processor. We use a simple processor.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.ATOMIC,
-    switch_core_type=CPUTypes.ATOMIC,  # It doesn't matter what this is, since we never switch cores
+    # The value of switch_core_type doesn't matter, since we never switch cores
+    switch_core_type=CPUTypes.ATOMIC,
     isa=ISA.RISCV,
     num_cores=args.num_cores,
 )
@@ -128,17 +97,6 @@ board = RiscvBoard(
     memory=memory,
     cache_hierarchy=cache_hierarchy,
 )
-
-# Here we a full system workload: "riscv-ubuntu-20.04-boot" which boots
-# Ubuntu 20.04. Once the system successfully boots it encounters an `m5_exit`
-# instruction which stops the simulation. When the simulation has ended you may
-# inspect `m5out/system.pc.com_1.device` to see the stdout.
-# board.set_kernel_disk_workload(
-#     kernel=KernelResource("/projects/gem5/new-base-imgs-w-hypercalls/riscv-disk-image-24-04/riscv-vmlinux-6.8.12"),
-#     disk_image=DiskImageResource("/projects/gem5/new-base-imgs-w-hypercalls/disk-image-riscv-npb/riscv-ubuntu-24.04-npb-20250515", root_partition="1"),
-#     bootloader=obtain_resource("riscv-bootloader-opensbi-1.3.1", resource_version="1.0.0"),
-#     readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
-# )
 
 board.set_kernel_disk_workload(
     kernel=obtain_resource(
@@ -153,11 +111,6 @@ board.set_kernel_disk_workload(
     readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
 )
 
-# board.set_workload(
-#     obtain_resource("riscv-ubuntu-24.04-npb-cg-s", resource_version="2.0.0")
-# )
 
-simulator = Simulator(
-    board=board,
-)
+simulator = Simulator(board=board)
 simulator.run()
