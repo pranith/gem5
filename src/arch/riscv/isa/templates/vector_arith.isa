@@ -2564,10 +2564,6 @@ Fault
     using vu [[maybe_unused]] = std::make_unsigned_t<ElemType>;
     using vi [[maybe_unused]] = std::make_signed_t<ElemType>;
 
-
-    if (machInst.vill)
-        return std::make_shared<IllegalInstFault>("VILL is set", machInst);
-
     uint32_t num_microops = vtype_regs_per_group(vtype);
     if (slideUp || num_microops > 1) {
         uint32_t vs2_end = machInst.vs2 + num_microops - 1;
@@ -2583,9 +2579,6 @@ Fault
                 machInst);
         }
     }
-
-    status.vs = VPUStatus::DIRTY;
-    xc->setMiscReg(MISCREG_STATUS, status);
 
     bool set_dirty = true;
     bool check_vill = true;
