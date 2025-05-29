@@ -2586,7 +2586,7 @@ Fault
 
     status.vs = VPUStatus::DIRTY;
     xc->setMiscReg(MISCREG_STATUS, status);
-  
+
     bool set_dirty = true;
     bool check_vill = true;
     Fault update_fault = updateVPUStatus(xc, machInst, set_dirty, check_vill);
