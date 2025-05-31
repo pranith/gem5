@@ -9098,8 +9098,8 @@ namespace VegaISA
                 if (neg & 1) tmp0 = -tmp0;
                 if (neg & 2) tmp1 = -tmp1;
 
-                uint16_t packed_data = (bits(tmp0.data, 31, 24) << 8)
-                                     | bits(tmp1.data, 31, 24);
+                uint16_t packed_data = (bits(tmp1.data, 31, 24) << 8)
+                                     | bits(tmp0.data, 31, 24);
 
                 if (opsel & 8) {
                     replaceBits(vdst[lane], 31, 16, packed_data);
