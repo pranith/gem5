@@ -39,21 +39,139 @@
 
 #include "arch/x86/regs/int.hh"
 #include "base/trace.hh"
+#include "cpu/pc_event.hh"
 #include "cpu/thread_context.hh"
+#include "debug/X86KernelPanicExit.hh"
+#include "kern/linux/events.hh"
 #include "mem/port_proxy.hh"
 #include "params/X86FsLinux.hh"
 #include "sim/byteswap.hh"
+#include "sim/sim_exit.hh"
 #include "sim/system.hh"
 
 namespace gem5
 {
 
+// using namespace linux;
 namespace X86ISA
 {
 
 FsLinux::FsLinux(const Params &p) :
-    X86ISA::FsWorkload(p), e820Table(p.e820_table)
-{}
+    X86ISA::FsWorkload(p), exit_on_kernel_panic(p.exit_on_kernel_panic),
+    exit_on_kernel_oops(p.exit_on_kernel_oops), e820Table(p.e820_table)
+{
+    // addExitOnKernelOopsEvent();
+    // addExitOnKernelPanicEvent();
+}
+
+void
+FsLinux::startup()
+{
+    KernelWorkload::startup();
+
+    addExitOnKernelOopsEvent();
+    addExitOnKernelPanicEvent();
+}
+
+
+// void
+// FsLinux::addExitOnKernelPanicEvent()
+// {
+//     const std::string dmesg_output = name() + ".dmesg";
+//     if (params().exit_on_kernel_panic) {
+//         // kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+//         //     "panic", "Kernel panic in simulated system.",
+//         //     dmesg_output, params().on_panic
+//         // );
+//         kernelPanicPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
+//             "panic", "Kernel panic in simulated kernel");
+//         // warn_if(
+                //!kernelPanicPcEvent, "Failed to find kernel symbol 'panic'");
+//     }
+// }
+
+// void
+// FsLinux::addExitOnKernelOopsEvent()
+// {
+//     // const std::string dmesg_output = name() + ".dmesg";
+//     if (params().exit_on_kernel_oops) {
+//         // kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+//         //     "oops_exit", "Kernel oops in simulated system.",
+//         //     dmesg_output, params().on_oops
+//         // );
+//         kernelOopsPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
+//             "oops_exit", "Kernel oops in guest");
+//         // warn_if(!kernelOopsPcEvent,
+//         //         "Failed to find kernel symbol 'oops_exit'");
+//     }
+// }
+
+void
+FsLinux::addExitOnKernelPanicEvent()
+{
+    const std::string dmesg_output = name() + ".dmesg";
+    // if (params().exit_on_kernel_panic) {
+    // if (exit_on_kernel_panic) {
+        // kernelPanicPcEvent = addFuncEvent<linux::PanicOrOopsEvent>(
+        //     kernelSymtab, "panic", "Kernel panic in simulated system.",
+        //     dmesg_output, params().on_panic
+        // );
+
+        // riscv method
+        // kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+        //     "panic", "Kernel panic in simulated system.",
+        //     dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
+        //     // params().on_panic
+        // );
+
+        //arm method
+        kernelPanicPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
+            "panic", "Kernel panic in simulated kernel");
+        DPRINTF(
+            X86KernelPanicExit, "FsLinux panic event has been registered!"
+        );
+        DPRINTF(
+            X86KernelPanicExit, "FsLinux: Is kernelPanicPcEvent set? %d",
+            kernelPanicPcEvent != nullptr
+        );
+
+    // }
+    DPRINTF(X86KernelPanicExit, "FsLinux::addExitOnKernelPanicEvent called!" );
+    DPRINTF(X86KernelPanicExit, "is params().exit_on_kernel_panic true? %d",
+        params().exit_on_kernel_panic
+    );
+    DPRINTF(X86KernelPanicExit, "is exit_on_kernel_panic true? %d",
+        exit_on_kernel_panic
+    );
+
+}
+
+void
+FsLinux::addExitOnKernelOopsEvent()
+{
+    const std::string dmesg_output = name() + ".dmesg";
+    // if (params().exit_on_kernel_oops) {
+    // if (exit_on_kernel_oops) {
+        // kernelOopsPcEvent = addFuncEvent<linux::PanicOrOopsEvent>(
+        //     kernelSymtab, "oops_exit", "Kernel oops in simulated system.",
+        //     dmesg_output, params().on_oops
+        // );
+    // }
+    // riscv method - fails to register the oops event because kernelSymtab
+    // is empty.
+    // kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+    //     "oops_exit", "Kernel oops in simulated system.",
+    //     dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
+    //     // params().on_oops
+    // );
+
+        //arm method - exits with a panic when gem5 tries to register the
+        // oops event because kernelSymtab is empty.
+        kernelOopsPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
+            "oops_exit", "Kernel oops in simulated kernel");
+    DPRINTF(X86KernelPanicExit, "FsLinux::addExitOnKernelOopsEvent called!" );
+
+}
 
 void
 FsLinux::initState()

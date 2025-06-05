@@ -50,14 +50,31 @@ namespace X86ISA
 
 class FsLinux : public X86ISA::FsWorkload
 {
+  private:
+    PCEvent *kernelPanicPcEvent = nullptr;
+    PCEvent *kernelOopsPcEvent = nullptr;
+    void addExitOnKernelPanicEvent();
+    void addExitOnKernelOopsEvent();
+    bool exit_on_kernel_panic;
+    bool exit_on_kernel_oops;
   protected:
     E820Table *e820Table;
 
   public:
-    typedef X86FsLinuxParams Params;
+    PARAMS(X86FsLinux);
+    // typedef X86FsLinuxParams Params;
     FsLinux(const Params &p);
-
+    ~FsLinux()
+    {
+        if (kernelPanicPcEvent != nullptr) {
+            delete kernelPanicPcEvent;
+        }
+        if (kernelOopsPcEvent != nullptr) {
+            delete kernelOopsPcEvent;
+        }
+    }
     void initState() override;
+    void startup() override;
 };
 
 } // namespace X86ISA

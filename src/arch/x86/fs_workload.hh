@@ -78,10 +78,18 @@ class FsWorkload : public KernelWorkload
   public:
     PARAMS(X86FsWorkload);
     FsWorkload(const Params &p);
-
+    ~FsWorkload()
+    {
+        if (kernelPanicPcEvent != nullptr) {
+            delete kernelPanicPcEvent;
+        }
+        if (kernelOopsPcEvent != nullptr) {
+            delete kernelOopsPcEvent;
+        }
+    }
   public:
     void initState() override;
-
+    void startup() override;
     void
     setSystem(System *sys) override
     {
@@ -109,6 +117,13 @@ class FsWorkload : public KernelWorkload
 
   private:
     bool enable_osxsave;
+
+    PCEvent *kernelPanicPcEvent = nullptr;
+    PCEvent *kernelOopsPcEvent = nullptr;
+    void addExitOnKernelPanicEvent();
+    void addExitOnKernelOopsEvent();
+    bool exit_on_kernel_panic;
+    bool exit_on_kernel_oops;
 };
 
 } // namespace X86ISA
