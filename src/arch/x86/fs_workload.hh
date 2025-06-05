@@ -122,8 +122,8 @@ class FsWorkload : public KernelWorkload
     PCEvent *kernelOopsPcEvent = nullptr;
     void addExitOnKernelPanicEvent();
     void addExitOnKernelOopsEvent();
-    bool exit_on_kernel_panic;
-    bool exit_on_kernel_oops;
+    // bool exit_on_kernel_panic;
+    // bool exit_on_kernel_oops;
 };
 
 } // namespace X86ISA

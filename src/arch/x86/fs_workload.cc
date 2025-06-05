@@ -64,14 +64,10 @@ FsWorkload::FsWorkload(const Params &p) : KernelWorkload(p),
     mpFloatingPointer(p.intel_mp_pointer),
     mpConfigTable(p.intel_mp_table),
     rsdp(p.acpi_description_table_pointer),
-    enable_osxsave(p.enable_osxsave),
-    exit_on_kernel_panic(p.exit_on_kernel_panic),
-    exit_on_kernel_oops(p.exit_on_kernel_oops)
-{
-    // addExitOnKernelPanicEvent();
-    // addExitOnKernelOopsEvent();
-
-}
+    enable_osxsave(p.enable_osxsave)
+    // exit_on_kernel_panic(p.exit_on_kernel_panic),
+    // exit_on_kernel_oops(p.exit_on_kernel_oops)
+{}
 
 void
 installSegDesc(ThreadContext *tc, int seg, SegDescriptor desc, bool longmode)
@@ -126,29 +122,31 @@ void
 FsWorkload::addExitOnKernelPanicEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
-    // if (params().exit_on_kernel_panic) {
+    DPRINTF(
+        X86KernelPanicExit, "FsWorkload::addExitOnKernelPanicEvent called!"
+    );
+    DPRINTF(
+        X86KernelPanicExit, "FsWorkload: is params().exit_on_kernel_panic "
+        "true? %d", params().exit_on_kernel_panic
+    );
+    if (params().exit_on_kernel_panic) {
     // if (exit_on_kernel_panic) {
+        // This was adapted from the RISCV implementation. The issue is that
+        // the kernel table, `kernelSymtab`, which addKernelFuncEvent tries
+        // to access, is empty
         kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
             "panic", "Kernel panic in simulated system.",
             dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
-            // params().on_panic
         );
         warn_if(!kernelPanicPcEvent, "Failed to find kernel symbol 'panic'");
         DPRINTF(
             X86KernelPanicExit, "FsWorkload: is kernelPanicPcEvent set? %d",
             kernelPanicPcEvent != nullptr);
-    // }
-    DPRINTF(
-        X86KernelPanicExit, "FsWorkload::addExitOnKernelPanicEvent called!"
-    );
-    DPRINTF(
-        X86KernelPanicExit, "is params().exit_on_kernel_panic true? %d",
-        params().exit_on_kernel_panic
-    );
-    DPRINTF(
-        X86KernelPanicExit, "is exit_on_kernel_panic true? %d",
-        exit_on_kernel_panic
-    );
+    }
+    // DPRINTF(
+    //     X86KernelPanicExit, "is exit_on_kernel_panic true? %d",
+    //     exit_on_kernel_panic
+    // );
 
 }
 
@@ -156,19 +154,15 @@ void
 FsWorkload::addExitOnKernelOopsEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
-    // if (params().exit_on_kernel_oops) {
-    if (exit_on_kernel_oops) {
-
+    if (params().exit_on_kernel_oops) {
+    // if (exit_on_kernel_oops) {
         kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
             "oops_exit", "Kernel oops in simulated system.",
             dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
-            // params().on_oops
         );
         warn_if(!kernelOopsPcEvent,
                 "Failed to find kernel symbol 'oops_exit'");
     }
-    // DPRINTF(X86KernelPanicExit,
-    // "FsWorkload::addExitOnKernelOopsEvent called!");
 
 }
 
