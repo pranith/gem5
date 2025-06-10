@@ -47,7 +47,6 @@
 #include "cpu/pc_event.hh"
 #include "cpu/thread_context.hh"
 #include "debug/ACPI.hh"
-#include "debug/X86KernelPanicExit.hh"
 #include "kern/linux/events.hh"
 #include "params/X86FsWorkload.hh"
 #include "sim/sim_exit.hh"
@@ -120,13 +119,6 @@ void
 FsWorkload::addExitOnKernelPanicEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
-    DPRINTF(
-        X86KernelPanicExit, "FsWorkload::addExitOnKernelPanicEvent called!"
-    );
-    DPRINTF(
-        X86KernelPanicExit, "FsWorkload: is params().exit_on_kernel_panic "
-        "true? %d", params().exit_on_kernel_panic
-    );
     if (params().exit_on_kernel_panic) {
         // This was adapted from the RISCV implementation. Some kernels may not
         // have kernel symbols, causing `kernelSymtab` to be empty.
@@ -138,15 +130,7 @@ FsWorkload::addExitOnKernelPanicEvent()
             dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
         );
         warn_if(!kernelPanicPcEvent, "Failed to find kernel symbol 'panic'");
-        DPRINTF(
-            X86KernelPanicExit, "FsWorkload: is kernelPanicPcEvent set? %d",
-            kernelPanicPcEvent != nullptr);
     }
-    // DPRINTF(
-    //     X86KernelPanicExit, "is exit_on_kernel_panic true? %d",
-    //     exit_on_kernel_panic
-    // );
-
 }
 
 void

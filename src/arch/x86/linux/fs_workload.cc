@@ -41,7 +41,6 @@
 #include "base/trace.hh"
 #include "cpu/pc_event.hh"
 #include "cpu/thread_context.hh"
-#include "debug/X86KernelPanicExit.hh"
 #include "kern/linux/events.hh"
 #include "mem/port_proxy.hh"
 #include "params/X86FsLinux.hh"
@@ -51,6 +50,7 @@
 
 namespace gem5
 {
+
 namespace X86ISA
 {
 
@@ -71,11 +71,6 @@ FsLinux::startup()
 void
 FsLinux::addExitOnKernelPanicEvent()
 {
-    DPRINTF(X86KernelPanicExit, "FsLinux::addExitOnKernelPanicEvent called!");
-    DPRINTF(X86KernelPanicExit, "FsLinux: is params().exit_on_kernel_panic "
-        "true? %d", params().exit_on_kernel_panic
-    );
-
     const std::string dmesg_output = name() + ".dmesg";
 
     if (params().exit_on_kernel_panic) {
@@ -88,19 +83,12 @@ FsLinux::addExitOnKernelPanicEvent()
             "panic", "Kernel panic in simulated system.",
             dmesg_output, params().on_panic
         );
-
-        DPRINTF(
-            X86KernelPanicExit, "FsLinux: Is kernelPanicPcEvent set? %d",
-            kernelPanicPcEvent != nullptr
-        );
     }
 }
 
 void
 FsLinux::addExitOnKernelOopsEvent()
 {
-    DPRINTF(X86KernelPanicExit, "FsLinux::addExitOnKernelOopsEvent called!\n");
-
     const std::string dmesg_output = name() + ".dmesg";
     if (params().exit_on_kernel_oops) {
         // This was adapted from the RISCV implementation. Some kernels may not
