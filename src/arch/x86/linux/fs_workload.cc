@@ -55,8 +55,7 @@ namespace X86ISA
 {
 
 FsLinux::FsLinux(const Params &p) :
-    X86ISA::FsWorkload(p), /* exit_on_kernel_panic(p.exit_on_kernel_panic),
-    exit_on_kernel_oops(p.exit_on_kernel_oops), */e820Table(p.e820_table)
+    X86ISA::FsWorkload(p), e820Table(p.e820_table)
 {}
 
 void
@@ -80,20 +79,15 @@ FsLinux::addExitOnKernelPanicEvent()
     const std::string dmesg_output = name() + ".dmesg";
 
     if (params().exit_on_kernel_panic) {
-        // Adapted from RISCV. Simulation continues if adding the "handler" to
-        // exit simulation on kernel panic fails. Fails to add the handler
-        // because kernelSymtab, which is used by addKernelFuncEvent, is empty
-
-        // kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
-        //     "panic", "Kernel panic in simulated system.",
-        //     dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
-        //     // params().on_panic
-        // );
-
-        // Copied from Arm implementation. Simulation fails if the handler
-        // isn't added successfully. Also fails because kernelSymtab is empty
-        kernelPanicPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
-            "panic", "Kernel panic in simulated kernel");
+        // This was adapted from the RISCV implementation. Some kernels may not
+        // have kernel symbols, causing `kernelSymtab` to be empty.
+        // In that case, addKernelFuncEvent tries to access the "panic" symbol
+        // in the symbol table but can't, so the event won't be added and the
+        // simulation will hang upon kernel panic.
+        kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+            "panic", "Kernel panic in simulated system.",
+            dmesg_output, params().on_panic
+        );
 
         DPRINTF(
             X86KernelPanicExit, "FsLinux: Is kernelPanicPcEvent set? %d",
@@ -109,18 +103,15 @@ FsLinux::addExitOnKernelOopsEvent()
 
     const std::string dmesg_output = name() + ".dmesg";
     if (params().exit_on_kernel_oops) {
-        // riscv method - fails to register the oops event because kernelSymtab
-        // is empty.
-        // kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
-        //     "oops_exit", "Kernel oops in simulated system.",
-        //     dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
-        //     // params().on_oops
-        // );
-
-        //arm method - exits with a panic when gem5 tries to register the
-        // oops event because kernelSymtab is empty.
-        kernelOopsPcEvent = addKernelFuncEventOrPanic<PanicPCEvent>(
-            "oops_exit", "Kernel oops in simulated kernel");
+        // This was adapted from the RISCV implementation. Some kernels may not
+        // have kernel symbols, causing `kernelSymtab` to be empty.
+        // In that case, addKernelFuncEvent tries to access the "panic" symbol
+        // in the symbol table but can't, so the event won't be added and the
+        // simulation will continue upon kernel oops.
+        kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
+            "oops_exit", "Kernel oops in simulated system.",
+            dmesg_output, params().on_oops
+        );
     }
 }
 

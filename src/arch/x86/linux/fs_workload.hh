@@ -55,14 +55,11 @@ class FsLinux : public X86ISA::FsWorkload
     PCEvent *kernelOopsPcEvent = nullptr;
     void addExitOnKernelPanicEvent();
     void addExitOnKernelOopsEvent();
-    // bool exit_on_kernel_panic;
-    // bool exit_on_kernel_oops;
   protected:
     E820Table *e820Table;
 
   public:
     PARAMS(X86FsLinux);
-    // typedef X86FsLinuxParams Params;
     FsLinux(const Params &p);
     ~FsLinux()
     {
