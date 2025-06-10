@@ -78,7 +78,7 @@ class X86FsWorkload(KernelWorkload):
         True, "Generate gem5 panic upon the guest's kernel panic."
     )
     exit_on_kernel_oops = Param.Bool(
-        True, "Generate gem5 panic upon the guest's kernel oops."
+        False, "Generate gem5 panic upon the guest's kernel oops."
     )
 
 
@@ -94,9 +94,10 @@ class X86FsLinux(X86FsWorkload):
         True, "Generate gem5 panic upon the guest's kernel panic."
     )
     exit_on_kernel_oops = Param.Bool(
-        True, "Generate gem5 panic upon the guest's kernel oops."
+        False, "Generate gem5 panic upon the guest's kernel oops."
     )
-    # Note: Duplicated from KernelWorkload for now
+    # Note: Taken from the RISC-V implementation, which obtained the following
+    # from KernelWorkload
     on_panic = Param.KernelPanicOopsBehaviour(
         "DumpDmesgAndExit",
         "Define how gem5 should behave after a Linux Kernel Panic. "
