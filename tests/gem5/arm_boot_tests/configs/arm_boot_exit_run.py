@@ -216,7 +216,7 @@ board.set_workload(
             else "arm-ubuntu-24.04-boot-no-systemd"
         ),
         resource_directory=args.resource_directory,
-        resource_version="3.0.0",
+        resource_version=("3.0.0" if args.systemd else "2.0.0"),
     ),
 )
 

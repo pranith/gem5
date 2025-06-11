@@ -49,23 +49,22 @@ arm_boot_test"
 
     verifiers = []
 
-    config_args = (
-        [
-            "--cpu",
-            cpu,
-            "--num-cpus",
-            str(num_cpus),
-            "--mem-system",
-            mem_system,
-            "--dram-class",
-            memory_class,
-            "--resource-directory",
-            resource_path,
-        ]
-        + ["--systemd"]
-        if systemd
-        else []
-    )
+    config_args = [
+        "--cpu",
+        cpu,
+        "--num-cpus",
+        str(num_cpus),
+        "--mem-system",
+        mem_system,
+        "--dram-class",
+        memory_class,
+        "--resource-directory",
+        resource_path,
+    ]
+
+    if systemd:
+        name += "_systemd"
+        config_args += ["--systemd"]
 
     if to_tick:
         name += "_to-tick"
