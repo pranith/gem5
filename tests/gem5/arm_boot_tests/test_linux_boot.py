@@ -42,24 +42,30 @@ def test_boot(
     memory_class: str,
     length: str,
     to_tick: Optional[int] = None,
+    systemd: bool = False,
 ):
     name = f"{cpu}-cpu_{num_cpus}-cores_{mem_system}_{memory_class}_\
 arm_boot_test"
 
     verifiers = []
 
-    config_args = [
-        "--cpu",
-        cpu,
-        "--num-cpus",
-        str(num_cpus),
-        "--mem-system",
-        mem_system,
-        "--dram-class",
-        memory_class,
-        "--resource-directory",
-        resource_path,
-    ]
+    config_args = (
+        [
+            "--cpu",
+            cpu,
+            "--num-cpus",
+            str(num_cpus),
+            "--mem-system",
+            mem_system,
+            "--dram-class",
+            memory_class,
+            "--resource-directory",
+            resource_path,
+        ]
+        + ["--systemd"]
+        if systemd
+        else []
+    )
 
     if to_tick:
         name += "_to-tick"
@@ -152,10 +158,11 @@ test_boot(
 
 test_boot(
     cpu="atomic",
-    num_cpus=4,
+    num_cpus=1,
     mem_system="no_cache",
     memory_class="HBM2Stack",
     length=constants.long_tag,
+    systemd=True,
 )
 
 test_boot(
