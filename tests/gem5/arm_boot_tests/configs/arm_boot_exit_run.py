@@ -93,6 +93,18 @@ parser.add_argument(
     help="The python class for the memory interface to use",
 )
 
+systemd_group = parser.add_mutually_exclusive_group(required=True)
+systemd_group.add_argument(
+    "--systemd",
+    action="store_true",
+    help="Enable systemd on boot.",
+)
+systemd_group.add_argument(
+    "--no-systemd",
+    action="store_true",
+    help="Disable systemd on boot.",
+)
+
 parser.add_argument(
     "--systemd",
     action="store_true",
