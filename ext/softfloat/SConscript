@@ -47,6 +47,7 @@ if sf_env['GCC']:
 elif sf_env['CLANG']:
     sf_env.Append(CCFLAGS=['-Wno-unused-variable',
                            '-Wno-unused-label',
+                           '-Wno-implicit-fallthrough',
                            '-Wno-implicit-function-declaration',
                            '-g'])
 

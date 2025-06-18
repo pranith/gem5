@@ -594,8 +594,21 @@ for variant_path in variant_paths:
         env.Append(CCFLAGS=['-Wall', '-Wundef', '-Wextra',
                             '-Wno-sign-compare', '-Wno-unused-parameter'])
 
-        # We always compile using C++17
-        env.Append(CXXFLAGS=['-std=c++17'])
+        # We always compile using C++20
+        env.Append(CXXFLAGS=['-std=c++20'])
+        # Left operand of volatile is deprecated in C++20 and then
+        # de-deprecaetd. This skip is a workaround to avoid warning on
+        # intermediate compiler versions. Ref:
+        # https://cplusplus.github.io/CWG/issues/2654.html
+        with gem5_scons.Configure(env) as conf:
+            conf.CheckCxxFlag('-Wno-volatile')
+
+        # Arithmetic operations between differen enums are deprecated.
+        # https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p1120r0.html
+        # However, this is common used in code under arch/.
+        # e.g. ArmFault::AddressSizeLL + start_lookup_level
+        env.Append(CXXFLAGS=['-Wno-deprecated-enum-enum-conversion'])
+        env.Append(CXXFLAGS=['-Wno-deprecated-anon-enum-enum-conversion'])
 
         if sys.platform.startswith('freebsd'):
             env.Append(CCFLAGS=['-I/usr/local/include'])
@@ -687,6 +700,9 @@ for variant_path in variant_paths:
                 f'to v{gcc_max_version}.\n'
             )
 
+        # Workaround https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105651
+        if compareVersions(gcc_version, "13") < 0:
+            env.Append(CXXFLAGS=['-Wno-restrict'])
 
         # Add the appropriate Link-Time Optimization (LTO) flags if
         # `--with-lto` is set.
