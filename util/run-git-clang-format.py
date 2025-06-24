@@ -60,6 +60,13 @@ This wrapper script adds the following functionality over calling
 The script can also be used without the `--pre-commit` option on the
 command line to manually re-format staged files.
 
+To support in-place checking of a PR in GitHub Actions, the
+`--ci-pr-base-commit` option and `GEM5_CI_PR_BASE_COMMIT` environment
+variable are also supported. If either of these are set to the
+hash/branch-name/tag-name of the base commit of a PR, then
+`git-clang-format` will be run in-place on the PR, and the changed
+lines between `GEM5_CI_PR_BASE_COMMIT` and HEAD will be re-formatted.
+
 """
 
 import argparse
@@ -196,6 +203,7 @@ def make_ignore_path_rel(path_str: str, repo_root: Path) -> Optional[Path]:
 if __name__ == "__main__":
     DISABLE_ENV_VAR_NAME: str = "GEM5_NO_GIT_CLANG_FORMAT"
     IGNORE_ENV_VAR_NAME: str = "GEM5_GIT_CLANG_FORMAT_IGNORE"
+    CI_PR_BASE_COMMIT_ENV_VAR_NAME: str = "GEM5_CI_PR_BASE_COMMIT"
 
     PROGRAM_DESCRIPTION_LINES: list[str] = [
         "Run `git-clang-format` on the current staged changes.",
@@ -208,6 +216,12 @@ if __name__ == "__main__":
         "",
         "When running from `pre-commit`, specify the `--pre-commit` ",
         "option to suppress output and return appropriate exit codes.",
+        "",
+        "When running in a CI context, specify the `--ci-pr-base-commit` ",
+        f"option or set the `{CI_PR_BASE_COMMIT_ENV_VAR_NAME}` environment ",
+        "variable to the hash/branch-name/tag-name of the base commit of ",
+        "the PR. This will run the formatting checks in-place from the ",
+        "specified branch to HEAD.",
     ]
     PROGRAM_DESCRIPTION: str = "\n".join(PROGRAM_DESCRIPTION_LINES)
 
@@ -231,6 +245,12 @@ if __name__ == "__main__":
         "--dry-run",
         action="store_true",
         help="Print the diff to stdout but do not modify any files.",
+    )
+    parser.add_argument(
+        "--ci-pr-base-commit",
+        type=str,
+        default=None,
+        help="Run the git-clang-format checks in a CI context, from this commit to HEAD.",
     )
     parser.add_argument(
         "--verbose",
@@ -283,6 +303,18 @@ if __name__ == "__main__":
             "git-clang-format disabled globally from environment variable."
         )
         sys.exit(0)
+
+    ci_pr_base_commit: Optional[str] = os.environ.get(
+        CI_PR_BASE_COMMIT_ENV_VAR_NAME, None
+    )
+    if ci_pr_base_commit is None:
+        ci_pr_base_commit = args.ci_pr_base_commit
+    if ci_pr_base_commit is not None:
+        logger.debug(
+            "Running in CI mode with base commit id '%s'", ci_pr_base_commit
+        )
+    else:
+        logger.debug("Running in normal (staged-changes) mode")
 
     disabled_files: set[Optional[Path]] = {
         make_ignore_path(path) for path in args.ignore
@@ -340,12 +372,22 @@ if __name__ == "__main__":
 
     # Run `git-clang-format`
     #
-    command = [
-        "git-clang-format",
-        "--staged",
-        "--quiet",
-        "--style=file",
-    ]
+    if ci_pr_base_commit is not None:
+        # Run git-clang-format in 'CI' context
+        command = [
+            "git-clang-format",
+            "--quiet",
+            "--style=file",
+            f"--commit={ci_pr_base_commit}",
+        ]
+    else:
+        # Run git-clang-format in normal (staged-changes) context
+        command = [
+            "git-clang-format",
+            "--staged",
+            "--quiet",
+            "--style=file",
+        ]
     if args.dry_run:
         command.append("--diff")
     if pathspecs:
