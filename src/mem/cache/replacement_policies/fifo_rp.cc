@@ -59,12 +59,16 @@ FIFO::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 void
 FIFO::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
-    // A touch does not modify the insertion tick
+    // A touch does not modify the insertion tick. We still check if the data
+    // exists to standardize the API
+    assert(replacement_data);
 }
 
 void
 FIFO::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
+    assert(replacement_data);
+
     // Set insertion tick
     std::static_pointer_cast<FIFOReplData>(
         replacement_data)->tickInserted = ++timeTicks;
