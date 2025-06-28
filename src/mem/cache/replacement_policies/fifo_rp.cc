@@ -48,9 +48,12 @@ FIFO::FIFO(const Params &p)
 void
 FIFO::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
-    // Reset insertion tick
+    assert(replacement_data);
+
+    // To prioritize these entries to be selected during victimization
+    // we set their insertion tick as 0
     std::static_pointer_cast<FIFOReplData>(
-        replacement_data)->tickInserted = ++timeTicks;
+        replacement_data)->tickInserted = 0;
 }
 
 void
