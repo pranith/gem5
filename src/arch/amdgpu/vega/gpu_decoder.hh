@@ -302,6 +302,7 @@ namespace VegaISA
         GPUStaticInst* decode_OPU_VOP3__V_OR_B32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_XOR_B32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_MAC_F32(MachInst);
+        GPUStaticInst* decode_OPU_VOP3__V_DOT2C_F32_BF16(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_ADD_CO_U32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_SUB_CO_U32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_SUBREV_CO_U32(MachInst);
@@ -477,6 +478,10 @@ namespace VegaISA
         GPUStaticInst* decode_OPU_VOP3__V_FMA_F16(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_DIV_FIXUP_F16(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_LSHL_ADD_U64(MachInst);
+        GPUStaticInst* decode_OPU_VOP3__V_BITOP3_B16(MachInst);
+        GPUStaticInst* decode_OPU_VOP3__V_BITOP3_B32(MachInst);
+        GPUStaticInst* decode_OPU_VOP3__V_ASHR_PK_I8_I32(MachInst);
+        GPUStaticInst* decode_OPU_VOP3__V_ASHR_PK_U8_I32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_INTERP_P1_F32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_INTERP_P2_F32(MachInst);
         GPUStaticInst* decode_OPU_VOP3__V_INTERP_MOV_F32(MachInst);
@@ -668,6 +673,10 @@ namespace VegaISA
         GPUStaticInst* decode_OP_DS__DS_MAX_SRC2_F64(MachInst);
         GPUStaticInst* decode_OP_DS__DS_WRITE_B96(MachInst);
         GPUStaticInst* decode_OP_DS__DS_WRITE_B128(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B4(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B96_TR_B6(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B8(MachInst);
+        GPUStaticInst* decode_OP_DS__DS_READ_B64_TR_B16(MachInst);
         GPUStaticInst* decode_OP_DS__DS_READ_B96(MachInst);
         GPUStaticInst* decode_OP_DS__DS_READ_B128(MachInst);
         GPUStaticInst* decode_OP_EXP(MachInst);
@@ -709,6 +718,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_ADD_F64(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_MIN_F64(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_MAX_F64(MachInst);
+        GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_FLAT__FLAT_ATOMIC_ADD_X2(MachInst);
@@ -744,6 +754,11 @@ namespace VegaISA
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_SBYTE_D16_HI(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_SHORT_D16(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_SHORT_D16_HI(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_UBYTE(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SBYTE(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_USHORT(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_SSHORT(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORD(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_SWAP(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_CMPSWAP(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD(MachInst);
@@ -762,6 +777,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD_F64(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_MIN_F64(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_MAX_F64(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_ADD_X2(MachInst);
@@ -775,6 +791,8 @@ namespace VegaISA
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_XOR_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_INC_X2(MachInst);
         GPUStaticInst* decode_OP_GLOBAL__GLOBAL_ATOMIC_DEC_X2(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX4(MachInst);
+        GPUStaticInst* decode_OP_GLOBAL__GLOBAL_LOAD_LDS_DWORDX3(MachInst);
         GPUStaticInst* decode_OP_MIMG__IMAGE_LOAD(MachInst);
         GPUStaticInst* decode_OP_MIMG__IMAGE_LOAD_MIP(MachInst);
         GPUStaticInst* decode_OP_MIMG__IMAGE_LOAD_PCK(MachInst);
@@ -940,6 +958,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_XOR(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_INC(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_DEC(MachInst);
+        GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_PK_ADD_BF16(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_SWAP_X2(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_CMPSWAP_X2(MachInst);
         GPUStaticInst* decode_OP_MUBUF__BUFFER_ATOMIC_ADD_X2(MachInst);
@@ -1344,6 +1363,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_VOP2__V_OR_B32(MachInst);
         GPUStaticInst* decode_OP_VOP2__V_XOR_B32(MachInst);
         GPUStaticInst* decode_OP_VOP2__V_MAC_F32(MachInst);
+        GPUStaticInst* decode_OP_VOP2__V_DOT2C_F32_BF16(MachInst);
         GPUStaticInst* decode_OP_VOP2__V_MADMK_F32(MachInst);
         GPUStaticInst* decode_OP_VOP2__V_MADAK_F32(MachInst);
         GPUStaticInst* decode_OP_VOP2__V_ADD_CO_U32(MachInst);
@@ -1609,6 +1629,7 @@ namespace VegaISA
         GPUStaticInst* decode_OP_VOP3P__V_PK_ADD_F32(MachInst);
         GPUStaticInst* decode_OP_VOP3P__V_PK_MOV_B32(MachInst);
         GPUStaticInst* decode_OP_VOP3P__V_DOT2_F32_F16(MachInst);
+        GPUStaticInst* decode_OP_VOP3P__V_DOT2_F32_BF16(MachInst);
         GPUStaticInst* decode_OP_VOP3P__V_DOT2_I32_I16(MachInst);
         GPUStaticInst* decode_OP_VOP3P__V_DOT2_U32_U16(MachInst);
         GPUStaticInst* decode_OP_VOP3P__V_DOT4_I32_I8(MachInst);
