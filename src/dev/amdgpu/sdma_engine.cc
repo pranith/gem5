@@ -383,6 +383,9 @@ SDMAEngine::decodeNext(SDMAQueue *q)
         q->processing(false);
         if (q->parent()) {
             DPRINTF(SDMAEngine, "SDMA switching queues\n");
+            // If current vmid is non-zero, set it back to 0 before
+            // switching back to parent
+            cur_vmid = 0;
             decodeNext(q->parent());
         }
         cur_vmid = 0;
@@ -478,7 +481,8 @@ SDMAEngine::decodeHeader(SDMAQueue *q, uint32_t header)
         dmaBuffer = new sdmaIndirectBuffer();
         cb = new DmaVirtCallback<uint64_t>(
             [ = ] (const uint64_t &)
-                { indirectBuffer(q, (sdmaIndirectBuffer *)dmaBuffer); });
+                { indirectBuffer(q, (sdmaIndirectBuffer *)dmaBuffer,
+                        header); });
         dmaReadVirt(q->rptr(), sizeof(sdmaIndirectBuffer), cb, dmaBuffer,
                 sdma_delay);
         } break;
@@ -659,7 +663,7 @@ SDMAEngine::writeReadData(SDMAQueue *q, sdmaWrite *pkt, uint32_t *dmaBuffer)
         gpuDevice->getMemMgr()->writeRequest(mmhub_addr, (uint8_t *)dmaBuffer,
                                            bufferSize, 0, cb);
     } else {
-        if (q->priv()) {
+        if (q->priv() && cur_vmid == 0) {
             pkt->dest = getGARTAddr(pkt->dest);
         }
         auto cb = new DmaVirtCallback<uint32_t>(
@@ -705,8 +709,13 @@ SDMAEngine::copy(SDMAQueue *q, sdmaCopy *pkt)
             pkt->source, pkt->dest, pkt->count);
     q->incRptr(sizeof(sdmaCopy));
     // count represents the number of bytes - 1 to be copied
-    pkt->count++;
-    if (q->priv()) {
+    // However, when vmid != 0, the sdma copies count number
+    // of bytes
+    if (cur_vmid == 0) {
+        pkt->count++;
+    }
+
+    if (q->priv() && cur_vmid == 0) {
         if (!gpuDevice->getVM().inMMHUB(pkt->source)) {
             DPRINTF(SDMAEngine, "Getting GART addr for %lx\n", pkt->source);
             pkt->source = getGARTAddr(pkt->source);
@@ -838,9 +847,11 @@ SDMAEngine::copyCleanup(uint8_t *dmaBuffer)
 
 /* Implements an indirect buffer packet. */
 void
-SDMAEngine::indirectBuffer(SDMAQueue *q, sdmaIndirectBuffer *pkt)
+SDMAEngine::indirectBuffer(SDMAQueue *q, sdmaIndirectBuffer *pkt,
+        uint32_t header)
 {
-    if (q->priv()) {
+    cur_vmid = (header >> 16) & 0xF;
+    if (q->priv() && cur_vmid == 0) {
         q->ib()->base(getGARTAddr(pkt->base));
     } else {
         q->ib()->base(pkt->base);
@@ -860,7 +871,7 @@ void
 SDMAEngine::fence(SDMAQueue *q, sdmaFence *pkt)
 {
     q->incRptr(sizeof(sdmaFence));
-    if (q->priv()) {
+    if (q->priv() && cur_vmid == 0) {
         pkt->dest = getGARTAddr(pkt->dest);
     }
 
@@ -958,7 +969,7 @@ SDMAEngine::pollRegMem(SDMAQueue *q, uint32_t header, sdmaPollRegMem *pkt)
     sdmaPollRegMemHeader prm_header;
     prm_header.ordinal = header;
 
-    if (q->priv()) {
+    if (q->priv() && cur_vmid == 0) {
         pkt->address = getGARTAddr(pkt->address);
     }
 
@@ -1086,7 +1097,7 @@ SDMAEngine::ptePde(SDMAQueue *q, sdmaPtePde *pkt)
                                              sizeof(uint64_t) * pkt->count, 0,
                                              cb);
     } else {
-        if (q->priv()) {
+        if (q->priv() && cur_vmid == 0) {
             pkt->dest = getGARTAddr(pkt->dest);
         }
         auto cb = new DmaVirtCallback<uint64_t>(
