@@ -171,6 +171,8 @@ class SDMAEngine : public DmaVirtDevice
     Addr mmioBase = 0;
     Addr mmioSize = 0;
 
+    static constexpr Tick sdma_delay = 1e9;
+
   public:
     SDMAEngine(const SDMAEngineParams &p);
 
