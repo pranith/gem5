@@ -875,9 +875,10 @@ void
 Execute::doInstCommitAccounting(MinorDynInstPtr inst)
 {
     assert(!inst->isFault());
-
-    MinorThread *thread = cpu.threads[inst->id.threadId];
     bool is_nop = inst->staticInst->isNop();
+    const ThreadID tid = inst->id.threadId;
+    MinorThread *thread = cpu.threads[tid];
+    const bool in_user_mode = thread->getIsaPtr()->inUserMode();
 
     /* Increment the many and various inst and op counts in the
      *  thread and system */
@@ -885,10 +886,12 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
     {
         thread->numInst++;
         thread->threadStats.numInsts++;
-        cpu.commitStats[inst->id.threadId]->numInsts++;
-        cpu.executeStats[inst->id.threadId]->numInsts++;
-
+        cpu.commitStats[tid]->numInsts++;
+        cpu.executeStats[tid]->numInsts++;
         cpu.baseStats.numInsts++;
+        if (in_user_mode) {
+            cpu.commitStats[tid]->numUserInsts++;
+        }
 
         if (!is_nop) {
             cpu.commitStats[inst->id.threadId]->numInstsNotNOP++;
@@ -901,47 +904,50 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
     thread->numOp++;
     thread->threadStats.numOps++;
     if (!is_nop) {
-        cpu.commitStats[inst->id.threadId]->numOpsNotNOP++;
+        cpu.commitStats[tid]->numOpsNotNOP++;
     }
 
     if (inst->staticInst->isMemRef()) {
-        cpu.executeStats[inst->id.threadId]->numMemRefs++;
-        cpu.commitStats[inst->id.threadId]->numMemRefs++;
+        cpu.executeStats[tid]->numMemRefs++;
+        cpu.commitStats[tid]->numMemRefs++;
         thread->threadStats.numMemRefs++;
     }
     if (inst->staticInst->isLoad()) {
-            cpu.executeStats[inst->id.threadId]->numLoadInsts++;
-            cpu.commitStats[inst->id.threadId]->numLoadInsts++;
+            cpu.executeStats[tid]->numLoadInsts++;
+            cpu.commitStats[tid]->numLoadInsts++;
     }
 
     if (inst->staticInst->isStore() || inst->staticInst->isAtomic()) {
-            cpu.commitStats[inst->id.threadId]->numStoreInsts++;
+            cpu.commitStats[tid]->numStoreInsts++;
     }
     if (inst->staticInst->isInteger()) {
-            cpu.commitStats[inst->id.threadId]->numIntInsts++;
+            cpu.commitStats[tid]->numIntInsts++;
     }
 
     if (inst->staticInst->isFloating()) {
-            cpu.commitStats[inst->id.threadId]->numFpInsts++;
+            cpu.commitStats[tid]->numFpInsts++;
     }
 
     if (inst->staticInst->isVector()) {
-            cpu.commitStats[inst->id.threadId]->numVecInsts++;
+            cpu.commitStats[tid]->numVecInsts++;
     }
     if (inst->staticInst->isControl()) {
-            cpu.executeStats[inst->id.threadId]->numBranches++;
+            cpu.executeStats[tid]->numBranches++;
     }
     if (inst->staticInst->isCall() || inst->staticInst->isReturn()) {
-            cpu.commitStats[inst->id.threadId]->numCallsReturns++;
+            cpu.commitStats[tid]->numCallsReturns++;
     }
     if (inst->staticInst->isCall()) {
-            cpu.commitStats[inst->id.threadId]->functionCalls++;
+            cpu.commitStats[tid]->functionCalls++;
     }
 
-    cpu.commitStats[inst->id.threadId]->numOps++;
-    cpu.commitStats[inst->id.threadId]
+    cpu.commitStats[tid]->numOps++;
+    cpu.commitStats[tid]
         ->committedInstType[inst->staticInst->opClass()]++;
-    cpu.commitStats[inst->id.threadId]->updateComCtrlStats(inst->staticInst);
+    cpu.commitStats[tid]->updateComCtrlStats(inst->staticInst);
+    if (in_user_mode) {
+        cpu.commitStats[tid]->numUserOps++;
+    }
 
     /* Set the CP SeqNum to the numOps commit number */
     if (inst->traceData)

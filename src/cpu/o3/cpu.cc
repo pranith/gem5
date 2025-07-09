@@ -1354,6 +1354,12 @@ CPU::getFreeTid()
     return InvalidThreadID;
 }
 
+bool
+CPU::inUserMode(ThreadID tid)
+{
+    return isa[tid]->inUserMode();
+}
+
 void
 CPU::updateThreadPriority()
 {
