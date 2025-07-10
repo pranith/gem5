@@ -105,7 +105,9 @@ board = ArmBoard(
 
 # Here we set a full system workload. The "arm-ubuntu-24.04-boot-with-systemd" boots
 # Ubuntu 24.04.
-workload = obtain_resource("arm-ubuntu-24.04-boot-with-systemd")
+workload = obtain_resource(
+    "arm-ubuntu-24.04-boot-with-systemd", resource_version="3.0.0"
+)
 board.set_workload(workload)
 
 # Examples of how you can override the default exit handler behaviors.

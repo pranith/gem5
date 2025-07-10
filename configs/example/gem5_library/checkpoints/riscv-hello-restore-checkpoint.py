@@ -81,9 +81,9 @@ board = SimpleBoard(
 )
 
 # Here we set the workload. In this case we want to run a simple "Hello World!"
-# program compiled to the RISCV ISA. The `Resource` class will automatically
-# download the binary from the gem5 Resources cloud bucket if it's not already
-# present.
+# program compiled to the RISCV ISA. The `obtain_resource` function will
+# automatically download the binary from the gem5 Resources cloud bucket if
+# it's not already present.
 # We get the pre-taken checkpoint from gem5-resources. This checkpoint
 # was taken from running this gem5 configuration script,
 # configs/example/gem5_library/checkpoints/riscv-hello-save-checkpoint.py

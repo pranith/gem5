@@ -99,9 +99,6 @@ generator = generator_factory(
 # We use the Test Board. This is a special board to run traffic generation
 # tasks. Can replace the cache_hierarchy with any hierarchy to simulate the
 # cache as well as the memory
-
-# Need to test this; will this work with cache_hierarchy as None instead of
-# NoCache?
 board = TestBoard(
     clk_freq="1GHz",  # Ignored for these generators
     generator=generator,  # We pass the traffic generator as the processor.
