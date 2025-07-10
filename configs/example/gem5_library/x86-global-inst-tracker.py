@@ -159,5 +159,3 @@ simulator = Simulator(
 )
 
 simulator.run()
-
-print("Simulation Done")

@@ -265,36 +265,3 @@ print("Using KVM cpu")
 
 # We start the simulation.
 simulator.run()
-
-# Simulation is over at this point. We acknowledge that all the simulation
-# events were successful.
-print("All simulation events were successful.")
-# We print the final simulation statistics.
-
-print("Done with the simulation")
-print("Performance statistics:")
-
-# manually calculate ROI time if ticks arg is used in case the
-# entire ROI wasn't simulated
-
-# if args.ticks:
-#     print(f"Simulated time in ROI (to tick): {args.ticks/ 1e12}s")
-# else:
-#     print(f"Simulated time in ROI: {simulator.get_roi_ticks()[0] / 1e12}s")
-import _m5.core
-
-print(
-    "Simulated time in ROI: "
-    f"{((simulator.get_tick_stopwatch[ExitEvent.WORKBEGIN] -
-    simulator.get_tick_stopwatch[ExitEvent.WORKEND]) /
-    _m5.core.getClockFrequency()):.2f}s"
-)
-print(
-    f"Ran a total of "
-    f"{simulator.get_current_tick() / _m5.core.getClockFrequency()} simulated "
-    "seconds"
-)
-print(
-    f"Total wallclock time: {(time.time() - globalStart):.2f}, "
-    f"which is {((time.time() - globalStart) / 60):.2f} min"
-)

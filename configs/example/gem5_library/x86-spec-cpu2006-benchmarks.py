@@ -323,23 +323,3 @@ m5.stats.reset()
 
 # We start the simulation
 simulator.run()
-
-# Simulation is over at this point. We acknowledge that all the simulation
-# events were successful.
-print("All simulation events were successful.")
-# We print the final simulation statistics.
-
-print("Performance statistics:")
-
-roi_begin_ticks = simulator.get_tick_stopwatch()[0][1]
-roi_end_ticks = simulator.get_tick_stopwatch()[1][1]
-
-print("roi simulated ticks: " + str(roi_end_ticks - roi_begin_ticks))
-
-print(
-    "Ran a total of", simulator.get_current_tick() / 1e12, "simulated seconds"
-)
-print(
-    "Total wallclock time: %.2fs, %.2f min"
-    % (time.time() - globalStart, (time.time() - globalStart) / 60)
-)

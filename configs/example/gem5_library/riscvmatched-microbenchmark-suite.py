@@ -74,11 +74,3 @@ board.set_workload(list(microbenchmarks.with_input_group("cca"))[0])
 # run the simulation with the RISCV Matched board
 simulator = Simulator(board=board, full_system=False)
 simulator.run()
-
-# Keep or remove this print statement?
-print(
-    "Exiting @ tick {} because {}.".format(
-        simulator.get_current_tick(),
-        simulator.get_last_exit_event_cause(),
-    )
-)

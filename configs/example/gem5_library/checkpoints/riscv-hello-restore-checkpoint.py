@@ -105,10 +105,3 @@ board.set_se_binary_workload(
 
 simulator = Simulator(board=board)
 simulator.run()
-
-# Should this be kept or removed?
-print(
-    "Exiting @ tick {} because {}.".format(
-        simulator.get_current_tick(), simulator.get_last_exit_event_cause()
-    )
-)

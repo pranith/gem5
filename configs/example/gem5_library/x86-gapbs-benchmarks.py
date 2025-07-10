@@ -221,29 +221,3 @@ print("Using KVM cpu")
 
 
 simulator.run()
-
-# Simulation is over at this point. We acknowledge that all the simulation
-# events were successful.
-print("All simulation events were successful.")
-
-# We print the final simulation statistics.
-print("Done with the simulation")
-print("Performance statistics:")
-
-import _m5.core
-
-print(
-    "Simulated time in ROI: "
-    f"{((simulator.get_tick_stopwatch[ExitEvent.WORKBEGIN] -
-    simulator.get_tick_stopwatch[ExitEvent.WORKEND]) /
-    _m5.core.getClockFrequency()):.2f}s"
-)
-print(
-    "Ran a total of"
-    f"{simulator.get_current_tick() / _m5.core.getClockFrequency()}"
-    "simulated seconds"
-)
-print(
-    f"Total wallclock time: {(time.time() - globalStart):.2f}, which is "
-    f"{((time.time() - globalStart) / 60):.2f} min"
-)

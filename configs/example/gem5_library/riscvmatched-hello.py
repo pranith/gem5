@@ -59,11 +59,3 @@ board.set_se_binary_workload(
 # Run the simulation with the RISCV Matched board
 simulator = Simulator(board=board)
 simulator.run()
-
-# Keep or remove this print statement?
-print(
-    "Exiting @ tick {} because {}.".format(
-        simulator.get_current_tick(),
-        simulator.get_last_exit_event_cause(),
-    )
-)
