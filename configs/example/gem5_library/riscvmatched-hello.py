@@ -31,8 +31,8 @@ Usage
 -----
 
 ```
-scons build/RISCV/gem5.opt
-./build/RISCV/gem5.opt \
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt \
     configs/example/gem5_library/riscvmatched-hello.py
 ```
 """
@@ -45,18 +45,22 @@ from gem5.utils.requires import requires
 
 requires(isa_required=ISA.RISCV)
 
-# instantiate the riscv matched board with default parameters
+# Instantiate the RISCV Matched board with default parameters
 board = RISCVMatchedBoard()
 
-# set the hello world riscv binary as the board workload
+# The riscv-hello binary on gem5 resources needs to be updated to say it is
+# compatible with gem5 v25.0
+
+# Set the "hello world" RISCV binary as the board's workload
 board.set_se_binary_workload(
     obtain_resource("riscv-hello", resource_version="1.0.0")
 )
 
-# run the simulation with the RISCV Matched board
-simulator = Simulator(board=board, full_system=False)
+# Run the simulation with the RISCV Matched board
+simulator = Simulator(board=board)
 simulator.run()
 
+# Keep or remove this print statement?
 print(
     "Exiting @ tick {} because {}.".format(
         simulator.get_current_tick(),

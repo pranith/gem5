@@ -38,14 +38,15 @@ Usage
 -----
 
 # Compile gem5 for RISC-V
-scons build/RISCV/gem5.opt
+scons build/ALL/gem5.opt
 
 # Run the simulation
-./build/RISCV/gem5.opt configs/example/gem5_library/riscv-rvv-example.py \
+./build/ALL/gem5.opt configs/example/gem5_library/riscv-rvv-example.py \
     [-c CORES] [-v VLEN] [-e ELEN] <resource>
 
 """
-
+# Should I add the UC Davis copyright if I modify this? Or do changes have to
+# be above a certain size/amount to add the copyright?
 import argparse
 
 from m5.objects import RiscvO3CPU
@@ -115,6 +116,6 @@ board = SimpleBoard(
 binary = obtain_resource(args.resource)
 board.set_se_binary_workload(binary)
 
-simulator = Simulator(board=board, full_system=False)
+simulator = Simulator(board=board)
 print("Beginning simulation!")
 simulator.run()

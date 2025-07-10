@@ -25,17 +25,18 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script further shows an example of booting an ARM based full system Ubuntu
+This script shows an example of booting an ARM based full system Ubuntu
 disk image. This simulation boots the disk image using 2 TIMING CPU cores. The
-simulation ends when the startup is completed successfully (i.e. when an
-`m5_exit instruction is reached on successful boot).
+simulation ends when the startup is completed successfully (i.e. when the
+simulation reaches a `gem5-bridge hypercall 3` command in the script the disk
+image runs after booting).
 
 Usage
 -----
 
 ```
-scons build/ARM/gem5.opt -j<NUM_CPUS>
-./build/ARM/gem5.opt configs/example/gem5_library/arm-ubuntu-run-with-kvm.py
+scons build/ALL/gem5.opt -j<NUM_CPUS>
+./build/ALL/gem5.opt configs/example/gem5_library/arm-ubuntu-run-with-kvm.py
 ```
 
 """
@@ -55,7 +56,9 @@ from gem5.components.processors.simple_switchable_processor import (
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
 from gem5.simulate.exit_event import ExitEvent
+from gem5.simulate.exit_handler import AfterBootExitHandler
 from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This runs a check to ensure the gem5 binary is compiled for ARM.
@@ -65,7 +68,7 @@ from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierar
     PrivateL1PrivateL2CacheHierarchy,
 )
 
-# Here we setup the parameters of the l1 and l2 caches.
+# Here we set up the parameters of the l1 and l2 caches.
 cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
     l1d_size="16KiB", l1i_size="16KiB", l2_size="256KiB"
 )
@@ -73,12 +76,13 @@ cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
 # Memory: Dual Channel DDR4 2400 DRAM device.
 memory = DualChannelDDR4_2400(size="2GiB")
 
-# Here we setup the processor. This is a special switchable processor in which
+# Here we set up the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
-# configuration is instantiated a user may call `processor.switch()` to switch
-# from the starting core types to the switch core types. In this simulation
-# we start with KVM cores to simulate the OS boot, then switch to the Timing
-# cores for the command we wish to run after boot.
+# configuration is instantiated a user may call `processor.switch()` or
+# `simulator.switch_processor` (if switching processors within a hypercall exit
+# handler) to switch from the starting core types to the switch core types.
+# In this simulation we start with KVM cores to simulate the OS boot, then
+# switch to the Timing cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.TIMING,
@@ -106,35 +110,23 @@ board = ArmBoard(
     platform=platform,
 )
 
-# Here we set a full system workload. The "arm-ubuntu-24.04-boot-with-systemd" boots
-# Ubuntu 24.04.
+# Here we set a full system workload. The "arm-ubuntu-24.04-boot-with-systemd"
+# boots Ubuntu 24.04.
 workload = obtain_resource("arm-ubuntu-24.04-boot-with-systemd")
 board.set_workload(workload)
 
 
-def exit_event_handler():
-    print("First exit: kernel booted")
-    yield False  # gem5 is now executing systemd startup
-    print("Second exit: Started `after_boot.sh` script")
-    # The after_boot.sh script is executed after the kernel and systemd have
-    # booted.
-    # Here we switch the CPU type to Timing.
-    print("Switching to Timing CPU")
-    processor.switch()
-    yield False  # gem5 is now executing the `after_boot.sh` script
-    print("Third exit: Finished `after_boot.sh` script")
-    # The after_boot.sh script will run a script if it is passed via
-    # m5 readfile. This is the last exit event before the simulation exits.
-    yield True
+# We override the default after-boot exit handler to switch processors.
+class SwitchProcessorAfterBootExitHandler(AfterBootExitHandler):
+    @overrides(AfterBootExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        simulator.switch_processor()
+
+    @overrides(AfterBootExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
 
 
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        # Here we want override the default behavior for the first m5 exit
-        # exit event.
-        ExitEvent.EXIT: exit_event_handler()
-    },
-)
+simulator = Simulator(board=board)
 
 simulator.run()

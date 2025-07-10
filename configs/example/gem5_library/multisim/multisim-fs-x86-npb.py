@@ -24,11 +24,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""An example of a single configuration script for defining multiple
+"""
+An example of a single configuration script for defining multiple
 simulations through the gem5 `multisim` module.
 
-This script creates 6 full system simulations by interating through a suite
-of benchmarks and different cores counts.
+This script creates 5 full system simulations by iterating through NPB
+benchmarks and different core counts.
 
 Usage
 -----
@@ -44,7 +45,7 @@ Usage
 
 ```shell
 <gem5-binary> configs/example/gem5_library/multisim/multisim-fs-x86-npb.py \
-    <process_id> # e.g. npb-bt-a_cores-1
+    <process_id> # e.g. npb-bt-s_cores-1
 ```
 
 3. To list all the IDs of the simulations defined in this script:
@@ -67,10 +68,12 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
-from gem5.simulate.simulator import (
-    ExitEvent,
-    Simulator,
+from gem5.simulate.exit_handler import (
+    WorkBeginExitHandler,
+    WorkEndExitHandler,
 )
+from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 requires(
@@ -83,15 +86,23 @@ from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import
 )
 
 
-def handle_workbegin():
-    m5.stats.reset()
-    processor.switch()
-    yield False
+class CustomWorkBeginExitHandler(WorkBeginExitHandler):
+    # The default behavior on work begin is to reset stats via
+    # m5.stats.reset() and continue simulation. We override `_process`
+    # so we can also switch processors.
+    @overrides(WorkBeginExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        m5.stats.reset()
+        simulator.switch_processor()
 
 
-def handle_workend():
-    m5.stats.dump()
-    yield True
+class CustomWorkEndExitHandler(WorkEndExitHandler):
+    # The default behavior for work end is to dump stats via
+    # m5.stats.dump() and continue simulation.
+    # We override `_exit_simulation` to exit simulation at this exit event.
+    @overrides(WorkEndExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
 
 
 # Set the maximum number of concurrent processes to be 3.
@@ -99,7 +110,13 @@ multisim.set_num_processes(3)
 
 # Here we imagine an experiment wanting to run each NPB benchmark on the same
 # system twice: once with 1 core and once with 2 cores.
-for benchmark in obtain_resource("npb-benchmark-suite"):
+
+# If we want to update this config for gem5 v25.0 and use the
+# "npb-benchmark-suite", we will have to update the suite on gem5 resources
+# to use NPB workloads with hypercalls
+
+# for benchmark in obtain_resource("npb-benchmark-suite"):
+for benchmark in ["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp", "ua"]:
     for num_cores in [1, 2]:
         cache_hierarchy = MESITwoLevelCacheHierarchy(
             l1d_size="32KiB",
@@ -124,23 +141,21 @@ for benchmark in obtain_resource("npb-benchmark-suite"):
             cache_hierarchy=cache_hierarchy,
         )
 
-        board.set_workload(benchmark)
-
-        simulator = Simulator(
-            board=board,
-            on_exit_event={
-                ExitEvent.WORKBEGIN: handle_workbegin(),
-                ExitEvent.WORKEND: handle_workend(),
-            },
+        board.set_workload(
+            obtain_resource(
+                f"x86-ubuntu-24.04-npb-{benchmark}-s", resource_version="3.0.0"
+            )
         )
+
+        simulator = Simulator(board=board)
 
         # As this is just an example we will only run the simulation for a
-        # billion ticks. In a real like would be days of time to simulate.
+        # billion ticks. An actual run could take days of time to simulate.
         scheduleTickExitAbsolute(
-            1000000000, "To exit the simulation as this is just an example."
+            1_000_000_000, "To exit the simulation as this is just an example."
         )
 
-        simulator.set_id(f"{benchmark.get_id()}_cores-{num_cores}")
+        simulator.set_id(f"npb-{benchmark}-s_cores-{num_cores}")
 
         multisim.add_simulator(simulator)
 

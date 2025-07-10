@@ -45,8 +45,8 @@ instructions.
 Usage:
 ------
 
-scons build/X86/gem5.opt
-./build/X86/gem5.opt [--debug-flags=InstTracker] \
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt [--debug-flags=InstTracker] \
     configs/example/gem5_library/x86-global-inst-tracker.py
 
 """
@@ -80,7 +80,7 @@ memory = SingleChannelDDR4_2400("1GB")
 # should be # cores + 1
 processor = SimpleProcessor(cpu_type=CPUTypes.TIMING, num_cores=9, isa=ISA.X86)
 
-# setup instruction tracker
+# set up instruction tracker
 
 # first, we need to create a global instruction tracker
 global_inst_tracker = GlobalInstTracker(
@@ -113,6 +113,7 @@ board = SimpleBoard(
     memory=memory,
     cache_hierarchy=cache_hierarchy,
 )
+# The workload needs to be updated to use hypercalls
 
 board.set_se_binary_workload(
     binary=obtain_resource(resource_id="x86-matrix-multiply-omp"),

@@ -41,8 +41,8 @@ cache hierarchy, can be changed when restoring checkpoints.
 Usage
 -----
 ```
-scons build/X86/gem5.opt
-./build/X86/gem5.opt \
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt \
     configs/example/gem5_library/looppoints/create-looppoint-checkpoint.py
 ```
 """
@@ -70,7 +70,7 @@ parser = argparse.ArgumentParser(
     description="An example looppoint workload file path"
 )
 
-# The lone arguments is a file path to a directory to store the checkpoints.
+# The lone argument is a file path to a directory to store the checkpoints.
 
 parser.add_argument(
     "--checkpoint-path",
@@ -84,16 +84,16 @@ args = parser.parse_args()
 
 # When taking a checkpoint, the cache state is not saved, so the cache
 # hierarchy can be changed completely when restoring from a checkpoint.
-# By using NoCache() to take checkpoints, it can slightly improve the
-# performance when running in atomic mode, and it will not put any restrictions
-# on what people can do with the checkpoints.
+# Using NoCache() to take checkpoints can slightly improve performance when
+# running in atomic mode, and will not put any restrictions on what people can
+# do with the checkpoints.
 cache_hierarchy = NoCache()
 
 
-# Using simple memory to take checkpoints might slightly imporve the
-# performance in atomic mode. The memory structure can be changed when
-# restoring from a checkpoint, but the size of the memory must be equal or
-# greater to that taken when creating the checkpoint.
+# Using simple memory to take checkpoints might slightly improve performance in
+# atomic mode. The memory structure can be changed when restoring from a
+# checkpoint, but the size of the memory must be equal or greater to the memory
+# used when creating the checkpoint.
 memory = SingleChannelDDR3_1600(size="2GiB")
 
 processor = SimpleProcessor(
@@ -116,6 +116,10 @@ board.set_workload(
 
 dir = Path(args.checkpoint_path)
 dir.mkdir(exist_ok=True)
+
+# The workload may have to be updated so it throws a hypercall instead of
+# hypercall 0. Then, this config will have to be modified so it has a handler
+# for that hypercall
 
 simulator = Simulator(
     board=board,

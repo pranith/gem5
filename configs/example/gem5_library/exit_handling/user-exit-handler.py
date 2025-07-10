@@ -24,16 +24,15 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""This script demonstrates how to override the default exit handler in gem5.
-This script shows how to override but also how to extend the default exit
-handler's behavior and exploit information which may have been passed via the
-exit's payload.
+"""
+This script demonstrates how to override and extend default exit handlers in
+gem5.
 
 Usage
 -----
 
 ```sh
-./build/ARM/gem5.opt \
+./build/ALL/gem5.opt \
     configs/example/gem5_library/exit_handling/user-exit-handler.py
 ```
 """
@@ -72,17 +71,19 @@ board = SimpleBoard(
 )
 
 # Set the workload
+# The binary on gem5 resources needs to be updated to say that it is
+# compatible with gem5 v25.0
 board.set_se_binary_workload(obtain_resource("x86-matrix-multiply"))
 
 # Schedule the first exit event. This will be used to take the first
 # checkpoint.
 scheduleTickExitAbsolute(
-    10000000000, "To take the first checkpoint (@ tick 1M)."
+    10_000_000_000, "To take the first checkpoint (@ tick 10M)."
 )
 
 
 # The exit handler which will be used to take checkpoints when the scheduled
-# exit event is triggered (type ID 6).
+# exit event is triggered (hypercall ID 6).
 class MyExitHandler(ScheduledExitEventHandler):
     def _process(self, simulator: "Simulator") -> None:
         super()._process(simulator)
@@ -111,22 +112,22 @@ class MyExitHandler(ScheduledExitEventHandler):
         m5.checkpoint((checkpoint_dir / f"cpt.{str(m5.curTick())}").as_posix())
         print(f"Checkpoint taken!")
 
-        # Finally we always schedule another exit 1M ticks from now.
-        # This means this exit occurs ever 10M ticks until the program
+        # Finally we always schedule another exit 10M ticks from now.
+        # This means this exit occurs every 10M ticks until the program
         # ceases execution.
         print("Scheduling the next checkpoint in 10M ticks.")
         scheduleTickExitFromCurrent(
-            10000000000, "To take checkpoint (every 10M ticks)."
+            10_000_000_000, "To take checkpoint (every 10M ticks)."
         )
 
     @overrides(ScheduledExitEventHandler)
     def _exit_simulation(self) -> bool:
-        # We always want to reenter the simulation look as we are automating
+        # We always want to reenter the simulation loop as we are automating
         # what we wanted to do in the `_process` function.
         return False
 
 
-# Create the Simulator and set the the exit event handler for type ID 4.
+# Create the Simulator
 simulator = Simulator(board=board)
 
 # Run the simulation.

@@ -28,7 +28,7 @@
 This gem5 configuation script creates a simple board to run an ARM
 "hello world" binary.
 
-This is setup is the close to the simplest setup possible using the gem5
+This setup is close to the simplest setup possible using the gem5
 library. It does not contain any kind of caching, IO, or any non-essential
 components.
 
@@ -36,8 +36,8 @@ Usage
 -----
 
 ```
-scons build/ARM/gem5.opt
-./build/ARM/gem5.opt configs/example/gem5_library/arm-hello.py
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt configs/example/gem5_library/arm-hello.py
 ```
 """
 
@@ -74,16 +74,10 @@ board = SimpleBoard(
 )
 
 # Here we set the workload. In this case we want to run a simple "Hello World!"
-# program compiled to the ARM ISA. The `Resource` class will automatically
-# download the binary from the gem5 Resources cloud bucket if it's not already
-# present.
+# program compiled to the ARM ISA. The `obtain_resource` function will
+# automatically download the binary from the gem5 Resources cloud bucket if
+# it's not already present.
 board.set_se_binary_workload(
-    # The `Resource` class reads the `resources.json` file from the gem5
-    # resources repository:
-    # https://github.com/gem5/gem5-resources.
-    # Any resource specified in this file will be automatically retrieved.
-    # At the time of writing, this file is a WIP and does not contain all
-    # resources. Jira ticket: https://gem5.atlassian.net/browse/GEM5-1096
     obtain_resource("arm-hello64-static", resource_version="1.0.0")
 )
 
@@ -91,6 +85,7 @@ board.set_se_binary_workload(
 simulator = Simulator(board=board)
 simulator.run()
 
+# Keep or remove this print statement?
 print(
     "Exiting @ tick {} because {}.".format(
         simulator.get_current_tick(), simulator.get_last_exit_event_cause()

@@ -63,6 +63,11 @@ from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
+# It doesn't look like we have any up to date Parsec resources. The
+# only result on the gem5 resources website appears to be `x86-parsec`, which
+# is built on top of Ubuntu 18.04. We should either make resources for Parsec
+# or deprecate this script.
+
 # We check for the required gem5 build.
 
 requires(

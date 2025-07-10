@@ -26,7 +26,7 @@
 
 """
 This script shows an example of running a full system RISCV Ubuntu boot
-simulation using the gem5 library. This simulation boots Ubuntu 20.04 using
+simulation using the gem5 library. This simulation boots Ubuntu 24.04 using
 2 TIMING CPU cores. The simulation ends when the startup is completed
 successfully.
 
@@ -34,14 +34,10 @@ Usage
 -----
 
 ```
-scons build/RISCV/gem5.opt
-./build/RISCV/gem5.opt \
-    configs/example/gem5_library/riscv-ubuntu-run.py
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt configs/example/gem5_library/riscv-ubuntu-run.py
 ```
 """
-
-import m5
-from m5.objects import Root
 
 from gem5.components.boards.riscv_board import RiscvBoard
 from gem5.components.memory import DualChannelDDR4_2400
@@ -49,7 +45,6 @@ from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
@@ -85,34 +80,14 @@ board = RiscvBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Here we a full system workload: "riscv-ubuntu-20.04-boot" which boots
-# Ubuntu 20.04. Once the system successfully boots it encounters an `m5_exit`
-# instruction which stops the simulation. When the simulation has ended you may
-# inspect `m5out/system.pc.com_1.device` to see the stdout.
+# Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
+# Ubuntu 24.04. Once the system successfully boots it encounters an
+# `gem5-bridge hypercall 3` command which stops the simulation. When the
+# simulation has ended you may inspect `m5out/system.pc.com_1.device` to see
+# the simulated system's stdout.
 board.set_workload(
-    obtain_resource("riscv-ubuntu-24.04-boot", resource_version="1.0.0")
+    obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")
 )
 
-
-def exit_event_handler():
-    print("First exit: kernel booted")
-    yield False  # gem5 is now executing systemd startup
-    print("Second exit: Started `after_boot.sh` script")
-    # The after_boot.sh script is executed after the kernel and systemd have
-    # booted.
-    yield False  # gem5 is now executing the `after_boot.sh` script
-    print("Third exit: Finished `after_boot.sh` script")
-    # The after_boot.sh script will run a script if it is passed via
-    # m5 readfile. This is the last exit event before the simulation exits.
-    yield True
-
-
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        # Here we want override the default behavior for the first m5 exit
-        # exit event.
-        ExitEvent.EXIT: exit_event_handler()
-    },
-)
+simulator = Simulator(board=board)
 simulator.run()

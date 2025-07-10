@@ -29,7 +29,7 @@ This script is used for running a traffic generator connected to a memory
 device. It supports linear and random accesses with a configurable amount
 of write traffic.
 
-By default, this scripts runs with one channel (two pseudo channels) of HBM2
+By default, this script runs with one channel (two pseudo channels) of HBM2
 and this channel is driven with 32GiB/s of traffic for 1ms.
 """
 
@@ -99,6 +99,9 @@ generator = generator_factory(
 # We use the Test Board. This is a special board to run traffic generation
 # tasks. Can replace the cache_hierarchy with any hierarchy to simulate the
 # cache as well as the memory
+
+# Need to test this; will this work with cache_hierarchy as None instead of
+# NoCache?
 board = TestBoard(
     clk_freq="1GHz",  # Ignored for these generators
     generator=generator,  # We pass the traffic generator as the processor.

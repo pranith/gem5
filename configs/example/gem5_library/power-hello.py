@@ -28,7 +28,7 @@
 This gem5 configuation script creates a simple board to run a POWER
 "hello world" binary.
 
-This is setup is the close to the simplest setup possible using the gem5
+This setup is close to the simplest setup possible using the gem5
 library. It does not contain any kind of caching, IO, or any non-essential
 components.
 
@@ -36,8 +36,8 @@ Usage
 -----
 
 ```
-scons build/POWER/gem5.opt
-./build/POWER/gem5.opt configs/example/gem5_library/power-hello.py
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt configs/example/gem5_library/power-hello.py
 ```
 """
 
@@ -75,6 +75,8 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
+# Resource on gem5 resources website needs to be updated to say that it is
+# compatible with gem5 v25.0
 board.set_se_binary_workload(
     obtain_resource("power-hello", resource_version="1.0.0")
 )
@@ -83,6 +85,7 @@ board.set_se_binary_workload(
 simulator = Simulator(board=board)
 simulator.run()
 
+# Keep or remove this print message?
 print(
     "Exiting @ tick {} because {}.".format(
         simulator.get_current_tick(),

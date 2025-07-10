@@ -25,10 +25,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This configuration script shows an example of how to take checkpoints for
-SimPoints using the gem5 stdlib. Simpoints are set via a Workload and the
-gem5 SimPoint module will calculate where to take checkpoints based of the
-SimPoints, SimPoints interval length, and the warmup instruction length.
+This configuration script demonstrates how to take checkpoints for SimPoints
+using the gem5 stdlib. Simpoints are set via a Workload and the gem5 SimPoint
+module will calculate where to take checkpoints based on the SimPoints,
+SimPoints' interval length, and the warmup instruction length.
 
 This scipt builds a simple board with the gem5 stdlib with no cache and a
 simple memory structure to take checkpoints. Some of the components, such as
@@ -38,11 +38,11 @@ Usage
 -----
 
 ```
-scons build/X86/gem5.opt
-./build/X86/gem5.opt \
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt \
     configs/example/gem5_library/checkpoints/simpoints-se-checkpoint.py
 
-./build/X86/gem5.opt \
+./build/ALL/gem5.opt \
     configs/example/gem5_library/checkpoints/simpoints-se-restore.py
 ```
 """
@@ -72,7 +72,7 @@ parser = argparse.ArgumentParser(
     description="An example simpoint workload file path"
 )
 
-# The lone arguments is a file path to a directory to store the checkpoints.
+# The lone argument is a file path to a directory to store the checkpoints.
 
 parser.add_argument(
     "--checkpoint-path",
@@ -91,7 +91,7 @@ args = parser.parse_args()
 # on what people can do with the checkpoints.
 cache_hierarchy = NoCache()
 
-# Using simple memory to take checkpoints might slightly imporve the
+# Using simple memory to take checkpoints might slightly improve the
 # performance in atomic mode. The memory structure can be changed when
 # restoring from a checkpoint, but the size of the memory must be maintained.
 memory = SingleChannelDDR3_1600(size="2GiB")
@@ -110,25 +110,34 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# board.set_workload(
-#    Workload("x86-print-this-15000-with-simpoints")
-#
-# **Note: This has been removed until we update the resources.json file to
-# encapsulate the new Simpoint format.
 # Below we set the simpount manually.
+# board.set_se_simpoint_workload(
+#     binary=obtain_resource("x86-print-this"),
+#     arguments=["print this", 15000],
+#     simpoint=SimpointResource(
+#         simpoint_interval=1000000,
+#         simpoint_list=[2, 3, 4, 15],
+#         weight_list=[0.1, 0.2, 0.4, 0.3],
+#         warmup_interval=1000000,
+#     ),
+# )
 
-board.set_se_simpoint_workload(
-    binary=obtain_resource("x86-print-this"),
-    arguments=["print this", 15000],
-    simpoint=SimpointResource(
-        simpoint_interval=1000000,
-        simpoint_list=[2, 3, 4, 15],
-        weight_list=[0.1, 0.2, 0.4, 0.3],
-        warmup_interval=1000000,
-    ),
+# The workload x86-print-this-15000-with-simpoints, version 2.0.0 is available
+# for gem5 versions 23.1 through 24.1. We may need to create another version
+# of the workload that throws a hypercall (see comment below)
+
+board.set_workload(
+    obtain_resource(
+        "x86-print-this-15000-with-simpoints", resource_version="2.0.0"
+    )
 )
 
 dir = Path(args.checkpoint_path)
+
+# For compatibility with gem5 v25.0: we may need to re-work the workload so
+# it throws a hypercall other than one of the defaults, then modify this
+# config so it has a hypercall handler. We could also make the workload
+# throw the checkpoint-taking hypercall.
 
 simulator = Simulator(
     board=board,
@@ -137,6 +146,7 @@ simulator = Simulator(
         # checkpoints
         ExitEvent.SIMPOINT_BEGIN: save_checkpoint_generator(dir)
     },
+    checkpoint_path=args.checkpoint_path,
 )
 
 simulator.run()

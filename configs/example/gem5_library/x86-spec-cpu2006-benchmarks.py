@@ -72,9 +72,15 @@ from gem5.isas import ISA
 from gem5.resources.resource import (
     DiskImageResource,
     Resource,
+    obtain_resource,
 )
 from gem5.simulate.exit_event import ExitEvent
+from gem5.simulate.exit_handler import (
+    WorkBeginExitHandler,
+    WorkEndExitHandler,
+)
 from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # We check for the required gem5 build.
@@ -177,6 +183,8 @@ if args.image[0] != "/":
     # present on the current working directory.
     args.image = os.path.abspath(args.image)
 
+# The link should probably point somewhere else, given that gem5art is a dead
+# project
 if not os.path.exists(args.image):
     warn("Disk image not found!")
     print("Instructions on building the disk image can be found at: ")
@@ -258,35 +266,51 @@ except FileExistsError:
 
 command = f"{args.benchmark} {args.size} {output_dir}"
 
+# Should this kernel be updated to something more recent? Or would it cause
+# problems for SPEC 2006?
 board.set_kernel_disk_workload(
     # The x86 linux kernel will be automatically downloaded to the
     # `~/.cache/gem5` directory if not already present.
     # SPEC CPU2006 benchamarks were tested with kernel version 4.19.83 and
     # 5.4.49
-    kernel=Resource("x86-linux-kernel-4.19.83"),
+    kernel=obtain_resource("x86-linux-kernel-4.19.83"),
     # The location of the x86 SPEC CPU 2017 image
     disk_image=DiskImageResource(args.image, root_partition=args.partition),
     readfile_contents=command,
 )
 
 
-def handle_exit():
-    print("Done bootling Linux")
-    print("Resetting stats at the start of ROI!")
-    m5.stats.reset()
-    processor.switch()
-    yield False  # E.g., continue the simulation.
-    print("Dump stats at the end of the ROI!")
-    m5.stats.dump()
-    yield True  # Stop the simulation. We're done.
+# def handle_exit():
+#     print("Done bootling Linux")
+#     print("Resetting stats at the start of ROI!")
+#     m5.stats.reset()
+#     processor.switch()
+#     yield False  # E.g., continue the simulation.
+#     print("Dump stats at the end of the ROI!")
+#     m5.stats.dump()
+#     yield True  # Stop the simulation. We're done.
 
 
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        ExitEvent.EXIT: handle_exit(),
-    },
-)
+class CustomWorkBeginExitHandler(WorkBeginExitHandler):
+    # The default behavior on work begin is to reset stats via
+    # m5.stats.reset() and continue simulation. We override `_process`
+    # so we can also switch processors.
+    @overrides(WorkBeginExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        m5.stats.reset()
+        simulator.switch_processor()
+
+
+class CustomWorkEndExitHandler(WorkEndExitHandler):
+    # The default behavior for work end is to dump stats via
+    # m5.stats.dump() and continue simulation.
+    # We override `_exit_simulation` to exit simulation at this exit event.
+    @overrides(WorkEndExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
+
+
+simulator = Simulator(board=board)
 
 # We maintain the wall clock time.
 

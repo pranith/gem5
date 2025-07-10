@@ -37,8 +37,8 @@ Usage:
 ------
 
 ```
-scons build/X86/gem5.opt
-./build/X86/gem5.opt \
+scons build/ALL/gem5.opt
+./build/ALL/gem5.opt \
     configs/example/gem5_library/x86-npb-benchmarks.py \
     --benchmark <benchmark_name> \
     --size <benchmark_class>
@@ -62,10 +62,15 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import (
+    WorkBeginExitHandler,
+    WorkEndExitHandler,
+)
 from gem5.simulate.simulator import (
     ExitEvent,
     Simulator,
 )
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 requires(
@@ -88,8 +93,10 @@ parser = argparse.ArgumentParser(
     description="An example configuration script to run the npb benchmarks."
 )
 
+# The suite needs to be updated to use the latest NPB workloads for gem5 v25.0.
+# version 2.0.0 doesn't exist yet, but I'll put it here as a placeholder
 npb_suite = obtain_resource(
-    "x86-ubuntu-24.04-npb-suite", resource_version="1.0.0"
+    "x86-ubuntu-24.04-npb-suite", resource_version="2.0.0"
 )
 # The only positional argument accepted is the benchmark name in this script.
 
@@ -99,14 +106,15 @@ parser.add_argument(
     required=True,
     help="Input the benchmark program to execute.",
     choices=[workload.get_id() for workload in npb_suite],
+    # choices=["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp", "ua"]
 )
 
-parser.add_argument(
-    "--ticks",
-    type=int,
-    help="Optionally put the maximum number of ticks to execute during the "
-    "ROI. It accepts an integer value.",
-)
+# parser.add_argument(
+#     "--ticks",
+#     type=int,
+#     help="Optionally put the maximum number of ticks to execute during the "
+#     "ROI. It accepts an integer value."
+# )
 
 args = parser.parse_args()
 
@@ -182,26 +190,56 @@ board = X86Board(
 board.set_workload(obtain_resource(args.benchmark))
 
 
-# The first exit_event ends with a `workbegin` cause. This means that the
-# system started successfully and the execution on the program started.
-def handle_workbegin():
-    print("Done booting Linux")
-    print("Resetting stats at the start of ROI!")
+# # The first exit_event ends with a `workbegin` cause. This means that the
+# # system started successfully and the execution on the program started.
+# def handle_workbegin():
+#     print("Done booting Linux")
+#     print("Resetting stats at the start of ROI!")
 
-    m5.stats.reset()
+#     m5.stats.reset()
 
-    # We have completed up to this step using KVM cpu. Now we switch to timing
-    # cpu for detailed simulation.
+#     # We have completed up to this step using KVM cpu. Now we switch to timing
+#     # cpu for detailed simulation.
 
-    # # Next, we need to check if the user passed a value for --ticks. If yes,
-    # then we limit out execution to this number of ticks during the ROI.
-    # Otherwise, we simulate until the ROI ends.
-    processor.switch()
-    if args.ticks:
-        # schedule an exit event for this amount of ticks in the future.
-        # The simulation will then continue.
-        m5.scheduleTickExitFromCurrent(args.ticks)
-    yield False
+#     # # Next, we need to check if the user passed a value for --ticks. If yes,
+#     # then we limit out execution to this number of ticks during the ROI.
+#     # Otherwise, we simulate until the ROI ends.
+#     processor.switch()
+#     if args.ticks:
+#         # schedule an exit event for this amount of ticks in the future.
+#         # The simulation will then continue.
+#         m5.scheduleTickExitFromCurrent(args.ticks)
+#     yield False
+
+
+class CustomWorkBeginExitHandler(WorkBeginExitHandler):
+    # The default behavior on work begin is to reset stats via
+    # m5.stats.reset() and continue simulation. We override `_process`
+    # so we can also switch processors.
+    @overrides(WorkBeginExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("Done booting Linux")
+        print("Resetting stats at the start of ROI!")
+        # This is a hacky way to keep the script's ending print statement.
+        simulator._tick_stopwatch.append(
+            (ExitEvent.WORKBEGIN, simulator.get_current_tick())
+        )
+        m5.stats.reset()
+        simulator.switch_processor()
+
+
+class CustomWorkEndExitHandler(WorkEndExitHandler):
+    @overrides(WorkEndExitHandler)
+    def _process(self, simulator):
+        super()._process(simulator)
+        # This is a hacky way to keep the script's ending print statement.
+        simulator._tick_stopwatch.append(
+            (ExitEvent.WORKEND, simulator.get_current_tick())
+        )
+
+    @overrides(WorkEndExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
 
 
 # The next exit_event is to simulate the ROI. It should be exited with a cause
@@ -209,34 +247,14 @@ def handle_workbegin():
 
 
 # We exepect that ROI ends with `workend` or `simulate() limit reached`.
-def handle_workend():
-    print("Dump stats at the end of the ROI!")
+# def handle_workend():
+#     print("Dump stats at the end of the ROI!")
 
-    m5.stats.dump()
-    yield True
-
-
-def exit_event_handler():
-    print("First exit: kernel booted")
-    yield False  # gem5 is now executing systemd startup
-    print("Second exit: Started `after_boot.sh` script")
-    # The after_boot.sh script is executed after the kernel and systemd have
-    # booted.
-    yield False  # gem5 is now executing the `after_boot.sh` script
-    print("Third exit: Finished `after_boot.sh` script")
-    # The after_boot.sh script will run a script if it is passed via
-    # m5 readfile. This is the last exit event before the simulation exits.
-    yield True
+#     m5.stats.dump()
+#     yield True
 
 
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        ExitEvent.WORKBEGIN: handle_workbegin(),
-        ExitEvent.WORKEND: handle_workend(),
-        ExitEvent.EXIT: exit_event_handler(),
-    },
-)
+simulator = Simulator(board=board)
 
 # We maintain the wall clock time.
 
@@ -248,30 +266,35 @@ print("Using KVM cpu")
 # We start the simulation.
 simulator.run()
 
-# We need to note that the benchmark is not executed completely till this
-# point, but, the ROI has. We collect the essential statistics here before
-# resuming the simulation again.
-
 # Simulation is over at this point. We acknowledge that all the simulation
 # events were successful.
 print("All simulation events were successful.")
 # We print the final simulation statistics.
 
 print("Done with the simulation")
-print()
 print("Performance statistics:")
 
 # manually calculate ROI time if ticks arg is used in case the
 # entire ROI wasn't simulated
-if args.ticks:
-    print(f"Simulated time in ROI (to tick): {args.ticks/ 1e12}s")
-else:
-    print(f"Simulated time in ROI: {simulator.get_roi_ticks()[0] / 1e12}s")
+
+# if args.ticks:
+#     print(f"Simulated time in ROI (to tick): {args.ticks/ 1e12}s")
+# else:
+#     print(f"Simulated time in ROI: {simulator.get_roi_ticks()[0] / 1e12}s")
+import _m5.core
 
 print(
-    f"Ran a total of {simulator.get_current_tick() / 1e12} simulated seconds"
+    "Simulated time in ROI: "
+    f"{((simulator.get_tick_stopwatch[ExitEvent.WORKBEGIN] -
+    simulator.get_tick_stopwatch[ExitEvent.WORKEND]) /
+    _m5.core.getClockFrequency()):.2f}s"
 )
 print(
-    "Total wallclock time: %.2fs, %.2f min"
-    % (time.time() - globalStart, (time.time() - globalStart) / 60)
+    f"Ran a total of "
+    f"{simulator.get_current_tick() / _m5.core.getClockFrequency()} simulated "
+    "seconds"
+)
+print(
+    f"Total wallclock time: {(time.time() - globalStart):.2f}, "
+    f"which is {((time.time() - globalStart) / 60):.2f} min"
 )

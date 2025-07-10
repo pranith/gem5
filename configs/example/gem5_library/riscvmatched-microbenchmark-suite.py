@@ -41,15 +41,15 @@ from gem5.utils.requires import requires
 
 requires(isa_required=ISA.RISCV)
 
-# instantiate the riscv matched board with default parameters
+# Instantiate the RISCV Matched board with default parameters
 board = RISCVMatchedBoard()
 
-# obtain the RISC-V Vertical Microbenchmarks
+# Obtain the RISC-V Vertical Microbenchmarks
 microbenchmarks = obtain_resource(
     "riscv-vertical-microbenchmarks", resource_version="1.0.0"
 )
 
-# list all the microbenchmarks present in the suite
+# List all the microbenchmarks present in the suite
 print("Microbenchmarks present in the suite:")
 print("====================================")
 for workload in microbenchmarks:
@@ -58,22 +58,24 @@ for workload in microbenchmarks:
     print(f"WorkloadResource Object: {workload}")
     print("====================================")
 
-# list all the WorkloadResource objects present in the suite
+# List all the WorkloadResource objects present in the suite
 for resource in microbenchmarks:
     print(f"WorkloadResource Object: {resource}")
 
-# list all the available input groups in the suite
+# List all the available input groups in the suite
 print("Input groups present in the suite:")
 print(microbenchmarks.get_input_groups())
 
-# for this example, we will filter the suite
-# to run the Workload "riscv-cca-run"
-# it has the input group 'cca', which is used as the filter
+# For this example, we will filter the suite to run the Workload
+# "riscv-cca-run".
+# It has the input group 'cca', which is used as the filter.
 board.set_workload(list(microbenchmarks.with_input_group("cca"))[0])
 
 # run the simulation with the RISCV Matched board
 simulator = Simulator(board=board, full_system=False)
 simulator.run()
+
+# Keep or remove this print statement?
 print(
     "Exiting @ tick {} because {}.".format(
         simulator.get_current_tick(),

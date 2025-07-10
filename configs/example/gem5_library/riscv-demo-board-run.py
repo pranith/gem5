@@ -25,8 +25,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script utilizes the RiscvDemoBoard to run a simple Ubunutu boot. The script
-will boot the the OS to login before exiting the simulation.
+This script can be used to run a simple Ubunutu boot with the RiscvDemoBoard.
+The script will boot the the OS to login before exiting the simulation.
 
 A detailed terminal output can be found in `m5out/board.platform.terminal`.
 
@@ -38,7 +38,9 @@ Usage
 
 ```
 scons build/ALL/gem5.opt
-./build/ALL/gem5.opt configs/example/gem5_library/riscv-demo-board-run.py --workload=riscv-ubuntu-24.04-boot-no-systemd
+
+./build/ALL/gem5.opt configs/example/gem5_library/riscv-demo-board-run.py \
+--workload=riscv-ubuntu-24.04-boot-no-systemd
 ```
 """
 
@@ -71,42 +73,10 @@ args = parser.parse_args()
 
 board = RiscvDemoBoard()
 
-
-def handle_workend():
-    print("Dump stats at the end of the ROI!")
-    m5.stats.dump()
-    yield False
-
-
-def handle_workbegin():
-    print("Done booting Linux")
-    print("Resetting stats at the start of ROI!")
-    m5.stats.reset()
-    yield False
-
-
-def exit_event_handler():
-    print("first exit event: Kernel booted")
-    yield False
-    print("second exit event: In after boot")
-    yield False
-    print("third exit event: After run script")
-    yield True
-
-
 board.set_workload(
     obtain_resource(resource_id=args.workload, resource_version=args.version)
 )
 
-
-simulator = Simulator(
-    board=board,
-    on_exit_event={
-        ExitEvent.WORKBEGIN: handle_workbegin(),
-        ExitEvent.WORKEND: handle_workend(),
-        ExitEvent.EXIT: exit_event_handler(),
-    },
-)
-
+simulator = Simulator(board=board)
 
 simulator.run()

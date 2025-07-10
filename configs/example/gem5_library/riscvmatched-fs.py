@@ -26,15 +26,15 @@
 
 """
 This gem5 configuration script runs the RISCVMatchedBoard in FS mode with a
-an Ubuntu 20.04 image and calls m5 exit after the simulation has booted the OS.
+an Ubuntu 24.04 image and exits after the simulation has booted the OS.
 
 Usage
 ---
 
 ```
-scons build/RISCV/gem5.opt
+scons build/ALL/gem5.opt
 
-./build/RISCV/gem5.opt configs/example/gem5_library/riscvmatched-fs.py
+./build/ALL/gem5.opt configs/example/gem5_library/riscvmatched-fs.py
 ```
 """
 
@@ -43,10 +43,16 @@ import argparse
 from gem5.isas import ISA
 from gem5.prebuilt.riscvmatched.riscvmatched_board import RISCVMatchedBoard
 from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import (
+    ExitHandler,
+    KernelBootedExitHandler,
+)
 from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 requires(isa_required=ISA.RISCV)
+
 
 parser = argparse.ArgumentParser(
     description="A script which uses the RISCVMatchedBoard in FS mode."
@@ -59,28 +65,36 @@ parser.add_argument(
     help="Exit the simulation after the Linux Kernel boot.",
 )
 
+global args
 args = parser.parse_args()
 
-# instantiate the riscv matched board with default parameters
+
+# If the `-i` flag is passed, exit the simulation after kernel boot.
+class CustomKernelBootedExitHandler(KernelBootedExitHandler):
+    @overrides(KernelBootedExitHandler)
+    def _exit_simulation(self) -> bool:
+        if args.i:
+            return True
+        return False
+
+
+# instantiate the RISCV Matched board with default parameters
 board = RISCVMatchedBoard(
     clk_freq="1.2GHz",
     l2_size="2MiB",
     is_fs=True,
 )
+# We previously tried to update this config script to boot Ubuntu 24.04, but
+# reverted back to Ubuntu 20.04 because we ran into issues. This will have
+# to be tested again.
 
-# Here we a full system workload: "riscv-ubuntu-20.04-boot" which boots
-# Ubuntu 20.04. Once the system successfully boots it encounters an `m5_exit`
-# instruction which stops the simulation. When the simulation has ended you may
-# inspect `m5out/system.pc.com_1.device` to see the stdout.
-#
-# In the case where the `-i` flag is passed, we add the kernel argument
-# `init=/root/exit.sh`. This means the simulation will exit after the Linux
-# Kernel has booted.
-workload = obtain_resource("riscv-ubuntu-20.04-boot", resource_version="3.0.0")
-kernel_args = board.get_default_kernel_args()
-if args.to_init:
-    kernel_args.append("init=/root/exit.sh")
-workload.set_parameter("kernel_args", kernel_args)
+# Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
+# Ubuntu 24.04. Once the system successfully boots it encounters hypercall 3,
+# which stops the simulation. When the simulation has ended you may inspect
+# `m5out/system.pc.com_1.device` to see the stdout of the simulated system.
+
+workload = obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")
+
 board.set_workload(workload)
 
 simulator = Simulator(board=board)
