@@ -46,11 +46,9 @@ scons build/NULL/gem5.opt
 ./build/NULL/gem5.opt configs/example/gem5_library/spatter_gen/spatter-gen-test.py
 ```
 """
-import argparse
-import json
+
 from pathlib import Path
 
-import m5
 from m5.objects import Root
 
 from gem5.components.boards.test_board import TestBoard
@@ -92,6 +90,6 @@ board = TestBoard(
     memory=memory,
 )
 
-simulator = Simulator(board=board, full_system=False)
+simulator = Simulator(board=board)
 
 simulator.run()
