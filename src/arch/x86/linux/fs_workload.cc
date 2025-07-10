@@ -74,7 +74,7 @@ FsLinux::addExitOnKernelPanicEvent()
     const std::string dmesg_output = name() + ".dmesg";
 
     if (params().exit_on_kernel_panic) {
-        // This was adapted from the RISCV implementation. Some kernels may not
+        // This was taken from the RISCV implementation. Some kernels may not
         // have kernel symbols, causing `kernelSymtab` to be empty.
         // In that case, addKernelFuncEvent tries to access the "panic" symbol
         // in the symbol table but can't, so the event won't be added and the
@@ -91,7 +91,7 @@ FsLinux::addExitOnKernelOopsEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
     if (params().exit_on_kernel_oops) {
-        // This was adapted from the RISCV implementation. Some kernels may not
+        // This was taken from the RISCV implementation. Some kernels may not
         // have kernel symbols, causing `kernelSymtab` to be empty.
         // In that case, addKernelFuncEvent tries to access the "panic" symbol
         // in the symbol table but can't, so the event won't be added and the

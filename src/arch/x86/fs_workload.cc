@@ -120,14 +120,14 @@ FsWorkload::addExitOnKernelPanicEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
     if (params().exit_on_kernel_panic) {
-        // This was adapted from the RISCV implementation. Some kernels may not
+        // This was taken from the RISCV implementation. Some kernels may not
         // have kernel symbols, causing `kernelSymtab` to be empty.
         // In that case, addKernelFuncEvent tries to access the "panic" symbol
         // in the symbol table but can't, so the event won't be added and the
         // simulation will hang upon kernel panic.
         kernelPanicPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
             "panic", "Kernel panic in simulated system.",
-            dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
+            dmesg_output, params().on_panic
         );
         warn_if(!kernelPanicPcEvent, "Failed to find kernel symbol 'panic'");
     }
@@ -137,7 +137,7 @@ void
 FsWorkload::addExitOnKernelOopsEvent()
 {
     const std::string dmesg_output = name() + ".dmesg";
-    // This was adapted from the RISCV implementation. Some kernels may not
+    // This was taken from the RISCV implementation. Some kernels may not
     // have kernel symbols, causing `kernelSymtab` to be empty.
     // In that case, addKernelFuncEvent tries to access the "oops_exit" symbol
     // in the symbol table but can't, so the event won't be added and the
@@ -145,7 +145,7 @@ FsWorkload::addExitOnKernelOopsEvent()
     if (params().exit_on_kernel_oops) {
         kernelOopsPcEvent = addKernelFuncEvent<linux::PanicOrOopsEvent>(
             "oops_exit", "Kernel oops in simulated system.",
-            dmesg_output, gem5::KernelPanicOopsBehaviour::DumpDmesgAndExit
+            dmesg_output, params().on_oops
         );
         warn_if(!kernelOopsPcEvent,
                 "Failed to find kernel symbol 'oops_exit'");
