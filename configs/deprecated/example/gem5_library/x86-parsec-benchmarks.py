@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025 The Regents of the University of California.
+# Copyright (c) 2021 The Regents of the University of California.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -62,11 +62,6 @@ from gem5.resources.resource import obtain_resource
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
-
-# It doesn't look like we have any up to date Parsec resources. The
-# only result on the gem5 resources website appears to be `x86-parsec`, which
-# is built on top of Ubuntu 18.04. We should either make resources for Parsec
-# or deprecate this script.
 
 # We check for the required gem5 build.
 
