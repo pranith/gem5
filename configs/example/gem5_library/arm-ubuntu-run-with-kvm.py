@@ -48,6 +48,9 @@ from m5.objects import (
 
 from gem5.coherence_protocol import CoherenceProtocol
 from gem5.components.boards.arm_board import ArmBoard
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierarchy import (
+    PrivateL1PrivateL2CacheHierarchy,
+)
 from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_switchable_processor import (
@@ -59,14 +62,6 @@ from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.exit_handler import AfterBootExitHandler
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
-from gem5.utils.requires import requires
-
-# This runs a check to ensure the gem5 binary is compiled for ARM.
-requires(isa_required=ISA.ARM)
-
-from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierarchy import (
-    PrivateL1PrivateL2CacheHierarchy,
-)
 
 # Here we set up the parameters of the l1 and l2 caches.
 cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
