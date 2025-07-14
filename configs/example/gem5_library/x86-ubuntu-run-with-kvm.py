@@ -106,8 +106,27 @@ workload = obtain_resource("x86-ubuntu-24.04-boot-with-systemd")
 board.set_workload(workload)
 
 
-# Override the default hypercall 2 exit handler so we can switch processors
-# when Ubuntu finishes booting
+# Examples of how you can override the default exit handler behaviors.
+# Exit handlers don't have to be specified in the config script if you don't
+# want to modify/override their default behaviors. Below, we override the
+# default after-boot exit handler to switch processors.
+
+# You can inherit from either the class that handles a certain hypercall by
+# default, or inherit directly from ExitHandler and specify a hypercall number.
+# See src/python/gem5/simulate/exit_handler.py for more information on which
+# behaviors map to which hypercalls, and what the default behaviors are.
+
+
+class CustomKernelBootedExitHandler(ExitHandler, hypercall_num=1):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("First exit: kernel booted")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
 class CustomAfterBootExitHandler(ExitHandler, hypercall_num=2):
     @overrides(ExitHandler)
     def _process(self, simulator: "Simulator") -> None:
@@ -116,6 +135,16 @@ class CustomAfterBootExitHandler(ExitHandler, hypercall_num=2):
     @overrides(ExitHandler)
     def _exit_simulation(self) -> bool:
         return False
+
+
+class AfterBootScriptExitHandler(ExitHandler, hypercall_num=3):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print(f"Third exit: {self.get_handler_description()}")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
 
 
 simulator = Simulator(board=board)

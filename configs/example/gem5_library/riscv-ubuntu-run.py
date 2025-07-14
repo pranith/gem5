@@ -45,7 +45,12 @@ from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import (
+    ExitHandler,
+    KernelBootedExitHandler,
+)
 from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This runs a check to ensure the gem5 binary is compiled for RISCV.
@@ -88,6 +93,45 @@ board = RiscvBoard(
 board.set_workload(
     obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")
 )
+
+# Examples of how you can override the default exit handler behaviors.
+# Exit handlers don't have to be specified in the config script if you don't
+# want to modify/override their default behaviors.
+
+
+# You can inherit from either the class that handles a certain hypercall by
+# default, or inherit directly from ExitHandler and specify a hypercall number.
+# See src/python/gem5/simulate/exit_handler.py for more information on which
+# behaviors map to which hypercalls, and what the default behaviors are.
+class CustomKernelBootedExitHandler(KernelBootedExitHandler):
+    @overrides(KernelBootedExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("First exit: kernel booted")
+
+    @overrides(KernelBootedExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
+class CustomAfterBootExitHandler(ExitHandler, hypercall_num=2):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("Second exit: Started `after_boot.sh` script")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
+class AfterBootScriptExitHandler(ExitHandler, hypercall_num=3):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print(f"Third exit: {self.get_handler_description()}")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
+
 
 simulator = Simulator(board=board)
 simulator.run()

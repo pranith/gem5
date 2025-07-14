@@ -50,7 +50,12 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
+from gem5.simulate.exit_handler import (
+    AfterBootExitHandler,
+    ExitHandler,
+)
 from gem5.simulate.simulator import Simulator
+from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This simulation requires using KVM with gem5 compiled for X86 simulation
@@ -107,6 +112,48 @@ workload = obtain_resource(
     "x86-ubuntu-24.04-boot-with-systemd", resource_version="5.0.0"
 )
 board.set_workload(workload)
+
+# Examples of how you can override the default exit handler behaviors.
+# Exit handlers don't have to be specified in the config script if you don't
+# want to modify/override their default behaviors. Below, we override the
+# default after-boot exit handler to switch processors.
+
+# You can inherit from either the class that handles a certain hypercall by
+# default, or inherit directly from ExitHandler and specify a hypercall number.
+# See src/python/gem5/simulate/exit_handler.py for more information on which
+# behaviors map to which hypercalls, and what the default behaviors are.
+
+
+class CustomKernelBootedExitHandler(ExitHandler, hypercall_num=1):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("First exit: kernel booted")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
+class SwitchProcessorAfterBootExitHandler(AfterBootExitHandler):
+    @overrides(AfterBootExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print("Second exit: Started `after_boot.sh` script")
+        print("Switching to Timing CPU")
+        simulator.switch_processor()
+
+    @overrides(AfterBootExitHandler)
+    def _exit_simulation(self) -> bool:
+        return False
+
+
+class AfterBootScriptExitHandler(ExitHandler, hypercall_num=3):
+    @overrides(ExitHandler)
+    def _process(self, simulator: "Simulator") -> None:
+        print(f"Third exit: {self.get_handler_description()}")
+
+    @overrides(ExitHandler)
+    def _exit_simulation(self) -> bool:
+        return True
 
 
 simulator = Simulator(board=board)
