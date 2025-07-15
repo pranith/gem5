@@ -40,6 +40,11 @@ scons build/ALL/gem5.opt
 """
 
 from gem5.components.boards.riscv_board import RiscvBoard
+
+# With RISCV, we use simple caches.
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
+    PrivateL1PrivateL2WalkCacheHierarchy,
+)
 from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
@@ -51,16 +56,6 @@ from gem5.simulate.exit_handler import (
 )
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
-from gem5.utils.requires import requires
-
-# This runs a check to ensure the gem5 binary is compiled for RISCV.
-
-requires(isa_required=ISA.RISCV)
-
-# With RISCV, we use simple caches.
-from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
-    PrivateL1PrivateL2WalkCacheHierarchy,
-)
 
 # Here we setup the parameters of the l1 and l2 caches.
 cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(

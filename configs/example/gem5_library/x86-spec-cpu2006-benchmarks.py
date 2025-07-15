@@ -86,7 +86,6 @@ from gem5.utils.requires import requires
 # We check for the required gem5 build.
 
 requires(
-    isa_required=ISA.X86,
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
     kvm_required=True,
 )

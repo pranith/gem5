@@ -61,7 +61,6 @@ from gem5.utils.requires import requires
 # This simulation requires using KVM with gem5 compiled for X86 simulation
 # and with MESI_Two_Level cache coherence protocol.
 requires(
-    isa_required=ISA.X86,
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
     kvm_required=True,
 )

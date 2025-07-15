@@ -49,10 +49,6 @@ from gem5.simulate.exit_handler import (
 )
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
-from gem5.utils.requires import requires
-
-requires(isa_required=ISA.RISCV)
-
 
 parser = argparse.ArgumentParser(
     description="A script which uses the RISCVMatchedBoard in FS mode."

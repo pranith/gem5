@@ -61,7 +61,6 @@ from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
-from gem5.utils.requires import requires
 
 
 class RVVCore(BaseCPUCore):
@@ -70,8 +69,6 @@ class RVVCore(BaseCPUCore):
         self.core.isa[0].elen = elen
         self.core.isa[0].vlen = vlen
 
-
-requires(isa_required=ISA.RISCV)
 
 resources = [
     "rvv-branch",
