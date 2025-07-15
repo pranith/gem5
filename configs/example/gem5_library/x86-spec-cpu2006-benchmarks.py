@@ -183,8 +183,7 @@ if args.image[0] != "/":
     # present on the current working directory.
     args.image = os.path.abspath(args.image)
 
-# The link should probably point somewhere else, given that gem5art is a dead
-# project
+
 if not os.path.exists(args.image):
     warn("Disk image not found!")
     print("Instructions on building the disk image can be found at: ")
@@ -266,8 +265,6 @@ except FileExistsError:
 
 command = f"{args.benchmark} {args.size} {output_dir}"
 
-# Should this kernel be updated to something more recent? Or would it cause
-# problems for SPEC 2006?
 board.set_kernel_disk_workload(
     # The x86 linux kernel will be automatically downloaded to the
     # `~/.cache/gem5` directory if not already present.

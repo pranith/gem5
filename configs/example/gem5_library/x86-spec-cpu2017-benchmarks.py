@@ -190,8 +190,6 @@ if args.image[0] != "/":
     # present on the current working directory.
     args.image = os.path.abspath(args.image)
 
-# This link should probably be replaced, since gem5art isn't being maintained
-# anymore
 if not os.path.exists(args.image):
     warn("Disk image not found!")
     print("Instructions on building the disk image can be found at: ")

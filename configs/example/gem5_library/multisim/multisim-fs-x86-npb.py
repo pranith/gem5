@@ -111,10 +111,6 @@ multisim.set_num_processes(3)
 # Here we imagine an experiment wanting to run each NPB benchmark on the same
 # system twice: once with 1 core and once with 2 cores.
 
-# If we want to update this config for gem5 v25.0 and use the
-# "npb-benchmark-suite", we will have to update the suite on gem5 resources
-# to use NPB workloads with hypercalls
-
 # for benchmark in obtain_resource("npb-benchmark-suite"):
 for benchmark in ["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp", "ua"]:
     for num_cores in [1, 2]:

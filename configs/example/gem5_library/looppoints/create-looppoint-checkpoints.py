@@ -117,10 +117,6 @@ board.set_workload(
 dir = Path(args.checkpoint_path)
 dir.mkdir(exist_ok=True)
 
-# The workload may have to be updated so it throws a hypercall instead of
-# hypercall 0. Then, this config will have to be modified so it has a handler
-# for that hypercall
-
 simulator = Simulator(
     board=board,
     on_exit_event={

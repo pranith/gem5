@@ -113,7 +113,6 @@ board = SimpleBoard(
     memory=memory,
     cache_hierarchy=cache_hierarchy,
 )
-# The workload needs to be updated to use hypercalls
 
 board.set_se_binary_workload(
     binary=obtain_resource(resource_id="x86-matrix-multiply-omp"),

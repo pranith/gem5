@@ -88,13 +88,6 @@ board = SimpleBoard(
 # was taken from running this gem5 configuration script,
 # configs/example/gem5_library/checkpoints/riscv-hello-save-checkpoint.py
 
-# gem5 v25.0: `riscv-hello` on gem5 resources needs to be updated to say it
-# is compatible with v25.0
-# The description of the riscv-hello-example-checkpoint says it is only
-# compatible with gem5 v22.0, but the raw JSON shows that it is compatible
-# with gem5 v24.1 and v25.0
-
-
 board.set_se_binary_workload(
     # the workload should be the same as the save-checkpoint script
     obtain_resource("riscv-hello"),

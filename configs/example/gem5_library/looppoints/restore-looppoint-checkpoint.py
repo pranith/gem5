@@ -116,7 +116,6 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# This workload may have to be updated to throw hypercalls
 board.set_workload(
     obtain_resource(
         f"x86-matrix-multiply-omp-100-8-looppoint-region-{args.checkpoint_region}"

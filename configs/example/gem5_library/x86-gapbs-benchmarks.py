@@ -69,8 +69,6 @@ from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
-# This script has been extensively modified and needs to be tested
-
 requires(
     isa_required=ISA.X86,
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
@@ -81,8 +79,6 @@ parser = argparse.ArgumentParser(
     description="An example configuration script to run the GAPBS benchmarks."
 )
 
-# This suite on the gem5 Resources website should be updated to use the latest
-# GAPBS benchmarks. For now, I will modify this script not to use the suite
 gapbs_suite = obtain_resource(
     "gapbs-benchmark-suite", resource_version="1.0.0"
 )

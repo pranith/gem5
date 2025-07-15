@@ -103,10 +103,6 @@ board = SimpleBoard(
 # workload was generated from
 # `configs/example/gem5_library/checkpoints/simpoints-se-checkpoint.py`.
 
-# On gem5 resources, this workload says that it is compatible with gem5
-# versions 23.1, 24.0, and 24.1. The resource may need to be updated or remade
-# so it is compatible with v25.0
-#
 board.set_workload(
     obtain_resource(
         "x86-print-this-15000-with-simpoints-and-checkpoint",
@@ -118,12 +114,6 @@ board.set_workload(
 #
 # This loads a single checkpoint as an example of using simpoints to simulate
 # the function of a single simpoint region.
-
-# I feel that it would be good to keep the example of setting the simpoint
-# manually, since many users of gem5 would probably set it manually instead
-# of using a pre-existing workload or making their own workload. Would the
-# best way to demonstrate this be to keep this example in the comments, or
-# should we point users to the "Raw" tab of resources on the resources website?
 
 # board.set_se_simpoint_workload(
 #     binary=obtain_resource("x86-print-this"),
@@ -167,9 +157,6 @@ class SimpointScheduledExitHandler(ScheduledExitEventHandler):
 
 
 simulator = Simulator(board=board)
-
-# This script STILL NEEDS TO BE TESTED; m5.scheduleTickExitAbsolute() may work
-# differently compared to simulator.schedule_max_insts()
 
 # Here, m5.scheduleTickExitAbsolute schedules an exit event for the first
 # SimPoint's warmup instructions

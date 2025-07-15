@@ -46,8 +46,7 @@ scons build/ALL/gem5.opt
     [-c CORES] [-v VLEN] [-e ELEN] <resource>
 
 """
-# Should I add the UC Davis copyright if I modify this? Or do changes have to
-# be above a certain size/amount to add the copyright?
+
 import argparse
 
 from m5.objects import RiscvO3CPU

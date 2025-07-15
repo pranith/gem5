@@ -75,8 +75,6 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Resource on gem5 resources website needs to be updated to say that it is
-# compatible with gem5 v25.0
 board.set_se_binary_workload(
     obtain_resource("power-hello", resource_version="1.0.0")
 )

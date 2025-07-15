@@ -71,8 +71,6 @@ board = SimpleBoard(
 )
 
 # Set the workload
-# The binary on gem5 resources needs to be updated to say that it is
-# compatible with gem5 v25.0
 board.set_se_binary_workload(obtain_resource("x86-matrix-multiply"))
 
 # Schedule the first exit event. This will be used to take the first

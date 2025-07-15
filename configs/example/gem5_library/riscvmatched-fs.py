@@ -84,9 +84,6 @@ board = RISCVMatchedBoard(
     l2_size="2MiB",
     is_fs=True,
 )
-# We previously tried to update this config script to boot Ubuntu 24.04, but
-# reverted back to Ubuntu 20.04 because we ran into issues. This will have
-# to be tested again.
 
 # Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
 # Ubuntu 24.04. Once the system successfully boots it encounters hypercall 3,

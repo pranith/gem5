@@ -81,8 +81,7 @@ for process_id in range(5):
         memory=memory,
         cache_hierarchy=cache_hierarchy,
     )
-    # The x86-print-this resource on the gem5 resources website may need to be
-    # updated to be compatible with v25.0
+
     board.set_se_binary_workload(
         binary=obtain_resource("x86-print-this"),
         arguments=[f"Hello from process {process_id}", 1],

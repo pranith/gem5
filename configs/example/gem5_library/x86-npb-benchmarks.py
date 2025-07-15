@@ -93,8 +93,6 @@ parser = argparse.ArgumentParser(
     description="An example configuration script to run the npb benchmarks."
 )
 
-# The suite needs to be updated to use the latest NPB workloads for gem5 v25.0.
-# version 2.0.0 doesn't exist yet, but I'll put it here as a placeholder
 npb_suite = obtain_resource(
     "x86-ubuntu-24.04-npb-suite", resource_version="2.0.0"
 )

@@ -122,10 +122,6 @@ board = SimpleBoard(
 #     ),
 # )
 
-# The workload x86-print-this-15000-with-simpoints, version 2.0.0 is available
-# for gem5 versions 23.1 through 24.1. We may need to create another version
-# of the workload that throws a hypercall (see comment below)
-
 board.set_workload(
     obtain_resource(
         "x86-print-this-15000-with-simpoints", resource_version="2.0.0"
@@ -133,11 +129,6 @@ board.set_workload(
 )
 
 dir = Path(args.checkpoint_path)
-
-# For compatibility with gem5 v25.0: we may need to re-work the workload so
-# it throws a hypercall other than one of the defaults, then modify this
-# config so it has a hypercall handler. We could also make the workload
-# throw the checkpoint-taking hypercall.
 
 simulator = Simulator(
     board=board,
