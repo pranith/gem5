@@ -78,56 +78,41 @@ requires(
     kvm_required=True,
 )
 
-# Following are the list of benchmark programs for npb.
-
-# We are restricting classes of NPB to A, B and C as the other classes (D and
-# F) require main memory size of more than 3 GiB. The X86Board is currently
-# limited to 3 GiB of memory. This limitation is explained later in line 136.
-
-# The resource disk has binaries for class D. However, only `ep` benchmark
-# works with class D in the current configuration. More information on the
-# memory footprint for NPB is available at https://arxiv.org/abs/2010.13216
+# We use argparse to select the NPB benchmark and size.
 
 parser = argparse.ArgumentParser(
-    description="An example configuration script to run the npb benchmarks."
+    description="An example configuration script to run the NPB benchmarks."
 )
-
-npb_suite = obtain_resource(
-    "x86-ubuntu-24.04-npb-suite", resource_version="2.0.0"
-)
-# The only positional argument accepted is the benchmark name in this script.
 
 parser.add_argument(
     "--benchmark",
     type=str,
     required=True,
     help="Input the benchmark program to execute.",
-    choices=[workload.get_id() for workload in npb_suite],
-    # choices=["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp", "ua"]
+    choices=["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp", "ua"],
 )
 
-# parser.add_argument(
-#     "--ticks",
-#     type=int,
-#     help="Optionally put the maximum number of ticks to execute during the "
-#     "ROI. It accepts an integer value."
-# )
+parser.add_argument(
+    "--size",
+    type=str,
+    required=True,
+    help="Input the benchmark size to use.",
+    choices=["s", "a", "b", "c", "d"],
+)
 
 args = parser.parse_args()
 
 
-# The simulation may fail in the case of using size "c" and size "d" of the
+# The simulation may fail when using size "c" and size "d" of the
 # benchmarks. This is because the X86Board is currently limited to 3 GB of
 # memory.
 # We warn the user here.
 
-if args.benchmark.endswith("c") or args.benchmark.endswith("d"):
+if args.size.endswith("c") or args.size.endswith("d"):
     warn(
         f"The X86Board is currently limited to 3 GB of memory. The benchmark "
         f"{args.benchmark} may fail to run."
     )
-
-# Checking for the maximum number of instructions, if provided by the user.
 
 # Setting up all the fixed system parameters here
 # Caches: MESI Two Level Cache Hierarchy
@@ -152,7 +137,8 @@ memory = DualChannelDDR4_2400(size="3GiB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
-# configuration is instantiated a user may call `processor.switch()` to switch
+# configuration is instantiated a user may call `processor.switch()` or
+# `simulator.switch_processor()`, if using a hypercall exit handler, to switch
 # from the starting core types to the switch core types. In this simulation
 # we start with KVM cores to simulate the OS boot, then switch to the Timing
 # cores for the command we wish to run after boot.
@@ -164,7 +150,8 @@ processor = SimpleSwitchableProcessor(
     num_cores=2,
 )
 
-# Here we setup the board. The X86Board allows for Full-System X86 simulations
+# Here we setup the board. The X86Board allows for FS (full system) or
+# SE (syscall emulation) X86 simulations.
 
 board = X86Board(
     clk_freq="3GHz",
@@ -173,9 +160,9 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Here we set the FS workload, i.e., npb benchmark program
-# After simulation has ended you may inspect
-# `m5out/board.pc.com_1.device` to the stdout, if any.
+# Here we set the FS workload, i.e., NPB benchmark program
+# After simulation has ended you may inspect `m5out/board.pc.com_1.device` to
+# see the stdout of the simulated system.
 
 # After the system boots, we execute the benchmark program and wait till the
 # ROI `workbegin` annotation is reached (m5_work_begin()). We start collecting
@@ -184,29 +171,12 @@ board = X86Board(
 
 # Also, we sleep the system for some time so that the output is printed
 # properly.
-board.set_workload(obtain_resource(args.benchmark))
-
-
-# # The first exit_event ends with a `workbegin` cause. This means that the
-# # system started successfully and the execution on the program started.
-# def handle_workbegin():
-#     print("Done booting Linux")
-#     print("Resetting stats at the start of ROI!")
-
-#     m5.stats.reset()
-
-#     # We have completed up to this step using KVM cpu. Now we switch to timing
-#     # cpu for detailed simulation.
-
-#     # # Next, we need to check if the user passed a value for --ticks. If yes,
-#     # then we limit out execution to this number of ticks during the ROI.
-#     # Otherwise, we simulate until the ROI ends.
-#     processor.switch()
-#     if args.ticks:
-#         # schedule an exit event for this amount of ticks in the future.
-#         # The simulation will then continue.
-#         m5.scheduleTickExitFromCurrent(args.ticks)
-#     yield False
+board.set_workload(
+    obtain_resource(
+        f"x86-ubuntu-24.04-npb-{args.benchmark}-{args.size}",
+        resource_version="3.0.0",
+    )
+)
 
 
 class CustomWorkBeginExitHandler(WorkBeginExitHandler):
@@ -217,10 +187,6 @@ class CustomWorkBeginExitHandler(WorkBeginExitHandler):
     def _process(self, simulator: "Simulator") -> None:
         print("Done booting Linux")
         print("Resetting stats at the start of ROI!")
-        # This is a hacky way to keep the script's ending print statement.
-        simulator._tick_stopwatch.append(
-            (ExitEvent.WORKBEGIN, simulator.get_current_tick())
-        )
         m5.stats.reset()
         simulator.switch_processor()
 
@@ -229,33 +195,15 @@ class CustomWorkEndExitHandler(WorkEndExitHandler):
     @overrides(WorkEndExitHandler)
     def _process(self, simulator):
         super()._process(simulator)
-        # This is a hacky way to keep the script's ending print statement.
-        simulator._tick_stopwatch.append(
-            (ExitEvent.WORKEND, simulator.get_current_tick())
-        )
+        print("Dump stats at the end of the ROI!")
+        m5.stats.dump()
 
     @overrides(WorkEndExitHandler)
     def _exit_simulation(self) -> bool:
         return True
 
 
-# The next exit_event is to simulate the ROI. It should be exited with a cause
-# marked by `workend`.
-
-
-# We exepect that ROI ends with `workend` or `simulate() limit reached`.
-# def handle_workend():
-#     print("Dump stats at the end of the ROI!")
-
-#     m5.stats.dump()
-#     yield True
-
-
 simulator = Simulator(board=board)
-
-# We maintain the wall clock time.
-
-globalStart = time.time()
 
 print("Running the simulation")
 print("Using KVM cpu")
