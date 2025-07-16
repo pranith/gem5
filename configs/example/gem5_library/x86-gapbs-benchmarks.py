@@ -118,7 +118,8 @@ memory = DualChannelDDR4_2400(size="3GiB")
 
 # Here we setup the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
-# configuration is instantiated a user may call `processor.switch()` to switch
+# configuration is instantiated a user may call `processor.switch()` or
+# `simulator.switch_processor()` if using a hypercall handler to switch
 # from the starting core types to the switch core types. In this simulation
 # we start with KVM cores to simulate the OS boot, then switch to the Timing
 # cores for the command we wish to run after boot.
@@ -161,10 +162,6 @@ class CustomWorkBeginExitHandler(WorkBeginExitHandler):
     def _process(self, simulator: "Simulator") -> None:
         print("Done booting Linux")
         print("Resetting stats at the start of ROI!")
-        # This is a hacky way to keep the script's ending print statement.
-        simulator._tick_stopwatch.append(
-            (ExitEvent.WORKBEGIN, simulator.get_current_tick())
-        )
         m5.stats.reset()
         simulator.switch_processor()
 
@@ -177,39 +174,14 @@ class CustomWorkEndExitHandler(WorkEndExitHandler):
     @overrides(WorkEndExitHandler)
     def _process(self, simulator: "Simulator") -> None:
         print("Dump stats at the end of the ROI!")
-
         m5.stats.dump()
-        # This is a hacky way to keep the script's ending print statement.
-        simulator._tick_stopwatch.append(
-            (ExitEvent.WORKEND, simulator.get_current_tick())
-        )
 
     @overrides(WorkEndExitHandler)
     def _exit_simulation(self) -> bool:
         return True
 
 
-# def handle_workbegin():
-#     print("Done booting Linux")
-#     print("Resetting stats at the start of ROI!")
-#     m5.stats.reset()
-#     global start_tick
-#     start_tick = m5.curTick()
-#     processor.switch()
-#     yield False  # E.g., continue the simulation.
-
-
-# def handle_workend():
-#     print("Dump stats at the end of the ROI!")
-#     m5.stats.dump()
-#     yield True  # Stop the simulation. We're done.
-
-
 simulator = Simulator(board=board)
-
-# We maintain the wall clock time.
-
-globalStart = time.time()
 
 print("Running the simulation")
 print("Using KVM cpu")
