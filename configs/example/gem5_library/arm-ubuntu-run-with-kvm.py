@@ -46,7 +46,6 @@ from m5.objects import (
     VExpress_GEM5_V1,
 )
 
-from gem5.coherence_protocol import CoherenceProtocol
 from gem5.components.boards.arm_board import ArmBoard
 from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierarchy import (
     PrivateL1PrivateL2CacheHierarchy,
@@ -58,7 +57,6 @@ from gem5.components.processors.simple_switchable_processor import (
 )
 from gem5.isas import ISA
 from gem5.resources.resource import obtain_resource
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.exit_handler import (
     AfterBootExitHandler,
     ExitHandler,

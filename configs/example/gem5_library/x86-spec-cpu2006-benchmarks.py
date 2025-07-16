@@ -49,13 +49,10 @@ scons build/X86/gem5.opt
 """
 
 import argparse
-import json
 import os
 import time
 
 import m5
-from m5.objects import Root
-from m5.stats.gem5stats import get_simstat
 from m5.util import (
     fatal,
     warn,
@@ -74,7 +71,6 @@ from gem5.resources.resource import (
     Resource,
     obtain_resource,
 )
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.exit_handler import (
     WorkBeginExitHandler,
     WorkEndExitHandler,

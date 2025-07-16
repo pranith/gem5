@@ -69,7 +69,6 @@ from gem5.resources.resource import (
     DiskImageResource,
     obtain_resource,
 )
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.exit_handler import (
     WorkBeginExitHandler,
     WorkEndExitHandler,

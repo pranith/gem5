@@ -49,8 +49,6 @@ scons build/NULL/gem5.opt
 
 from pathlib import Path
 
-from m5.objects import Root
-
 from gem5.components.boards.test_board import TestBoard
 from gem5.components.cachehierarchies.classic.private_l1_cache_hierarchy import (
     PrivateL1CacheHierarchy,

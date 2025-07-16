@@ -51,7 +51,6 @@ scons build/ALL/gem5.opt
 
 """
 
-import m5
 from m5.objects import (
     GlobalInstTracker,
     LocalInstTracker,

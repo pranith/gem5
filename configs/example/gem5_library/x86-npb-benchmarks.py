@@ -46,11 +46,8 @@ scons build/ALL/gem5.opt
 """
 
 import argparse
-import time
 
 import m5
-from m5.objects import Root
-from m5.stats.gem5stats import get_simstat
 from m5.util import warn
 
 from gem5.coherence_protocol import CoherenceProtocol
@@ -67,7 +64,6 @@ from gem5.simulate.exit_handler import (
     WorkEndExitHandler,
 )
 from gem5.simulate.simulator import (
-    ExitEvent,
     Simulator,
 )
 from gem5.utils.override import overrides

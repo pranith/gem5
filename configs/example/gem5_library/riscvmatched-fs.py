@@ -40,11 +40,9 @@ scons build/ALL/gem5.opt
 
 import argparse
 
-from gem5.isas import ISA
 from gem5.prebuilt.riscvmatched.riscvmatched_board import RISCVMatchedBoard
 from gem5.resources.resource import obtain_resource
 from gem5.simulate.exit_handler import (
-    ExitHandler,
     KernelBootedExitHandler,
 )
 from gem5.simulate.simulator import Simulator

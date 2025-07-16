@@ -38,10 +38,8 @@ scons build/ALL/gem5.opt -j $(nproc)
 """
 import argparse
 
-from gem5.isas import ISA
 from gem5.prebuilt.demo.arm_demo_board import ArmDemoBoard
 from gem5.resources.resource import obtain_resource
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 
 parser = argparse.ArgumentParser(

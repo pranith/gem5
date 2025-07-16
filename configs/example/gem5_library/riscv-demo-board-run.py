@@ -50,7 +50,6 @@ import m5
 
 from gem5.prebuilt.demo.riscv_demo_board import RiscvDemoBoard
 from gem5.resources.resource import obtain_resource
-from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 
 parser = argparse.ArgumentParser()
