@@ -175,7 +175,7 @@ board = X86Board(
 
 # Here we set the FS workload, i.e., npb benchmark program
 # After simulation has ended you may inspect
-# `m5out/system.pc.com_1.device` to the stdout, if any.
+# `m5out/board.pc.com_1.device` to the stdout, if any.
 
 # After the system boots, we execute the benchmark program and wait till the
 # ROI `workbegin` annotation is reached (m5_work_begin()). We start collecting

@@ -83,7 +83,7 @@ board = RiscvBoard(
 # Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
 # Ubuntu 24.04. Once the system successfully boots it encounters an
 # `gem5-bridge hypercall 3` command which stops the simulation. When the
-# simulation has ended you may inspect `m5out/system.pc.com_1.device` to see
+# simulation has ended you may inspect `m5out/board.platform.terminal` to see
 # the simulated system's stdout.
 board.set_workload(
     obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")

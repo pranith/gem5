@@ -28,7 +28,7 @@
 This script utilizes the X86DemoBoard to run a simple Ubunutu boot. The script
 will boot the the OS to login before exiting the simulation.
 
-A detailed terminal output can be found in `m5out/system.pc.com_1.device`.
+A detailed terminal output can be found in `m5out/board.pc.com_1.device`.
 
 **Warning:** The X86DemoBoard uses the Timing CPU. The boot may take
 considerable time to complete execution.

@@ -257,7 +257,7 @@ except FileExistsError:
 
 # Here we set the FS workload, i.e., SPEC CPU2017 benchmark
 # After simulation has ended you may inspect
-# `m5out/system.pc.com_1.device` to see the simulated system's stdout.
+# `m5out/board.pc.com_1.device` to see the simulated system's stdout.
 
 # After the system boots, we execute the benchmark program and wait until the
 # `m5_exit instruction encountered` is encountered. We start collecting

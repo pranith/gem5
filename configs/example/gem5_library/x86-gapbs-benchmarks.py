@@ -140,7 +140,7 @@ board = X86Board(
 )
 
 # Here we set the FS workload, i.e., gapbs benchmark program
-# After simulation has ended you may inspect `m5out/system.pc.com_1.device`
+# After simulation has ended you may inspect `m5out/board.pc.com_1.device`
 # to see the stdout of the simulated program.
 
 # After the system boots, we execute the benchmark program and wait until the
