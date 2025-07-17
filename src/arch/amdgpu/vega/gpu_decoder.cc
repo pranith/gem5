@@ -1002,7 +1002,7 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_CVT_F32_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -1156,60 +1156,60 @@ namespace VegaISA
         &Decoder::decode_invalid,
         &Decoder::decode_OPU_VOP3__V_BITOP3_B16,
         &Decoder::decode_OPU_VOP3__V_BITOP3_B32,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_FP8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_BF8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F32_FP8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F32_BF8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_FP4,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_FP8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_BF8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F16_FP8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F16_BF8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_FP4,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_FP4,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_2XPK16_FP6_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_2XPK16_BF6_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F32_FP6,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F32_BF6,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_FP6_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_FP6_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF6_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF6_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_F16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_BF16,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F16_FP6,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF16_FP6,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F16_BF6,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF16_BF6,
         &Decoder::decode_invalid,
         &Decoder::decode_OPU_VOP3__V_ASHR_PK_I8_I32,
         &Decoder::decode_OPU_VOP3__V_ASHR_PK_U8_I32,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_CVT_PK_F16_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_PK_BF16_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_FP8,
+        &Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_BF8,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -1266,11 +1266,11 @@ namespace VegaISA
         &Decoder::decode_OPU_VOP3__V_PACK_B32_F16,
         &Decoder::decode_invalid,
         &Decoder::decode_OPU_VOP3__V_CVT_PK_FP8_F32,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OPU_VOP3__V_CVT_PK_BF8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SR_FP8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SR_BF8_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SR_F16_F32,
+        &Decoder::decode_OPU_VOP3__V_CVT_SR_BF16_F32,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -3166,14 +3166,14 @@ namespace VegaISA
         &Decoder::decode_OP_VOP1__V_SWAP_B32,
         &Decoder::decode_OP_VOP1__V_ACCVGPR_MOV_B32,
         &Decoder::decode_invalid,
+        &Decoder::decode_OP_VOP1__V_CVT_F32_FP8,
+        &Decoder::decode_OP_VOP1__V_CVT_F32_BF8,
+        &Decoder::decode_OP_VOP1__V_CVT_PK_F32_FP8,
+        &Decoder::decode_OP_VOP1__V_CVT_PK_F32_BF8,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
-        &Decoder::decode_invalid,
+        &Decoder::decode_OP_VOP1__V_CVT_F32_BF16,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
         &Decoder::decode_invalid,
@@ -6655,6 +6655,12 @@ namespace VegaISA
     } // decode_OPU_VOP3__V_LOG_LEGACY_F32
 
     GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_F32_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_F32_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
     Decoder::decode_OPU_VOP3__V_MAD_LEGACY_F32(MachInst iFmt)
     {
         return new Inst_VOP3__V_MAD_LEGACY_F32(&iFmt->iFmt_VOP3A);
@@ -7116,6 +7122,198 @@ namespace VegaISA
     }
 
     GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F32_FP8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F32_BF8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F32_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_F32_BF8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F32_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_F32_FP8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP4_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F32_FP4(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F32_FP4(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP8_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF8_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP8_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP8_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF8_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF8_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F16_FP8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F16_BF8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F16_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_F16_BF8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_F16_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_F16_FP8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP4_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_FP4_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_FP4_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_F16_FP4(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_F16_FP4(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_FP4(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF16_FP4(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF16_BF6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_BF16_BF6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF16_FP6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_BF16_FP6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF6_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_BF6_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_BF6_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_BF6_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_2XPK16_BF6_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_2XPK16_BF6_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F16_BF6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_F16_BF6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F16_FP6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_F16_FP6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F32_BF6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_F32_BF6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_F32_FP6(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_F32_FP6(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_FP6_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_FP6_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK32_FP6_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK32_FP6_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_2XPK16_FP6_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_2XPK16_FP6_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
     Decoder::decode_OPU_VOP3__V_ASHR_PK_I8_I32(MachInst iFmt)
     {
         return new Inst_VOP3__V_ASHR_PK_I8_I32(&iFmt->iFmt_VOP3A);
@@ -7125,6 +7323,120 @@ namespace VegaISA
     Decoder::decode_OPU_VOP3__V_ASHR_PK_U8_I32(MachInst iFmt)
     {
         return new Inst_VOP3__V_ASHR_PK_U8_I32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_PK_F16_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_PK_F16_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_PK_BF16_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_PK_BF16_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF16_FP8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_PK_BF16_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_PK_BF16_BF8(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_BF8_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_BF8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_FP8_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_BF8_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_BF8_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_FP8_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALEF32_SR_FP8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALEF32_SR_FP8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_BF6_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_BF6_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_BF6_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_BF6_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP6_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP6_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP6_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP6_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP4_BF16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_F16(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP4_F16(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SCALE_SR_PK_FP4_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SCALE_SR_PK_FP4_F32(&iFmt->iFmt_VOP3A);
     }
 
     GPUStaticInst*
@@ -7364,9 +7676,39 @@ namespace VegaISA
     }
 
     GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SR_FP8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SR_FP8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SR_BF8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SR_BF8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SR_F16_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SR_F16_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_SR_BF16_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_SR_BF16_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
     Decoder::decode_OPU_VOP3__V_CVT_PK_FP8_F32(MachInst iFmt)
     {
         return new Inst_VOP3__V_CVT_PK_FP8_F32(&iFmt->iFmt_VOP3A);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OPU_VOP3__V_CVT_PK_BF8_F32(MachInst iFmt)
+    {
+        return new Inst_VOP3__V_CVT_PK_BF8_F32(&iFmt->iFmt_VOP3A);
     }
 
     GPUStaticInst*
@@ -11933,6 +12275,36 @@ namespace VegaISA
     Decoder::decode_OP_VOP1__V_ACCVGPR_MOV_B32(MachInst iFmt)
     {
         return new Inst_VOP1__V_ACCVGPR_MOV_B32(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP1__V_CVT_F32_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_CVT_F32_FP8(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP1__V_CVT_F32_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_CVT_F32_BF8(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP1__V_CVT_PK_F32_FP8(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_CVT_PK_F32_FP8(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP1__V_CVT_PK_F32_BF8(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_CVT_PK_F32_BF8(&iFmt->iFmt_VOP1);
+    }
+
+    GPUStaticInst*
+    Decoder::decode_OP_VOP1__V_CVT_F32_BF16(MachInst iFmt)
+    {
+        return new Inst_VOP1__V_CVT_F32_BF16(&iFmt->iFmt_VOP1);
     }
 
     GPUStaticInst*
