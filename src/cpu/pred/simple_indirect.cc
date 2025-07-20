@@ -171,9 +171,9 @@ SimpleIndirectPredictor::lookup(ThreadID tid, Addr br_addr,
     return history->hit;
 }
 
-
 void
-SimpleIndirectPredictor::commit(ThreadID tid, InstSeqNum sn, void * &i_history)
+SimpleIndirectPredictor::commit(ThreadID tid, InstSeqNum sn, bool mispredict,
+                                void*& i_history, const Addr corr_target)
 {
     if (i_history == nullptr) return;
     // we do not need to recover the GHR, so delete the information

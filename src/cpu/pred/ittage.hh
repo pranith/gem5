@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014 ARM Limited
- * Copyright (c) 2022-2023 The University of Edinburgh
+ * Copyright (c) 2025 - Pranith Kumar
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -36,139 +35,205 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_PRED_INDIRECT_HH__
-#define __CPU_PRED_INDIRECT_HH__
+#ifndef __CPU_PRED_ITTAGE_HH__
+#define __CPU_PRED_ITTAGE_HH__
 
 #include <deque>
 
+#include "base/cache/associative_cache.hh"
+#include "base/cache/cache_entry.hh"
+#include "base/sat_counter.hh"
 #include "base/statistics.hh"
 #include "cpu/inst_seq.hh"
 #include "cpu/pred/indirect.hh"
-#include "params/SimpleIndirectPredictor.hh"
+#include "params/ITTAGE.hh"
 
-namespace gem5
-{
+class BaseIndexingPolicy;
 
-namespace branch_prediction
-{
+namespace replacement_policy {
+class Base;
+}
 
-class SimpleIndirectPredictor : public IndirectPredictor
+namespace gem5 {
+
+namespace branch_prediction {
+
+class ITTAGE : public IndirectPredictor
 {
   public:
-    SimpleIndirectPredictor(const SimpleIndirectPredictorParams &params);
+    ITTAGE(const ITTAGEParams& params);
 
     /** Indirect predictor interface */
-    void reset() override;
+    void
+    reset() override;
 
-    const PCStateBase * lookup(ThreadID tid, InstSeqNum sn,
-                                Addr pc, void * &iHistory) override;
-    void update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash,
-                bool taken, const PCStateBase& target,
-                BranchType br_type, void * &iHistory) override;
-    void squash(ThreadID tid, InstSeqNum sn, void * &iHistory) override;
+    const PCStateBase*
+    lookup(ThreadID tid, InstSeqNum sn, Addr pc, void*& iHistory) override;
+    void
+    update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash, bool taken,
+           const PCStateBase& target, BranchType br_type,
+           void*& iHistory) override;
+    void
+    squash(ThreadID tid, InstSeqNum sn, void*& iHistory) override;
     void
     commit(ThreadID tid, InstSeqNum sn, bool mispredict, void*& iHistory,
-           const Addr corr_target) override;
+           const Addr target) override;
 
     /** ------------------
      * The actual predictor
      * -------------------
      * */
   private:
-    const bool hashGHR;
-    const bool hashTargets;
-    const unsigned numSets;
-    const unsigned numWays;
-    const unsigned tagBits;
+    const unsigned numPredTables;
+    const unsigned predTableEntries;
+    // const unsigned predTableTagBits;
+    // const unsigned predTableAssociativity;
+    const std::vector<unsigned> predTableHistLengths;
     const unsigned pathLength;
     const unsigned speculativePathLength;
     const unsigned instShift;
+
+    replacement_policy::Base* replPolicy;
+    BaseIndexingPolicy* indexingPolicy;
+
+    SatCounter8 useAltOnNA;
+
+    const bool hashGHR;
+    const bool hashTargets;
+    const unsigned numSets;
+    // const unsigned numWays;
+    const unsigned tagBits;
     const unsigned ghrNumBits;
     const unsigned ghrMask;
+    const unsigned tableCtrBits;
+    const unsigned tableCtrInit;
+    const unsigned tableUsefulBits;
 
-    struct IPredEntry
-    {
+    struct IPredEntry {
         Addr tag = 0;
         std::unique_ptr<PCStateBase> target;
     };
 
-    std::vector<std::vector<IPredEntry> > targetCache;
-
-
-
-    struct HistoryEntry
+    class NewIPredEntry : public CacheEntry
     {
+      public:
+        using TagExtractor = std::function<Addr(Addr)>;
+
+        Addr tag;
+        PCStateBase* target;
+
+        SatCounter8 ctr;
+        bool useful;
+
+        NewIPredEntry(TagExtractor ext, unsigned ctr_bits, unsigned ctr_init,
+                      unsigned useful_bits)
+            : CacheEntry(ext), tag(0), target(nullptr),
+              ctr(ctr_bits, ctr_init), useful(false)
+        {
+        }
+
+        void
+        resetCtr(void)
+        {
+            ctr.reset();
+        }
+    };
+
+    std::vector<AssociativeCache<NewIPredEntry>*> predTables;
+
+    struct HistoryEntry {
         HistoryEntry(Addr br_addr, Addr tgt_addr, InstSeqNum seq_num)
-            : pcAddr(br_addr), targetAddr(tgt_addr), seqNum(seq_num) { }
-        HistoryEntry() : pcAddr(0), targetAddr(0), seqNum(0) { }
+            : pcAddr(br_addr), targetAddr(tgt_addr), seqNum(seq_num)
+        {
+        }
+        HistoryEntry() : pcAddr(0), targetAddr(0), seqNum(0) {}
         Addr pcAddr;
         Addr targetAddr;
+
         InstSeqNum seqNum;
     };
 
     /** Indirect branch history information
      * Used for prediction, update and recovery
      */
-    struct IndirectHistory
-    {
+    struct IndirectHistory {
         /* data */
         Addr pcAddr;
         Addr targetAddr;
+        Addr altTargetAddr;
         InstSeqNum seqNum;
 
-        Addr set_index;
-        Addr tag;
+        uint32_t entry_table_idx;
+        uint32_t alt_entry_table_idx;
+
         bool hit;
-        unsigned ghr;
+        Addr table_tag;
+        Addr alt_table_tag;
+
+        uint64_t ghr;
         uint64_t pathHist;
 
         bool was_indirect;
+        bool using_alt_pred;
 
         IndirectHistory()
-            : pcAddr(MaxAddr),
-              targetAddr(MaxAddr),
-              was_indirect(false)
-        {}
+            : pcAddr(MaxAddr), targetAddr(MaxAddr), altTargetAddr(MaxAddr),
+              entry_table_idx(0), alt_entry_table_idx(0), hit(false),
+              was_indirect(false), using_alt_pred(false)
+        {
+        }
     };
 
     /** Per thread path and global history registers*/
-    struct ThreadInfo
-    {
+    struct ThreadInfo {
         // Path history register
         std::deque<HistoryEntry> pathHist;
         // Global direction history register
-        unsigned ghr = 0;
+        uint64_t ghr = 0;
     };
 
     std::vector<ThreadInfo> threadInfo;
 
-
     // ---- Internal functions ----- //
-    bool lookup(ThreadID tid, Addr br_addr,
-                PCStateBase * &target, IndirectHistory * &history);
-    void recordTarget(ThreadID tid, InstSeqNum sn,
-                      const PCStateBase& target, IndirectHistory * &history);
+    bool
+    lookup(ThreadID tid, Addr br_addr, PCStateBase*& target,
+           IndirectHistory*& history);
+    void
+    recordTarget(ThreadID tid, InstSeqNum sn, const PCStateBase& target,
+                 IndirectHistory*& history);
 
     // Helper functions to generate and modify the
     // direction info
-    void genIndirectInfo(ThreadID tid, void* &iHistory);
-    void updateDirectionInfo(ThreadID tid, bool taken, Addr pc, Addr target);
+    void
+    genIndirectInfo(ThreadID tid, void*& iHistory);
+    void
+    updateDirectionInfo(ThreadID tid, bool taken, Addr pc, Addr target);
 
     // Helper to compute set and tag
-    inline Addr getSetIndex(Addr br_addr, ThreadID tid);
-    inline Addr getTag(Addr br_addr);
+    inline Addr
+    getSetIndex(Addr br_addr, ThreadID tid);
+    inline Addr
+    getTag(Addr br_addr);
+    inline Addr
+    getTableTag(Addr pc, uint64_t ghr, unsigned table_idx);
 
-    inline bool isIndirectNoReturn(BranchType type) {
+    inline bool
+    isIndirectNoReturn(BranchType type)
+    {
         return (type == BranchType::CallIndirect) ||
                (type == BranchType::IndirectUncond) ||
                (type == BranchType::IndirectCond);
     }
 
   protected:
-    struct IndirectStats : public statistics::Group
-    {
-        IndirectStats(statistics::Group *parent);
-        // STATS
+    struct IndirectStats : public statistics::Group {
+        IndirectStats(statistics::Group* parent);
+        // Main Predictor stats
+        statistics::Vector tableHits;
+        statistics::Vector tableInserts;
+        statistics::Scalar tableMisses;
+
+        // Base Predictor Stats
         statistics::Scalar lookups;
         statistics::Scalar hits;
         statistics::Scalar misses;
@@ -182,4 +247,4 @@ class SimpleIndirectPredictor : public IndirectPredictor
 } // namespace branch_prediction
 } // namespace gem5
 
-#endif // __CPU_PRED_INDIRECT_HH__
+#endif // __CPU_PRED_ITTAGE_HH__

@@ -128,6 +128,16 @@ class IndexingPolicyTemplate : public SimObject
     }
 
     /**
+     * Copy constructor
+     */
+    IndexingPolicyTemplate(const IndexingPolicyTemplate& other)
+        : SimObject(other.params()), assoc(other.assoc),
+          numSets(other.numSets), setShift(other.setShift),
+          setMask(other.setMask), sets(other.sets), tagShift(other.tagShift)
+    {
+    }
+
+    /**
      * Destructor.
      */
     ~IndexingPolicyTemplate() {};
@@ -203,6 +213,9 @@ class IndexingPolicyTemplate : public SimObject
      */
     virtual Addr regenerateAddr(const KeyType &key,
                                 const ReplaceableEntry* entry) const = 0;
+
+    virtual IndexingPolicyTemplate*
+    clone() const = 0;
 };
 
 class AddrTypes

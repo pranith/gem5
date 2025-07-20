@@ -388,8 +388,8 @@ BPredUnit::commitBranch(ThreadID tid, PredictorHistory* &hist)
 
     // Commit also Indirect predictor and RAS
     if (iPred) {
-        iPred->commit(tid, hist->seqNum,
-                           hist->indirectHistory);
+        iPred->commit(tid, hist->seqNum, hist->mispredict,
+                      hist->indirectHistory, hist->target->instAddr());
     }
 
     if (ras) {

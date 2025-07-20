@@ -178,6 +178,62 @@ class SimpleIndirectPredictor(IndirectPredictor):
     )
 
 
+class ITTAGE(IndirectPredictor):
+    type = "ITTAGE"
+    cxx_class = "gem5::branch_prediction::ITTAGE"
+    cxx_header = "cpu/pred/ittage.hh"
+
+    numPredTables = Param.Unsigned(6, "Number of predictor tables")
+    predTableEntries = Param.MemorySize(
+        "1024", "Number of predictor table entries"
+    )
+    predTableTagBits = Param.Unsigned(16, "Size of the tag in bits")
+    predTableHistLengths = VectorParam.Unsigned(
+        [0, 2, 4, 8, 16, 32], "History lengths in each table"
+    )
+    predTableAssociativity = Param.Unsigned(
+        1024, "Associativity of the pred tables"
+    )
+    tableReplPolicy = Param.BaseReplacementPolicy(
+        LRURP(), "Tag Table replacement policy"
+    )
+    tableIndexingPolicy = Param.BaseIndexingPolicy(
+        SetAssociative(
+            size=Parent.predTableEntries,
+            assoc=Parent.predTableAssociativity,
+            entry_size=1,
+        ),
+        "Tag Table indexing policy",
+    )
+    tableCtrBits = Param.Unsigned(
+        4, "Number of bits in the table entry counter"
+    )
+    tableCtrInit = Param.Unsigned(
+        8, "Initial value of the table entry counter"
+    )
+    tableUsefulBits = Param.Unsigned(
+        2, "Number of bits in the table entry useful field"
+    )
+
+    indirectHashGHR = Param.Bool(True, "Hash branch predictor GHR")
+    indirectHashTargets = Param.Bool(True, "Hash path history targets")
+    indirectSets = Param.Unsigned(256, "Cache sets for indirect predictor")
+    indirectWays = Param.Unsigned(2, "Ways for indirect predictor")
+    indirectTagSize = Param.Unsigned(16, "Indirect target cache tag bits")
+    indirectPathLength = Param.Unsigned(
+        3, "Previous indirect targets to use for path history"
+    )
+    speculativePathLength = Param.Unsigned(
+        256,
+        "Additional buffer space to store speculative path history. "
+        "If there are more speculative branches in flight the history cannot "
+        "be recovered. Set this to an appropriate value respective the CPU"
+        "pipeline depth or a high value e.g. 256 to make it 'unlimited'.",
+    )
+    indirectGHRBits = Param.Unsigned(13, "Indirect GHR number of bits")
+    instShiftAmt = Param.Unsigned(2, "Number of bits to shift instructions by")
+
+
 class BranchPredictor(SimObject):
     type = "BranchPredictor"
     cxx_class = "gem5::branch_prediction::BPredUnit"

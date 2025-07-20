@@ -49,24 +49,19 @@
 #include "params/IndirectPredictor.hh"
 #include "sim/sim_object.hh"
 
-namespace gem5
-{
+namespace gem5 {
 
-namespace branch_prediction
-{
+namespace branch_prediction {
 
 class IndirectPredictor : public SimObject
 {
   public:
-
     typedef IndirectPredictorParams Params;
 
-    IndirectPredictor(const Params &params)
-        : SimObject(params)
-    {
-    }
+    IndirectPredictor(const Params& params) : SimObject(params) {}
 
-    virtual void reset() {};
+    virtual void
+    reset(){};
 
     /**
      * Predicts the indirect target of an indirect branch.
@@ -77,8 +72,8 @@ class IndirectPredictor : public SimObject
      * @return For a hit the predictor returns a pointer to the target PCState
      *         otherwise a nullptr is returned.
      */
-    virtual const PCStateBase* lookup(ThreadID tid, InstSeqNum sn,
-                                      Addr pc, void * &i_history) = 0;
+    virtual const PCStateBase*
+    lookup(ThreadID tid, InstSeqNum sn, Addr pc, void*& i_history) = 0;
 
     /**
      * Updates the indirect predictor with history information of a branch.
@@ -96,9 +91,10 @@ class IndirectPredictor : public SimObject
      * @param br_type The branch instruction type.
      * @param i_history The pointer to the history object.
      */
-    virtual void update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash,
-                        bool taken, const PCStateBase& target,
-                        BranchType br_type, void * &i_history) = 0;
+    virtual void
+    update(ThreadID tid, InstSeqNum sn, Addr pc, bool squash, bool taken,
+           const PCStateBase& target, BranchType br_type,
+           void*& i_history) = 0;
 
     /**
      * Squashes a branch. If the branch modified the history
@@ -107,16 +103,20 @@ class IndirectPredictor : public SimObject
      * @param sn The sequence number of the branch.
      * @param i_history The pointer to the history object.
      */
-    virtual void squash(ThreadID tid, InstSeqNum sn, void * &i_history) = 0;
+    virtual void
+    squash(ThreadID tid, InstSeqNum sn, void*& i_history) = 0;
 
     /**
      * A branch gets finally commited. Updates the internal state of
      * the indirect predictor (counter and target information).
      * @param tid Thread ID
      * @param sn The sequence number of the branch.
+     * @param mispredict Was this indirect branch mispredicted?
      * @param i_history The pointer to the history object.
      */
-    virtual void commit(ThreadID tid, InstSeqNum sn, void * &i_history) = 0;
+    virtual void
+    commit(ThreadID tid, InstSeqNum sn, bool mispredict, void*& i_history,
+           const Addr corr_target) = 0;
 };
 
 } // namespace branch_prediction

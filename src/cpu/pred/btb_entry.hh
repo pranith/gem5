@@ -83,6 +83,18 @@ class BTBSetAssociative : public BTBIndexingPolicy
         setNumThreads(p.numThreads);
     }
 
+    BTBSetAssociative*
+    clone() const override
+    {
+        assert(0);
+        return nullptr;
+    }
+
+    BTBSetAssociative(const BTBSetAssociative& other)
+        : BTBIndexingPolicy(other), tagMask(other.tagMask)
+    {
+    }
+
   protected:
     /**
      * Extract the set index for the instruction PC based on tid.

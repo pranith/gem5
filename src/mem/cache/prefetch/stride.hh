@@ -89,6 +89,14 @@ class StridePrefetcherHashedSetAssociative : public TaggedSetAssociative
       : TaggedSetAssociative(p)
     {
     }
+
+    StridePrefetcherHashedSetAssociative*
+    clone() const override
+    {
+        assert(0);
+        return nullptr;
+    }
+
     ~StridePrefetcherHashedSetAssociative() = default;
 };
 

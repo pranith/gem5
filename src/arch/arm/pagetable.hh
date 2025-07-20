@@ -226,6 +226,13 @@ class TLBSetAssociative : public TLBIndexingPolicy
     {
         panic("Unimplemented\n");
     }
+
+    TLBSetAssociative*
+    clone() const override
+    {
+        assert(0);
+        return nullptr;
+    }
 };
 
 // ITB/DTB table entry

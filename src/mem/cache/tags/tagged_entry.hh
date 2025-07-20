@@ -88,6 +88,18 @@ class TaggedSetAssociative : public TaggedIndexingPolicy
       : TaggedIndexingPolicy(p, p.size / p.entry_size, floorLog2(p.entry_size))
     {}
 
+    TaggedSetAssociative(const TaggedSetAssociative& other)
+        : TaggedIndexingPolicy(other)
+    {
+    }
+
+    TaggedSetAssociative*
+    clone() const override
+    {
+        assert(0);
+        return nullptr;
+    }
+
     std::vector<ReplaceableEntry*>
     getPossibleEntries(const KeyType &key) const override
     {
