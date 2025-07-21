@@ -348,13 +348,6 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
 
     MISA misa = tc->readMiscReg(MISCREG_ISA);
 
-    // special access indicates that we should
-    // not lookup or insert to the TLB
-    bool special_access = false
-        || memaccess.force_virt
-        || memaccess.hlvx
-        || memaccess.lr;
-
     SATP satp = (misa.rvh && memaccess.virt) ?
         tc->readMiscReg(MISCREG_VSATP) :
         tc->readMiscReg(MISCREG_SATP);
@@ -362,13 +355,24 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
     Addr vpn = getVPNFromVAddr(vaddr, satp.mode);
 
     TlbEntry *e = nullptr;
-    if (!special_access) {
+    if (!memaccess.bypassTLB()) {
         e = lookup(vpn, satp.asid, mode, false);
         if (!e) {
             Fault fault = walker->start(tc, translation, req, mode);
-            if (translation != nullptr || fault != NoFault) {
-                // This gets ignored in atomic mode.
-                delayed = true;
+            // Atomic translations have translation == nullptr
+            // so the if body is reachable only in timing
+            if (translation != nullptr) {
+                // If there has been a fault already, do not
+                // mark the translation as delayed as that
+                // will block its deletion
+                if (fault != NoFault) {
+                    delayed = false;
+                } else {
+                    delayed = true;
+                }
+                return fault;
+            }
+            else if (fault != NoFault) {
                 return fault;
             }
             e = lookup(vpn, satp.asid, mode, true);
@@ -376,7 +380,7 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
         }
     }
     else {
-        // Don't lookup and don't insert for special accesses!
+        // Don't lookup and don't insert when bypassing the TLB.
         // We get the translation result back in memory pointed to by
         // TlbEntry *e which is not inserted!
         e = new TlbEntry();
@@ -390,8 +394,7 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
     }
 
     Fault fault;
-    // No check on special_access
-    if (special_access) {
+    if (memaccess.bypassTLB()) {
         fault = NoFault;
     }
     else {
@@ -414,16 +417,31 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
     if (e && (mode == BaseMMU::Write) && !e->pte.w) {
         DPRINTF(TLB, "Dirty bit not set, repeating PT walk\n");
         fault = walker->start(tc, translation, req, mode);
-        if (translation != nullptr || fault != NoFault) {
-            if (special_access)
+        // Atomic translations have translation == nullptr
+        // so the if body is reachable only in timing
+        if (translation != nullptr) {
+            // If there has been a fault already, do not
+            // mark the translation as delayed as that
+            // will block its deletion
+            if (fault != NoFault) {
+                delayed = false;
+            } else {
+                delayed = true;
+            }
+
+            if (memaccess.bypassTLB())
                 delete e;
-            delayed = true;
+            return fault;
+        }
+        else if (fault != NoFault) {
+            if (memaccess.bypassTLB())
+                delete e;
             return fault;
         }
     }
 
     if (fault != NoFault) {
-        if (special_access)
+        if (memaccess.bypassTLB())
             delete e;
         return fault;
     }
@@ -435,7 +453,7 @@ TLB::doTranslate(const RequestPtr &req, ThreadContext *tc,
             vaddr, vpn, satp.asid, paddr);
     req->setPaddr(paddr);
 
-    if (special_access)
+    if (memaccess.bypassTLB())
         delete e;
 
     return NoFault;
@@ -449,13 +467,17 @@ TLB::getMemAccessInfo(ThreadContext *tc, BaseMMU::Mode mode,
     STATUS status = tc->readMiscReg(MISCREG_STATUS);
     HSTATUS hstatus = tc->readMiscReg(MISCREG_HSTATUS);
     PrivilegeMode priv = (PrivilegeMode)tc->readMiscReg(MISCREG_PRV);
+    ISA* isa = dynamic_cast<ISA*>(tc->getIsaPtr());
+    assert(isa);
 
+    bool nmie = !isa->enableSmrnmi() || tc->readMiscRegNoEffect(MISCREG_NMIE);
+    bool in_mprv = nmie && (status.mprv == 1);
     bool virt = misa.rvh ? virtualizationEnabled(tc) : false;
     bool force_virt = false;
     bool hlvx = false;
     bool lr = false;
 
-    if (mode != BaseMMU::Execute && status.mprv == 1) {
+    if (mode != BaseMMU::Execute && in_mprv) {
         priv = (PrivilegeMode)(RegVal)status.mpp;
         if (misa.rvh && status.mpv && priv != PRV_M) {
             virt = true;

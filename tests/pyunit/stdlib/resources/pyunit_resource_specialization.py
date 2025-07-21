@@ -60,10 +60,6 @@ mock_config_json = {
     "gem5.resources.client._create_clients",
     side_effect=lambda x: _create_clients(mock_config_json),
 )
-@unittest.skip(
-    "These fail due to changes in client API in gem5 stdlib. "
-    "Unknown reason. To be fixed at a later date."
-)
 class ResourceSpecializationSuite(unittest.TestCase):
     """This suite tests that `gem5.resource.resource` casts to the correct
     `AbstractResource` specialization when using the `obtain_resource`
@@ -180,6 +176,7 @@ class ResourceSpecializationSuite(unittest.TestCase):
         """Tests the loading of a Simpoint directory resource."""
         resource = obtain_resource(
             resource_id="simpoint-directory-example",
+            resource_version="1.0.0",
             resource_directory=self.get_resource_dir(),
             gem5_version="develop",
         )
@@ -196,7 +193,7 @@ class ResourceSpecializationSuite(unittest.TestCase):
         self.assertEqual(
             Path(
                 Path(self.get_resource_dir())
-                / "simpoint-directory-example"
+                / "simpoint-directory-example-1.0.0"
                 / "simpoint.simpt"
             ),
             resource.get_simpoint_file(),
@@ -204,7 +201,7 @@ class ResourceSpecializationSuite(unittest.TestCase):
         self.assertEqual(
             Path(
                 Path(self.get_resource_dir())
-                / "simpoint-directory-example"
+                / "simpoint-directory-example-1.0.0"
                 / "simpoint.weight"
             ),
             resource.get_weight_file(),

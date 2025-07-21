@@ -93,7 +93,9 @@ Walker::start(ThreadContext * _tc, BaseMMU::Translation *_translation,
         if (result_entry)
             *result_entry = newState->entry;
 
-        if (!newState->isTiming())
+        // In functional mode, always pop the state
+        // In timing we must pop the state in the case of an early fault!
+        if (fault != NoFault || !newState->isTiming())
         {
             currStates.pop_front();
             delete newState;
@@ -291,10 +293,17 @@ Walker::startWalkWrapper()
         }
     }
     if (currState && !currState->wasStarted()) {
-        if (!e || fault != NoFault)
-            currState->walk();
-        else
+        if (!e || fault != NoFault) {
+            Fault timingFault = currState->walk();
+            if (timingFault != NoFault) {
+                currStates.pop_front();
+                delete currState;
+                currState = NULL;
+            }
+        }
+        else {
             schedule(startWalkWrapperEvent, clockEdge(Cycles(1)));
+        }
     }
 }
 
@@ -418,12 +427,6 @@ Walker::WalkerState::walkOneStage(Addr vaddr)
 
     curstage = XlateStage::FIRST_STAGE;
 
-    // TLB insert for one stage walks is done in stepwalk
-    // special access is used there!
-    // bool special_access = memaccess.force_virt ||
-    //                             memaccess.hlvx ||
-    //                             memaccess.lr;
-
     // Make sure MSBS are the same
     // riscv-privileged-20211203 page 84
     auto mask_for_msbs = mask(64 - SV39_VADDR_BITS);
@@ -488,9 +491,6 @@ Fault
 Walker::WalkerState::walkTwoStage(Addr vaddr)
 {
     curstage = XlateStage::FIRST_STAGE;
-    bool special_access = memaccess.force_virt ||
-                                memaccess.hlvx ||
-                                memaccess.lr;
 
     // Make sure MSBS are the same
     // riscv-privileged-20211203 page 84
@@ -587,7 +587,7 @@ Walker::WalkerState::walkTwoStage(Addr vaddr)
         return fault;
     }
 
-    if (!functional && !special_access) {
+    if (!functional && !memaccess.bypassTLB()) {
         Addr vpn = getVPNFromVAddr(entry.vaddr, satp.mode);
         walker->tlb->insert(vpn, entry);
     }
@@ -710,11 +710,6 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
     // walk flags are initialized to false
     WalkFlags stepWalkFlags;
 
-    bool special_access = false
-        || memaccess.force_virt
-        || memaccess.hlvx
-        || memaccess.lr;
-
     DPRINTF(PageTableWalker, "Got level%d PTE: %#x\n", level, pte);
 
     // step 2:
@@ -789,7 +784,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
                     // An additional GStage is done in walkTwoStage()
                     // and then we insert.
                     // Also don't insert on special_access
-                    if (walkType != TwoStage && !special_access)
+                    if (walkType != TwoStage && !memaccess.bypassTLB())
                         stepWalkFlags.doTLBInsert = true;
                 }
 
@@ -843,7 +838,7 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         }
 
         if (stepWalkFlags.doTLBInsert) {
-            if (!functional && !special_access) {
+            if (!functional && !memaccess.bypassTLB()) {
                 Addr vpn = getVPNFromVAddr(entry.vaddr, satp.mode);
                 walker->tlb->insert(vpn, entry);
             }
@@ -877,11 +872,6 @@ Walker::WalkerState::stepWalkGStage(PacketPtr &write)
 
     // walk flags are initialized to false
     WalkFlags stepWalkFlags;
-
-    bool special_access = false
-        || memaccess.force_virt
-        || memaccess.hlvx
-        || memaccess.lr;
 
     DPRINTF(PageTableWalker, "[GSTAGE]: Got level%d PTE: %#x\n", glevel, pte);
 
@@ -947,7 +937,7 @@ Walker::WalkerState::stepWalkGStage(PacketPtr &write)
                         entry.pte.w = 0;
 
                     // Also don't do TLB inserts on special_access
-                    if (!special_access)
+                    if (!memaccess.bypassTLB())
                         stepWalkFlags.doTLBInsert = true;
                 }
                 else {
@@ -1012,7 +1002,7 @@ Walker::WalkerState::stepWalkGStage(PacketPtr &write)
         }
 
         if (stepWalkFlags.doTLBInsert) {
-            if (!functional && !special_access) {
+            if (!functional && !memaccess.bypassTLB()) {
                 // This TLB insertion should only be reachable
                 // for GstageOnly walks. Two stage walks insert
                 // in walkTwoStage.
