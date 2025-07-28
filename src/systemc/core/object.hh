@@ -108,8 +108,7 @@ std::string pickUniqueName(::sc_core::sc_object *parent, std::string name);
 extern Objects topLevelObjects;
 extern Objects allObjects;
 
-sc_core::sc_object *findObject(
-        const char *name, const Objects &objects=topLevelObjects);
+sc_core::sc_object *findObject(const char *name);
 
 sc_core::sc_object *pickParentObj();
 void pushParentObj(sc_core::sc_object *obj);

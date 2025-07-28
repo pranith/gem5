@@ -81,7 +81,12 @@ nameIsUnique(Objects *objects, Events *events, const std::string &name)
     return true;
 }
 
+std::stack<sc_core::sc_object *> objParentStack;
+
 } // anonymous namespace
+
+Objects topLevelObjects;
+Objects allObjects;
 
 Object::Object(sc_core::sc_object *_sc_obj) : Object(_sc_obj, nullptr) {}
 
@@ -282,10 +287,6 @@ pickUniqueName(::sc_core::sc_object *parent, std::string base)
     return base;
 }
 
-
-Objects topLevelObjects;
-Objects allObjects;
-
 const std::vector<sc_core::sc_object *> &
 getTopLevelScObjects()
 {
@@ -293,18 +294,11 @@ getTopLevelScObjects()
 }
 
 sc_core::sc_object *
-findObject(const char *name, const Objects &objects)
+findObject(const char *name)
 {
     ObjectsIt it = findObjectIn(allObjects, name);
     return it == allObjects.end() ? nullptr : *it;
 }
-
-namespace
-{
-
-std::stack<sc_core::sc_object *> objParentStack;
-
-} // anonymous namespace
 
 sc_core::sc_object *
 pickParentObj()
