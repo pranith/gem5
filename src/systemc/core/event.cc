@@ -29,6 +29,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
+#include <shared_mutex>
 #include <utility>
 
 #include "systemc/core/module.hh"
@@ -69,6 +71,8 @@ popEvent(Events* events, const std::string &name)
     events->pop_back();
 }
 
+std::shared_mutex globalEventLock;
+
 } // anonymous namespace
 
 Events topLevelEvents;
@@ -84,6 +88,8 @@ Event::Event(sc_core::sc_event *_sc_event, const char *_basename_cstr,
     _inHierarchy(!internal), delayedNotify([this]() { this->notify(); }),
     _triggeredStamp(~0ULL)
 {
+    [[maybe_unused]] std::unique_lock lock(globalEventLock);
+
     if (_basename == "" && ::sc_core::sc_is_running())
         _basename = ::sc_core::sc_gen_unique_name("event");
 
@@ -124,6 +130,8 @@ Event::Event(sc_core::sc_event *_sc_event, const char *_basename_cstr,
 
 Event::~Event()
 {
+    [[maybe_unused]] std::unique_lock lock(globalEventLock);
+
     if (parent) {
         Object *obj = Object::getFromScObject(parent);
         obj->delChildEvent(_sc_event);
@@ -235,6 +243,8 @@ Event::triggered() const
 void
 Event::clearParent()
 {
+    [[maybe_unused]] std::unique_lock lock(globalEventLock);
+
     if (!parent)
         return;
     Object::getFromScObject(parent)->delChildEvent(_sc_event);
@@ -245,6 +255,8 @@ Event::clearParent()
 sc_core::sc_event *
 findEvent(const char *name)
 {
+    [[maybe_unused]] std::shared_lock lock(globalEventLock);
+
     EventsIt it = findEventIn(allEvents, name);
     return it == allEvents.end() ? nullptr : *it;
 }
