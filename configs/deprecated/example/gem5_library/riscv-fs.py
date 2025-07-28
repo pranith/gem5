@@ -51,7 +51,6 @@ from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
-
 # Run a check to ensure the right version of gem5 is being used.
 requires(isa_required=ISA.RISCV)
 
