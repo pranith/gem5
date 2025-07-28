@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2025 The Regents of the University of California
+# Copyright (c) 2022 The Regents of the University of California
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,33 +26,34 @@
 
 """
 This configuration script shows an example of how to restore a checkpoint that
-was taken for SimPoints in the script
+was taken for SimPoints in the
 configs/example/gem5_library/checkpoints/simpoints-se-checkpoint.py.
-The SimPoints, SimPoints' interval length, and the warmup instruction length
+The SimPoints, SimPoints interval length, and the warmup instruction length
 are passed into the SimPoint module, so the SimPoint object will store and
-calculate the warmup instruction length for each SimPoint based on the
+calculate the warmup instruction length for each SimPoints based on the
 available instructions before reaching the start of the SimPoint. With the
-Simulator module, an exit event will be generated to stop when the warmup
-session ends and the SimPoints interval ends.
+Simulator module, exit event will be generated to stop when the warmup session
+ends and the SimPoints interval ends.
 
 This script builds a more complex board than the board used for taking
-checkpoints.
+checkpoint.
 
 Usage
 -----
 
 ```
-scons build/ALL/gem5.opt
-./build/ALL/gem5.opt \
+scons build/X86/gem5.opt
+./build/X86/gem5.opt \
     configs/example/gem5_library/checkpoints/simpoints-se-checkpoint.py
 
-./build/ALL/gem5.opt \
+./build/X86/gem5.opt \
     configs/example/gem5_library/checkpoints/simpoints-se-restore.py
 ```
 
 """
 
-import m5
+from pathlib import Path
+
 from m5.stats import (
     dump,
     reset,
@@ -66,10 +67,13 @@ from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
-from gem5.resources.resource import obtain_resource
-from gem5.simulate.exit_handler import ScheduledExitEventHandler
+from gem5.resources.resource import (
+    SimpointResource,
+    obtain_resource,
+)
+from gem5.resources.workload import Workload
+from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
-from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 requires(isa_required=ISA.X86)
@@ -102,63 +106,58 @@ board = SimpleBoard(
 # Here we obtain the workload from gem5 resources, the checkpoint in this
 # workload was generated from
 # `configs/example/gem5_library/checkpoints/simpoints-se-checkpoint.py`.
-
-board.set_workload(
-    obtain_resource(
-        "x86-print-this-15000-with-simpoints-and-checkpoint",
-        resource_version="2.0.0",
-    )
-)
-
-# Below we set the simpoint manually.
+# board.set_workload(
+#    Workload("x86-print-this-15000-with-simpoints-and-checkpoint")
+#
+# **Note: This has been removed until we update the resources.json file to
+# encapsulate the new Simpoint format.
+# Below we set the simpount manually.
 #
 # This loads a single checkpoint as an example of using simpoints to simulate
 # the function of a single simpoint region.
 
-# board.set_se_simpoint_workload(
-#     binary=obtain_resource("x86-print-this"),
-#     arguments=["print this", 15000],
-#     simpoint=SimpointResource(
-#         simpoint_interval=1000000,
-#         simpoint_list=[2, 3, 4, 15],
-#         weight_list=[0.1, 0.2, 0.4, 0.3],
-#         warmup_interval=1000000,
-#     ),
-#     checkpoint=obtain_resource(
-#         "simpoints-se-checkpoints", resource_version="3.0.0"
-#     ),
-# )
+board.set_se_simpoint_workload(
+    binary=obtain_resource("x86-print-this"),
+    arguments=["print this", 15000],
+    simpoint=SimpointResource(
+        simpoint_interval=1000000,
+        simpoint_list=[2, 3, 4, 15],
+        weight_list=[0.1, 0.2, 0.4, 0.3],
+        warmup_interval=1000000,
+    ),
+    checkpoint=obtain_resource(
+        "simpoints-se-checkpoints", resource_version="3.0.0"
+    ),
+)
 
 
-class SimpointScheduledExitHandler(ScheduledExitEventHandler):
+def max_inst():
     warmed_up = False
-
-    @overrides(ScheduledExitEventHandler)
-    def _process(self, simulator: "Simulator") -> None:
-        if self.__class__.warmed_up:
+    while True:
+        if warmed_up:
             print("end of SimPoint interval")
+            yield True
         else:
             print("end of warmup, starting to simulate SimPoint")
-            self.__class__.warmed_up = True
-            # use m5.scheduleTickExitAbsolute to trigger another hypercall exit
-            # later
-            m5.scheduleTickExitAbsolute(
+            warmed_up = True
+            # Schedule a MAX_INSTS exit event during the simulation
+            simulator.schedule_max_insts(
                 board.get_simpoint().get_simpoint_interval()
             )
             dump()
             reset()
-
-    @overrides(ScheduledExitEventHandler)
-    def _exit_simulation(self) -> bool:
-        if self.__class__.warmed_up:
-            return True
-        else:
-            return False
+            yield False
 
 
-simulator = Simulator(board=board)
+simulator = Simulator(
+    board=board,
+    on_exit_event={ExitEvent.MAX_INSTS: max_inst()},
+)
 
-# Here, m5.scheduleTickExitAbsolute schedules an exit event for the first
-# SimPoint's warmup instructions
-m5.scheduleTickExitAbsolute(board.get_simpoint().get_warmup_list()[0])
+# Schedule a MAX_INSTS exit event before the simulation begins the
+# schedule_max_insts function only schedule event when the instruction length
+# is greater than 0.
+# In here, it schedules an exit event for the first SimPoint's warmup
+# instructions
+simulator.schedule_max_insts(board.get_simpoint().get_warmup_list()[0])
 simulator.run()
