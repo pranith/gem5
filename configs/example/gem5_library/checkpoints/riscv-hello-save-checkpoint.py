@@ -107,13 +107,6 @@ class SimpointScheduledExitHandler(ScheduledExitEventHandler):
 
     @overrides(ScheduledExitEventHandler)
     def _process(self, simulator: "Simulator") -> None:
-        # Should this print be kept or removed?
-        print(
-            "Exiting @ tick {} because {}.".format(
-                simulator.get_current_tick(),
-                simulator.get_last_exit_event_cause(),
-            )
-        )
         print("Taking a checkpoint at", simulator._checkpoint_path)
         simulator.save_checkpoint(simulator._checkpoint_path)
         print("Done taking a checkpoint")
@@ -124,8 +117,9 @@ class SimpointScheduledExitHandler(ScheduledExitEventHandler):
 
 
 # Lastly we run the simulation.
-max_ticks = 10**6
-m5.scheduleTickExitAbsolute(max_ticks)
-
 simulator = Simulator(board=board, checkpoint_path=args.checkpoint_path)
+simulator.set_hypercall_absolute_max_ticks(
+    1_000_000, "Max ticks reached, taking checkpoint!"
+)
+
 simulator.run()
