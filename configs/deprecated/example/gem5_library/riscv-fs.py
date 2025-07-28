@@ -1,4 +1,4 @@
-# Copyright (c) 2021-2025 The Regents of the University of California
+# Copyright (c) 2021 The Regents of the University of California
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -51,9 +51,6 @@ from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
-# Will we continue to support the `riscv-disk-img` resource? If not, should this
-# config script be deprecated, given that it would be very similar to
-# `riscv-ubuntu-run.py` if we updated the workload to a more recent one?
 
 # Run a check to ensure the right version of gem5 is being used.
 requires(isa_required=ISA.RISCV)

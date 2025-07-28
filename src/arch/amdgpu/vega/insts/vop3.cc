@@ -5211,6 +5211,55 @@ namespace VegaISA
 
         vdst.write();
     } // execute
+    // --- Inst_VOP3__V_CVT_F32_BF16 class methods ---
+
+    Inst_VOP3__V_CVT_F32_BF16::Inst_VOP3__V_CVT_F32_BF16(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_f32_bf16", false)
+    {
+        setFlag(ALU);
+        setFlag(F32);
+    } // Inst_VOP3__V_CVT_F32_BF16
+
+    Inst_VOP3__V_CVT_F32_BF16::~Inst_VOP3__V_CVT_F32_BF16()
+    {
+    } // ~Inst_VOP3__V_CVT_F32_BF16
+
+    void
+    Inst_VOP3__V_CVT_F32_BF16::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandU32 src(gpuDynInst, extData.SRC0);
+        VecOperandF32 vdst(gpuDynInst, instData.VDST);
+
+        src.readSrc();
+
+        bool clamp = instData.CLAMP;
+        unsigned abs = instData.ABS;
+        unsigned opsel = instData.OPSEL;
+        unsigned omod = extData.OMOD;
+        unsigned neg = extData.NEG;
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                uint16_t s0 = (opsel & 1) ? bits(src[lane], 31, 16)
+                                          : bits(src[lane], 15, 0);
+
+                AMDGPU::mxbfloat16 tmp;
+                tmp.data = s0;
+
+                float f32 = float(tmp);
+
+                if (abs & 1) f32 = std::fabs(f32);
+                if (neg & 1) f32 = -f32;
+                if (omod) f32 = omodModifier(f32, omod);
+                if (clamp) f32 = std::clamp(f32, 0.0f, 1.0f);
+
+                vdst[lane] = f32;
+            }
+        }
+
+        vdst.write();
+    } // execute
     // --- Inst_VOP3__V_MAD_LEGACY_F32 class methods ---
 
     Inst_VOP3__V_MAD_LEGACY_F32::Inst_VOP3__V_MAD_LEGACY_F32(InFmt_VOP3A *iFmt)
@@ -8111,6 +8160,124 @@ namespace VegaISA
         vdst.write();
 
     } // execute
+    // --- Inst_VOP3__V_CVT_PK_F16_F32 class methods ---
+
+    Inst_VOP3__V_CVT_PK_F16_F32::
+        Inst_VOP3__V_CVT_PK_F16_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_pk_f16_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_PK_F16_F32
+
+    Inst_VOP3__V_CVT_PK_F16_F32::~Inst_VOP3__V_CVT_PK_F16_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_PK_F16_F32
+
+    void
+    Inst_VOP3__V_CVT_PK_F16_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandF32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+
+        bool clamp = instData.CLAMP;
+        unsigned abs = instData.ABS;
+        unsigned opsel = instData.OPSEL;
+        unsigned omod = extData.OMOD;
+        unsigned neg = extData.NEG;
+
+        // Unclear how opsel would work here.
+        panic_if(opsel, "OPSEL not implemented for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxfloat16 tmp0(src0[lane]), tmp1(src1[lane]);
+
+                if (abs & 1) tmp0.fabs();
+                if (abs & 2) tmp1.fabs();
+                if (neg & 1) tmp0.neg();
+                if (neg & 2) tmp1.neg();
+                tmp0.omodModifier(omod);
+                tmp1.omodModifier(omod);
+                tmp0.clamp(clamp);
+                tmp1.clamp(clamp);
+
+                uint32_t lower_word = tmp0.data;
+                uint32_t upper_word = tmp1.data;
+
+                vdst[lane] = (upper_word << 16) | lower_word;
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_PK_BF16_F32 class methods ---
+
+    Inst_VOP3__V_CVT_PK_BF16_F32::
+        Inst_VOP3__V_CVT_PK_BF16_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_pk_bf16_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_PK_BF16_F32
+
+    Inst_VOP3__V_CVT_PK_BF16_F32::~Inst_VOP3__V_CVT_PK_BF16_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_PK_BF16_F32
+
+    void
+    Inst_VOP3__V_CVT_PK_BF16_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandF32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+
+        bool clamp = instData.CLAMP;
+        unsigned abs = instData.ABS;
+        unsigned opsel = instData.OPSEL;
+        unsigned omod = extData.OMOD;
+        unsigned neg = extData.NEG;
+
+        // Unclear how opsel would work here.
+        panic_if(opsel, "OPSEL not implemented for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxbfloat16 tmp0(src0[lane]), tmp1(src1[lane]);
+
+                if (abs & 1) tmp0.fabs();
+                if (abs & 2) tmp1.fabs();
+                if (neg & 1) tmp0.neg();
+                if (neg & 2) tmp1.neg();
+                tmp0.omodModifier(omod);
+                tmp1.omodModifier(omod);
+                tmp0.clamp(clamp);
+                tmp1.clamp(clamp);
+
+                uint32_t lower_word = tmp0.data;
+                uint32_t upper_word = tmp1.data;
+
+                vdst[lane] = (upper_word << 16) | lower_word;
+            }
+        }
+
+        vdst.write();
+    } // execute
     // --- Inst_VOP3__V_INTERP_P1_F32 class methods ---
 
     Inst_VOP3__V_INTERP_P1_F32::Inst_VOP3__V_INTERP_P1_F32(InFmt_VOP3A *iFmt)
@@ -9375,10 +9542,10 @@ namespace VegaISA
             if (wf->execMask(lane)) {
                 AMDGPU::mxfloat8 tmp0(src0[lane]), tmp1(src1[lane]);
 
-                if ((abs & 1) && (tmp0 < 0)) tmp0 = -tmp0;
-                if ((abs & 2) && (tmp1 < 0)) tmp1 = -tmp1;
-                if (neg & 1) tmp0 = -tmp0;
-                if (neg & 2) tmp1 = -tmp1;
+                if (abs & 1) tmp0.fabs();
+                if (abs & 2) tmp1.fabs();
+                if (neg & 1) tmp0.neg();
+                if (neg & 2) tmp1.neg();
 
                 uint16_t packed_data = (bits(tmp1.data, 31, 24) << 8)
                                      | bits(tmp0.data, 31, 24);
@@ -9387,6 +9554,313 @@ namespace VegaISA
                     replaceBits(vdst[lane], 31, 16, packed_data);
                 } else {
                     replaceBits(vdst[lane], 15, 0, packed_data);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_PK_BF8_F32 class methods ---
+
+    Inst_VOP3__V_CVT_PK_BF8_F32::Inst_VOP3__V_CVT_PK_BF8_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_pk_bf8_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_PK_BF8_F32
+
+    Inst_VOP3__V_CVT_PK_BF8_F32::~Inst_VOP3__V_CVT_PK_BF8_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_PK_BF8_F32
+
+    void
+    Inst_VOP3__V_CVT_PK_BF8_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandF32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read(); // Preserve bits
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "CLAMP not supported for %s", _opcode);
+        panic_if(extData.OMOD, "OMOD not supported for %s", _opcode);
+
+        unsigned opsel = instData.OPSEL;
+        unsigned abs = instData.ABS;
+        unsigned neg = extData.NEG;
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxbfloat8 tmp0(src0[lane]), tmp1(src1[lane]);
+
+                if (abs & 1) tmp0.fabs();
+                if (abs & 2) tmp1.fabs();
+                if (neg & 1) tmp0.neg();
+                if (neg & 2) tmp1.neg();
+
+                uint16_t packed_data = (bits(tmp1.data, 31, 24) << 8)
+                                     | bits(tmp0.data, 31, 24);
+
+                if (opsel & 8) {
+                    replaceBits(vdst[lane], 31, 16, packed_data);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, packed_data);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_SR_FP8_F32 class methods ---
+
+    Inst_VOP3__V_CVT_SR_FP8_F32::
+        Inst_VOP3__V_CVT_SR_FP8_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_sr_fp8_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_SR_FP8_F32
+
+    Inst_VOP3__V_CVT_SR_FP8_F32::~Inst_VOP3__V_CVT_SR_FP8_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_SR_FP8_F32
+
+    void
+    Inst_VOP3__V_CVT_SR_FP8_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "CLAMP not supported for %s", _opcode);
+        panic_if(extData.OMOD, "OMOD not supported for %s", _opcode);
+
+        unsigned abs = instData.ABS;
+        unsigned neg = extData.NEG;
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x3, "Source OPSEL not supported for %s", _opcode);
+        opsel = bits(opsel, 3, 2);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxfloat32 in(src0[lane]);
+                AMDGPU::mxfloat8 cvt;
+
+                if (abs & 1) in = std::fabs(src0[lane]);
+                if (neg & 1) in = -in;
+
+                using sInfo = decltype(in.getFmt());
+                using dInfo = decltype(cvt.getFmt());
+                dInfo cvt_info = AMDGPU::convertMXFP<dInfo, sInfo>(
+                    in.getFmt(), AMDGPU::roundStochastic, src1[lane]
+                );
+                cvt.setFmt(cvt_info);
+
+                if (opsel == 0) {
+                    replaceBits(vdst[lane],  7,  0, cvt);
+                } else if (opsel == 1) {
+                    replaceBits(vdst[lane], 15,  8, cvt);
+                } else if (opsel == 2) {
+                    replaceBits(vdst[lane], 23, 16, cvt);
+                } else {
+                    replaceBits(vdst[lane], 31, 24, cvt);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_SR_BF8_F32 class methods ---
+
+    Inst_VOP3__V_CVT_SR_BF8_F32::
+        Inst_VOP3__V_CVT_SR_BF8_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_sr_fp8_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_SR_BF8_F32
+
+    Inst_VOP3__V_CVT_SR_BF8_F32::~Inst_VOP3__V_CVT_SR_BF8_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_SR_BF8_F32
+
+    void
+    Inst_VOP3__V_CVT_SR_BF8_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "CLAMP not supported for %s", _opcode);
+        panic_if(extData.OMOD, "OMOD not supported for %s", _opcode);
+
+        unsigned abs = instData.ABS;
+        unsigned neg = extData.NEG;
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x3, "Source OPSEL not supported for %s", _opcode);
+        opsel = bits(opsel, 3, 2);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxfloat32 in(src0[lane]);
+                AMDGPU::mxbfloat8 cvt;
+
+                if (abs & 1) in = std::fabs(src0[lane]);
+                if (neg & 1) in = -in;
+
+                using sInfo = decltype(in.getFmt());
+                using dInfo = decltype(cvt.getFmt());
+                dInfo cvt_info = AMDGPU::convertMXFP<dInfo, sInfo>(
+                    in.getFmt(), AMDGPU::roundStochastic, src1[lane]
+                );
+                cvt.setFmt(cvt_info);
+
+                if (opsel == 0) {
+                    replaceBits(vdst[lane],  7,  0, cvt);
+                } else if (opsel == 1) {
+                    replaceBits(vdst[lane], 15,  8, cvt);
+                } else if (opsel == 2) {
+                    replaceBits(vdst[lane], 23, 16, cvt);
+                } else {
+                    replaceBits(vdst[lane], 31, 24, cvt);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_SR_F16_F32 class methods ---
+
+    Inst_VOP3__V_CVT_SR_F16_F32::
+        Inst_VOP3__V_CVT_SR_F16_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_sr_f16_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_SR_F16_F32
+
+    Inst_VOP3__V_CVT_SR_F16_F32::~Inst_VOP3__V_CVT_SR_F16_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_SR_F16_F32
+
+    void
+    Inst_VOP3__V_CVT_SR_F16_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read();
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "CLAMP not supported for %s", _opcode);
+        panic_if(extData.OMOD, "OMOD not supported for %s", _opcode);
+
+        unsigned abs = instData.ABS;
+        unsigned neg = extData.NEG;
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x7, "Source OPSEL not supported for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxfloat32 in = src0[lane];
+                AMDGPU::mxfloat16 cvt;
+
+                if (abs & 1) in = std::fabs(src0[lane]);
+                if (neg & 1) in = -in;
+
+                using sInfo = decltype(in.getFmt());
+                using dInfo = decltype(cvt.getFmt());
+                dInfo cvt_info = AMDGPU::convertMXFP<dInfo, sInfo>(
+                    in.getFmt(), AMDGPU::roundStochastic, src1[lane]
+                );
+                cvt.setFmt(cvt_info);
+
+                if (opsel & 8) {
+                    replaceBits(vdst[lane], 31, 16, cvt.data >> 16);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, cvt.data >> 16);
+                }
+            }
+        }
+
+        vdst.write();
+    } // execute
+    // --- Inst_VOP3__V_CVT_SR_BF16_F32 class methods ---
+
+    Inst_VOP3__V_CVT_SR_BF16_F32::
+        Inst_VOP3__V_CVT_SR_BF16_F32(InFmt_VOP3A *iFmt)
+        : Inst_VOP3A(iFmt, "v_cvt_sr_bf16_f32", false)
+    {
+        setFlag(ALU);
+    } // Inst_VOP3__V_CVT_SR_BF16_F32
+
+    Inst_VOP3__V_CVT_SR_BF16_F32::~Inst_VOP3__V_CVT_SR_BF16_F32()
+    {
+    } // ~Inst_VOP3__V_CVT_SR_BF16_F32
+
+    // --- description from .arch file ---
+    // D = {int32_to_int16(S1.i), int32_to_int16(S0.i)}.
+    void
+    Inst_VOP3__V_CVT_SR_BF16_F32::execute(GPUDynInstPtr gpuDynInst)
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        ConstVecOperandF32 src0(gpuDynInst, extData.SRC0);
+        ConstVecOperandU32 src1(gpuDynInst, extData.SRC1);
+        VecOperandU32 vdst(gpuDynInst, instData.VDST);
+
+        src0.readSrc();
+        src1.readSrc();
+        vdst.read(); // Preserve bits
+
+        panic_if(isSDWAInst(), "SDWA not supported for %s", _opcode);
+        panic_if(isDPPInst(), "DPP not supported for %s", _opcode);
+        panic_if(instData.CLAMP, "CLAMP not supported for %s", _opcode);
+        panic_if(extData.OMOD, "OMOD not supported for %s", _opcode);
+
+        unsigned abs = instData.ABS;
+        unsigned neg = extData.NEG;
+        int opsel = instData.OPSEL;
+        panic_if(opsel & 0x7, "Source OPSEL not supported for %s", _opcode);
+
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                AMDGPU::mxfloat32 in = src0[lane];
+                AMDGPU::mxbfloat16 cvt;
+
+                if (abs & 1) in = std::fabs(src0[lane]);
+                if (neg & 1) in = -in;
+
+                using sInfo = decltype(in.getFmt());
+                using dInfo = decltype(cvt.getFmt());
+                dInfo cvt_info = AMDGPU::convertMXFP<dInfo, sInfo>(
+                    in.getFmt(), AMDGPU::roundStochastic, src1[lane]
+                );
+                cvt.setFmt(cvt_info);
+
+                if (opsel & 8) {
+                    replaceBits(vdst[lane], 31, 16, cvt.data >> 16);
+                } else {
+                    replaceBits(vdst[lane], 15, 0, cvt.data >> 16);
                 }
             }
         }
