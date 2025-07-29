@@ -33,13 +33,6 @@
 namespace sc_core
 {
 
-namespace
-{
-
-std::vector<sc_object *> top_level_objects;
-
-} // anonymous namespace
-
 const char *
 sc_object::name() const
 {
