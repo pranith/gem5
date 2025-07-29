@@ -123,19 +123,18 @@ sc_object::simcontext() const
     return _gem5_object->simcontext();
 }
 
-sc_object::sc_object()
+sc_object::sc_object() : _gem5_object(new sc_gem5::Object(this))
 {
-    _gem5_object = new sc_gem5::Object(this);
 }
 
 sc_object::sc_object(const char *name)
+  : _gem5_object(new sc_gem5::Object(this, name))
 {
-    _gem5_object = new sc_gem5::Object(this, name);
 }
 
 sc_object::sc_object(const sc_object &other)
+  : _gem5_object(new sc_gem5::Object(this, *other._gem5_object))
 {
-    _gem5_object = new sc_gem5::Object(this, *other._gem5_object);
 }
 
 sc_object &
