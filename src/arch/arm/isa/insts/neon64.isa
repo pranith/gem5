@@ -3013,11 +3013,11 @@ let {{
             }
             FpscrQc = fpscr;
     '''
-    twoEqualRegInstX("sqshl", "SqshlImmDX", "SimdAluOp", smallSignedTypes, 2,
+    twoEqualRegInstX("sqshl", "SqshlImmDX", "SimdShiftOp", smallSignedTypes, 2,
                      sqshlImmCode, hasImm=True)
-    twoEqualRegInstX("sqshl", "SqshlImmQX", "SimdAluOp", signedTypes, 4,
+    twoEqualRegInstX("sqshl", "SqshlImmQX", "SimdShiftOp", signedTypes, 4,
                      sqshlImmCode, hasImm=True)
-    twoEqualRegInstX("sqshl", "SqshlImmScX", "SimdAluOp", signedTypes, 4,
+    twoEqualRegInstX("sqshl", "SqshlImmScX", "SimdShiftOp", signedTypes, 4,
                      sqshlImmCode, hasImm=True, scalar=True)
     # SQSHL (register)
     sqshlCode = '''
