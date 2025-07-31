@@ -2340,9 +2340,9 @@ let {{
                       abdlCode, True, hi=True)
     # SADALP
     adalpCode = "destElem += (BigElement)srcElem1 + (BigElement)srcElem2;"
-    twoRegCondenseInstX("sadalp", "SadalpDX", "SimdAddOp", smallSignedTypes, 2,
+    twoRegCondenseInstX("sadalp", "SadalpDX", "SimdAddAccOp", smallSignedTypes, 2,
                         adalpCode, True)
-    twoRegCondenseInstX("sadalp", "SadalpQX", "SimdAddOp", smallSignedTypes, 4,
+    twoRegCondenseInstX("sadalp", "SadalpQX", "SimdAddAccOp", smallSignedTypes, 4,
                         adalpCode, True)
     # SADDL, SADDL2
     addlwCode = "destElem = (BigElement)srcElem1 + (BigElement)srcElem2;"
@@ -3514,9 +3514,9 @@ let {{
     threeRegLongInstX("uabdl2", "Uabdl2X", "SimdAddAccOp", smallUnsignedTypes,
                       abdlCode, True, hi=True)
     # UADALP
-    twoRegCondenseInstX("uadalp", "UadalpDX", "SimdAddOp", smallUnsignedTypes,
+    twoRegCondenseInstX("uadalp", "UadalpDX", "SimdAddAccOp", smallUnsignedTypes,
                         2, adalpCode, True)
-    twoRegCondenseInstX("uadalp", "UadalpQX", "SimdAddOp", smallUnsignedTypes,
+    twoRegCondenseInstX("uadalp", "UadalpQX", "SimdAddAccOp", smallUnsignedTypes,
                         4, adalpCode, True)
     # UADDL, UADDL2
     threeRegLongInstX("uaddl", "UaddlX", "SimdAddAccOp", smallUnsignedTypes,
