@@ -6485,14 +6485,14 @@ let {{
             __uint128_t res = poly_mul(srcElem1, srcElem2);
             destElem = res;
     '''
-    sveBinLongInst('pmullb', 'Pmullb', 'SimdAluOp', ('uint8_t','uint32_t'),
+    sveBinLongInst('pmullb', 'Pmullb', 'SimdMultOp', ('uint8_t','uint32_t'),
                    pmullCode)
-    sveBinLongInst('pmullb', 'Pmullb128', 'SimdAluOp', ('uint64_t',),
+    sveBinLongInst('pmullb', 'Pmullb128', 'SimdMultOp', ('uint64_t',),
                    pmullCode)
     # PMULLT
-    sveBinLongInst('pmullt', 'Pmullt', 'SimdAluOp', ('uint8_t','uint32_t'),
+    sveBinLongInst('pmullt', 'Pmullt', 'SimdMultOp', ('uint8_t','uint32_t'),
                     pmullCode, uptTop = True)
-    sveBinLongInst('pmullt', 'Pmullt128', 'SimdAluOp', ('uint64_t',),
+    sveBinLongInst('pmullt', 'Pmullt128', 'SimdMultOp', ('uint64_t',),
                     pmullCode, uptTop = True)
     # PNEXT
     svePNextInst('pnext', 'Pnext', 'SimdPredAluOp', unsignedTypes)
