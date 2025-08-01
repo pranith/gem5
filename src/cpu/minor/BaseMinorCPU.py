@@ -225,6 +225,7 @@ class MinorDefaultFloatSimdFU(MinorFU):
             "SimdFloatExt",
             "SimdFloatCvt",
             "SimdConfig",
+            "SimdDotProd",
             "SimdBf16Add",
             "SimdBf16Cmp",
             "SimdBf16Cvt",

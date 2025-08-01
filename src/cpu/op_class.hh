@@ -145,6 +145,7 @@ static const OpClass SimdBf16MatMultAccOp = enums::SimdBf16MatMultAcc;
 static const OpClass SimdBf16MultOp = enums::SimdBf16Mult;
 static const OpClass SimdBf16MultAccOp = enums::SimdBf16MultAcc;
 static const OpClass Bf16CvtOp = enums::Bf16Cvt;
+static const OpClass SimdDotProdOp = enums::SimdDotProd;
 static const OpClass SystemOp = enums::System;
 static const OpClass Num_OpClasses = enums::Num_OpClass;
 

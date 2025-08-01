@@ -110,6 +110,7 @@ class SIMD_Unit(FUDesc):
         OpDesc(opClass="SimdExt"),
         OpDesc(opClass="SimdFloatExt"),
         OpDesc(opClass="SimdConfig"),
+        OpDesc(opClass="SimdDotProd"),
         OpDesc(opClass="SimdAes"),
         OpDesc(opClass="SimdAesMix"),
         OpDesc(opClass="SimdSha1Hash"),
