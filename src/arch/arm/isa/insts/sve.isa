@@ -5188,7 +5188,7 @@ let {{
                PredType.MERGE, True)
     # BCAX
     bcaxCode = 'destElem ^= srcElem1 & (~srcElem2);'
-    sveBinInst('bcax', 'Bcax', 'SimdShiftOp', ('uint64_t',), bcaxCode,
+    sveBinInst('bcax', 'Bcax', 'SimdSha3Op', ('uint64_t',), bcaxCode,
                 isDestructive=True)
     # BDEP
     bdepCode = '''
@@ -5676,7 +5676,7 @@ let {{
     svePredLogicalInst('eors', 'PredEors', 'SimdPredAluOp', ('uint8_t',),
                        eorCode, isFlagSetting=True)
     # EORTB
-    sveBinInterInst('eortb', 'Eortb', 'SimdAluOp', unsignedTypes, eorCode,
+    sveBinInterInst('eortb', 'Eortb', 'SimdSha3Op', unsignedTypes, eorCode,
                     tb = True)
     # EORV
     sveAssocReducInst('eorv', 'Eorv', 'SimdReduceAluOp', unsignedTypes,
@@ -6528,7 +6528,7 @@ let {{
                      smallUnsignedTypes, raddhnCode, uptTop = True)
     # RAX1
     rax1Code = 'destElem = srcElem1 ^ ((srcElem2 << 1) | (srcElem2 >> 63));'
-    sveBinInst('rax', 'Rax1', 'SimdAluOp', ('uint64_t',), rax1Code)
+    sveBinInst('rax', 'Rax1', 'SimdSha3Op', ('uint64_t',), rax1Code)
     # RBIT
     rbitCode = '''
         destElem = reverseBits(srcElem1);'''
@@ -9008,7 +9008,7 @@ let {{
             destElem = ((destElem >> srcElem2) |
                     (destElem << (sizeof(Element) * 8 - srcElem2)));
     '''
-    sveBinImmInst('xar', 'Xar', 'SimdAluOp', unsignedTypes, xarCode)
+    sveBinImmInst('xar', 'Xar', 'SimdSha3Op', unsignedTypes, xarCode)
     # ZIP1, ZIP2 (predicates)
     zipPredIterCode = '''
         constexpr unsigned sz = sizeof(Element);
