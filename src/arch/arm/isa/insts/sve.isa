@@ -6149,11 +6149,13 @@ let {{
                  PredType.MERGE)
     # FRSQRTE
     frsqrteCode = fpOp % 'fplibRSqrtEstimate<Element>(srcElem1, fpscr, fpcr)'
-    sveUnaryInst('frsqrte', 'Frsqrte', 'SimdFloatSqrtOp', floatTypes,
+    sveUnaryInst('frsqrte', 'Frsqrte', 'SimdCvtOp', floatTypes,
                  frsqrteCode)
     # FRSQRTS
+    # Floating-point reciprocal square root step is really a multiply
+    # and add(sub)
     frsqrtsCode = fpBinOp % 'RSqrtStepFused'
-    sveBinInst('frsqrts', 'Frsqrts', 'SimdFloatAluOp', floatTypes,
+    sveBinInst('frsqrts', 'Frsqrts', 'SimdFloatMultAccOp', floatTypes,
                frsqrtsCode)
     # FSCALE
     fscaleCode = fpBinOp % 'Scale'

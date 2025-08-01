@@ -2093,19 +2093,21 @@ let {{
                      frint64zCode, extra_check=frintts_check)
     # FRSQRTE
     frsqrteCode = fpOp % "fplibRSqrtEstimate<Element>(srcElem1, fpscr, fpcr)"
-    twoEqualRegInstX("frsqrte", "FrsqrteDX", "SimdFloatSqrtOp",
+    twoEqualRegInstX("frsqrte", "FrsqrteDX", "SimdCvtOp",
                      smallFloatTypes, 2, frsqrteCode)
-    twoEqualRegInstX("frsqrte", "FrsqrteQX", "SimdFloatSqrtOp", floatTypes, 4,
+    twoEqualRegInstX("frsqrte", "FrsqrteQX", "SimdCvtOp", floatTypes, 4,
                      frsqrteCode)
-    twoEqualRegInstX("frsqrte", "FrsqrteScX", "SimdFloatSqrtOp", floatTypes, 4,
+    twoEqualRegInstX("frsqrte", "FrsqrteScX", "SimdCvtOp", floatTypes, 4,
                      frsqrteCode, scalar=True, nepSrc="vd")
     # FRSQRTS
     frsqrtsCode = fpBinOp % "RSqrtStepFused"
-    threeEqualRegInstX("frsqrts", "FrsqrtsDX", "SimdFloatMiscOp",
+    threeEqualRegInstX("frsqrts", "FrsqrtsDX", "SimdFloatMultAccOp",
                        smallFloatTypes, 2, frsqrtsCode)
-    threeEqualRegInstX("frsqrts", "FrsqrtsQX", "SimdFloatMiscOp", floatTypes,
+    threeEqualRegInstX("frsqrts", "FrsqrtsQX", "SimdFloatMultAccOp",
+                       floatTypes,
                        4, frsqrtsCode)
-    threeEqualRegInstX("frsqrts", "FrsqrtsScX", "SimdFloatMiscOp", floatTypes,
+    threeEqualRegInstX("frsqrts", "FrsqrtsScX", "SimdFloatMultAccOp",
+                       floatTypes,
                        4, frsqrtsCode, scalar=True, nepSrc="vn")
     # FSQRT
     fsqrtCode = fpOp % "fplibSqrt<Element>(srcElem1, fpscr, fpcr)"
@@ -3878,9 +3880,9 @@ let {{
                      rshrCode, hasImm=True)
     # URSQRTE
     ursqrteCode = "destElem = unsignedRSqrtEstimate(srcElem1);"
-    twoEqualRegInstX("ursqrte", "UrsqrteDX", "SimdSqrtOp", ("uint32_t",), 2,
+    twoEqualRegInstX("ursqrte", "UrsqrteDX", "SimdCvtOp", ("uint32_t",), 2,
                      ursqrteCode)
-    twoEqualRegInstX("ursqrte", "UrsqrteQX", "SimdSqrtOp", ("uint32_t",), 4,
+    twoEqualRegInstX("ursqrte", "UrsqrteQX", "SimdCvtOp", ("uint32_t",), 4,
                      ursqrteCode)
     # URSRA
     twoEqualRegInstX("ursra", "UrsraDX", "SimdShiftOp", unsignedTypes, 2,
