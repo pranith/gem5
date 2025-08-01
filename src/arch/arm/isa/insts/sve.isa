@@ -6726,19 +6726,19 @@ let {{
     sveBinInst('sdivr', 'Sdivr', 'SimdDivOp', signedTypes, sdivrCode,
                PredType.MERGE, True)
     # SDOT (2-way, indexed)
-    sveDotInst('sdot', 'Sdot2wayi', 'SimdMultAccOp',
+    sveDotInst('sdot', 'Sdot2wayi', 'SimdDotProdOp',
                ['int16_t, int16_t, int32_t'],
                isIndexed = True)
     # SDOT (2-way, vectors)
-    sveDotInst('sdot', 'Sdot2wayv', 'SimdMultAccOp',
+    sveDotInst('sdot', 'Sdot2wayv', 'SimdDotProdOp',
                ['int16_t, int16_t, int32_t'],
                isIndexed = False)
     # SDOT (4-way, indexed)
-    sveDotInst('sdot', 'Sdoti', 'SimdMultAccOp',
+    sveDotInst('sdot', 'Sdoti', 'SimdDotProdOp',
                ['int8_t, int8_t, int32_t', 'int16_t, int16_t, int64_t'],
                isIndexed = True)
     # SDOT (4-way, vectors)
-    sveDotInst('sdot', 'Sdotv', 'SimdMultAccOp',
+    sveDotInst('sdot', 'Sdotv', 'SimdDotProdOp',
                ['int8_t, int8_t, int32_t', 'int16_t, int16_t, int64_t'],
                isIndexed = False)
     # SEL (predicates)
@@ -8176,17 +8176,17 @@ let {{
     sveBinInst('udivr', 'Udivr', 'SimdDivOp', unsignedTypes, udivrCode,
                PredType.MERGE, True)
     # UDOT (2-way, indexed)
-    sveDotInst('udot', 'Udot2wayi', 'SimdMultAccOp',
+    sveDotInst('udot', 'Udot2wayi', 'SimdDotProdOp',
                ['uint16_t, uint16_t, uint32_t'], isIndexed = True)
     # UDOT (2-way, vectors)
-    sveDotInst('udot', 'Udot2wayv', 'SimdMultAccOp',
+    sveDotInst('udot', 'Udot2wayv', 'SimdDotProdOp',
                ['uint16_t, uint16_t, uint32_t'], isIndexed = False)
     # UDOT (4-way, indexed)
-    sveDotInst('udot', 'Udoti', 'SimdMultAccOp',
+    sveDotInst('udot', 'Udoti', 'SimdDotProdOp',
                ['uint8_t, uint8_t, uint32_t', 'uint16_t, uint16_t, uint64_t'],
                isIndexed = True)
     # UDOT (4-way, vectors)
-    sveDotInst('udot', 'Udotv', 'SimdMultAccOp',
+    sveDotInst('udot', 'Udotv', 'SimdDotProdOp',
                ['uint8_t, uint8_t, uint32_t', 'uint16_t, uint16_t, uint64_t'],
                isIndexed = False)
     # UHADD

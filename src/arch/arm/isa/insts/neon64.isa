@@ -1255,26 +1255,40 @@ let {{
                            complex=True)
 
     # SDOT (vector)
-    intDotInst('sdot', 'SdotDX', 'SimdAluOp', True, True, True, 2, False)
-    intDotInst('sdot', 'SdotQX', 'SimdAluOp', True, True, True, 4, False)
+    intDotInst('sdot', 'SdotDX', 'SimdDotProdOp',
+               True, True, True, 2, False)
+    intDotInst('sdot', 'SdotQX', 'SimdDotProdOp',
+               True, True, True, 4, False)
     # SDOT (element)
-    intDotInst('sdot', 'SdotElemDX', 'SimdAluOp', True, True, True, 2, True)
-    intDotInst('sdot', 'SdotElemQX', 'SimdAluOp', True, True, True, 4, True)
+    intDotInst('sdot', 'SdotElemDX', 'SimdDotProdOp',
+               True, True, True, 2, True)
+    intDotInst('sdot', 'SdotElemQX', 'SimdDotProdOp',
+               True, True, True, 4, True)
     # UDOT (vector)
-    intDotInst('udot', 'UdotDX', 'SimdAluOp', False, False, False, 2, False)
-    intDotInst('udot', 'UdotQX', 'SimdAluOp', False, False, False, 4, False)
+    intDotInst('udot', 'UdotDX', 'SimdDotProdOp',
+               False, False, False, 2, False)
+    intDotInst('udot', 'UdotQX', 'SimdDotProdOp',
+               False, False, False, 4, False)
     # UDOT (element)
-    intDotInst('udot', 'UdotElemDX', 'SimdAluOp', False, False, False, 2, True)
-    intDotInst('udot', 'UdotElemQX', 'SimdAluOp', False, False, False, 4, True)
+    intDotInst('udot', 'UdotElemDX', 'SimdDotProdOp',
+               False, False, False, 2, True)
+    intDotInst('udot', 'UdotElemQX', 'SimdDotProdOp',
+               False, False, False, 4, True)
     # SUDOT (element)
-    intDotInst('sudot', 'SudotElemDX', 'SimdAluOp', True, True, False, 2, True)
-    intDotInst('sudot', 'SudotElemQX', 'SimdAluOp', True, True, False, 4, True)
+    intDotInst('sudot', 'SudotElemDX', 'SimdDotProdOp',
+               True, True, False, 2, True)
+    intDotInst('sudot', 'SudotElemQX', 'SimdDotProdOp',
+               True, True, False, 4, True)
     # USDOT (vector)
-    intDotInst('usdot', 'UsdotDX', 'SimdAluOp', True, False, True, 2, False)
-    intDotInst('usdot', 'UsdotQX', 'SimdAluOp', True, False, True, 4, False)
+    intDotInst('usdot', 'UsdotDX', 'SimdDotProdOp',
+               True, False, True, 2, False)
+    intDotInst('usdot', 'UsdotQX', 'SimdDotProdOp',
+               True, False, True, 4, False)
     # USDOT (element)
-    intDotInst('usdot', 'UsdotElemDX', 'SimdAluOp', True, False, True, 2, True)
-    intDotInst('usdot', 'UsdotElemQX', 'SimdAluOp', True, False, True, 4, True)
+    intDotInst('usdot', 'UsdotElemDX', 'SimdDotProdOp',
+               True, False, True, 2, True)
+    intDotInst('usdot', 'UsdotElemQX', 'SimdDotProdOp',
+               True, False, True, 4, True)
 
     def intMatMulInst(name, Name, opClass,
                       destIsSigned, src1IsSigned, src2IsSigned):
