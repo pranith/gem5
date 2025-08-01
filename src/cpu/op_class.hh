@@ -100,6 +100,7 @@ static const OpClass SimdSha256HashOp = enums::SimdSha256Hash;
 static const OpClass SimdSha256Hash2Op = enums::SimdSha256Hash2;
 static const OpClass SimdShaSigma2Op = enums::SimdShaSigma2;
 static const OpClass SimdShaSigma3Op = enums::SimdShaSigma3;
+static const OpClass SimdSha3Op = enums::SimdSha3;
 static const OpClass SimdSm4eOp = enums::SimdSm4e;
 static const OpClass SimdPredAluOp = enums::SimdPredAlu;
 static const OpClass MatrixOp = enums::Matrix;
