@@ -92,6 +92,7 @@ class OpClass(Enum):
         "SimdShaSigma3",
         "SimdSha3",
         "SimdSm4e",
+        "SimdCrc",
         "SimdPredAlu",
         "SimdDotProd",
         "Matrix",

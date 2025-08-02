@@ -102,6 +102,7 @@ static const OpClass SimdShaSigma2Op = enums::SimdShaSigma2;
 static const OpClass SimdShaSigma3Op = enums::SimdShaSigma3;
 static const OpClass SimdSha3Op = enums::SimdSha3;
 static const OpClass SimdSm4eOp = enums::SimdSm4e;
+static const OpClass SimdCrcOp = enums::SimdCrc;
 static const OpClass SimdPredAluOp = enums::SimdPredAlu;
 static const OpClass MatrixOp = enums::Matrix;
 static const OpClass MatrixMovOp = enums::MatrixMov;

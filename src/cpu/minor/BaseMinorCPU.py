@@ -219,6 +219,7 @@ class MinorDefaultFloatSimdFU(MinorFU):
             "SimdShaSigma3",
             "SimdSha3",
             "SimdSm4e",
+            "SimdCrc",
             "Matrix",
             "MatrixMov",
             "MatrixOP",

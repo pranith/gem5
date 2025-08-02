@@ -121,6 +121,7 @@ class SIMD_Unit(FUDesc):
         OpDesc(opClass="SimdShaSigma3"),
         OpDesc(opClass="SimdSha3"),
         OpDesc(opClass="SimdSm4e"),
+        OpDesc(opClass="SimdCrc"),
         OpDesc(opClass="SimdBf16Add"),
         OpDesc(opClass="SimdBf16Cmp"),
         OpDesc(opClass="SimdBf16Cvt"),
