@@ -48,7 +48,6 @@
 #include "cpu/o3/limits.hh"
 #include "cpu/reg_class.hh"
 #include "debug/Activity.hh"
-#include "debug/O3PipeView.hh"
 #include "debug/Rename.hh"
 #include "params/BaseO3CPU.hh"
 
@@ -822,11 +821,7 @@ Rename::sortInsts()
     for (int i = 0; i < insts_from_decode; ++i) {
         const DynInstPtr &inst = fromDecode->insts[i];
         insts[inst->threadNumber].push_back(inst);
-#if TRACING_ON
-        if (debug::O3PipeView) {
-            inst->renameTick = curTick() - inst->fetchTick;
-        }
-#endif
+        inst->renameTick = curTick() - inst->fetchTick;
     }
 }
 

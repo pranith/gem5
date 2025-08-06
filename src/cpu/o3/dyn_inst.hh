@@ -999,7 +999,6 @@ class DynInst : public ExecContext, public RefCounted
     uint64_t htmDepth = 0;
 
   public:
-#if TRACING_ON
     // Value -1 indicates that particular phase
     // hasn't happened (yet).
     /** Tick records used for the pipeline activity viewer. */
@@ -1011,7 +1010,6 @@ class DynInst : public ExecContext, public RefCounted
     int32_t completeTick = -1;
     int32_t commitTick = -1;
     int32_t storeTick = -1;
-#endif
 
     /* Values used by LoadToUse stat */
     Tick firstIssue = -1;

@@ -51,7 +51,6 @@
 #include "debug/HtmCpu.hh"
 #include "debug/IEW.hh"
 #include "debug/LSQUnit.hh"
-#include "debug/O3PipeView.hh"
 #include "mem/packet.hh"
 #include "mem/request.hh"
 
@@ -1171,12 +1170,7 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
             "idx:%i\n",
             store_inst->seqNum, store_idx.idx() - 1, storeQueue.head() - 1);
 
-#if TRACING_ON
-    if (debug::O3PipeView) {
-        store_inst->storeTick =
-            curTick() - store_inst->fetchTick;
-    }
-#endif
+    store_inst->storeTick = curTick() - store_inst->fetchTick;
 
     if (isStalled() &&
         store_inst->seqNum == stallingStoreIsn) {
