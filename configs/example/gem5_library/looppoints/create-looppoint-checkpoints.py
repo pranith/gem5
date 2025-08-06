@@ -43,7 +43,7 @@ Usage
 ```
 scons build/ALL/gem5.opt
 ./build/ALL/gem5.opt \
-    configs/example/gem5_library/looppoints/create-looppoint-checkpoint.py
+    configs/example/gem5_library/looppoints/create-looppoint-checkpoints.py
 ```
 """
 
@@ -111,7 +111,9 @@ board = SimpleBoard(
 )
 
 board.set_workload(
-    obtain_resource("x86-matrix-multiply-omp-100-8-looppoint-csv")
+    obtain_resource(
+        "x86-matrix-multiply-omp-100-8-looppoint-csv", resource_version="2.0.0"
+    )
 )
 
 dir = Path(args.checkpoint_path)
@@ -124,11 +126,11 @@ simulator = Simulator(
             checkpoint_dir=dir,
             looppoint=board.get_looppoint(),
             # True if the relative PC count pairs should be updated during the
-            # simulation. Default as True.
+            # simulation. Default is True.
             update_relatives=True,
             # True if the simulation loop should exit after all the PC count
             # pairs in the LoopPoint data file have been encountered. Default
-            # as True.
+            # is True.
             exit_when_empty=True,
         )
     },

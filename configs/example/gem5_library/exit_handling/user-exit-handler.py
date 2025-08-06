@@ -25,8 +25,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script demonstrates how to override and extend default exit handlers in
-gem5.
+This script demonstrates how to override and extend default hypercall exit
+handlers in gem5.
 
 Usage
 -----
@@ -37,14 +37,8 @@ Usage
 ```
 """
 
+import argparse
 from pathlib import Path
-
-import m5
-from m5 import options
-from m5.simulate import (
-    scheduleTickExitAbsolute,
-    scheduleTickExitFromCurrent,
-)
 
 from gem5.components.boards.simple_board import SimpleBoard
 from gem5.components.cachehierarchies.classic.no_cache import NoCache
@@ -56,6 +50,18 @@ from gem5.resources.resource import obtain_resource
 from gem5.simulate.exit_handler import ScheduledExitEventHandler
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--checkpoint-path",
+    type=str,
+    required=False,
+    default="./",
+    help="The directory to store the checkpoint.",
+)
+
+args = parser.parse_args()
 
 # Create the system
 cache_hierarchy = NoCache()
@@ -71,12 +77,8 @@ board = SimpleBoard(
 )
 
 # Set the workload
-board.set_se_binary_workload(obtain_resource("x86-matrix-multiply"))
-
-# Schedule the first exit event. This will be used to take the first
-# checkpoint.
-scheduleTickExitAbsolute(
-    10_000_000_000, "To take the first checkpoint (@ tick 10M)."
+board.set_se_binary_workload(
+    obtain_resource("x86-matrix-multiply", resource_version="1.0.0")
 )
 
 
@@ -92,30 +94,30 @@ class MyExitHandler(ScheduledExitEventHandler):
         justification = self.justification()
 
         # Print this information to the console.
-        print(f"Processing scheduled exit event at tick: {m5.curTick()}...")
+        print(
+            f"Processing scheduled exit event at tick: {simulator.get_current_tick()}..."
+        )
         if scheduled_at:
             print(f"(Exit was originally scheduled at tick: {scheduled_at})")
         if justification:
-            print(f"(Justification: {justification}_")
+            print(f"(Justification: {justification})")
 
         # Take the checkpoint.
         print("Taking checkpoint via scheduled exit event...")
-        checkpoint_dir = (
-            Path(simulator._checkpoint_path)
-            if simulator._checkpoint_path
-            else None
+        simulator.save_checkpoint(
+            (
+                Path(args.checkpoint_path)
+                / f"cpt.{str(simulator.get_current_tick())}"
+            ).as_posix()
         )
-        if not checkpoint_dir:
-            checkpoint_dir = Path(options.outdir)
-        m5.checkpoint((checkpoint_dir / f"cpt.{str(m5.curTick())}").as_posix())
         print(f"Checkpoint taken!")
 
-        # Finally we always schedule another exit 10M ticks from now.
-        # This means this exit occurs every 10M ticks until the program
+        # Finally we always schedule another exit 10 billion ticks from now.
+        # This means this exit occurs every 10 billion ticks until the program
         # ceases execution.
-        print("Scheduling the next checkpoint in 10M ticks.")
-        scheduleTickExitFromCurrent(
-            10_000_000_000, "To take checkpoint (every 10M ticks)."
+        print("Scheduling the next checkpoint in 10 billion ticks.")
+        simulator.set_hypercall_relative_max_ticks(
+            10_000_000_000, "To take checkpoint (every 10 billion ticks)."
         )
 
     @overrides(ScheduledExitEventHandler)
@@ -127,6 +129,12 @@ class MyExitHandler(ScheduledExitEventHandler):
 
 # Create the Simulator
 simulator = Simulator(board=board)
+
+# Schedule the first exit event. This will be used to take the first
+# checkpoint.
+simulator.set_hypercall_absolute_max_ticks(
+    10_000_000_000, "To take the first checkpoint (@ tick 10 billion)."
+)
 
 # Run the simulation.
 simulator.run()

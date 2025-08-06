@@ -27,7 +27,7 @@
 """
 This script is used for running a traffic generator connected to a memory
 device. It supports linear and random accesses with a configurable amount
-of write traffic.
+of read traffic.
 
 By default, this script runs with one channel (two pseudo channels) of HBM2
 and this channel is driven with 32GiB/s of traffic for 1ms.

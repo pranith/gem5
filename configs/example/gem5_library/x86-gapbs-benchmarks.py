@@ -28,10 +28,7 @@
 Script to run GAPBS benchmarks with gem5. The script expects the user to
 provide the benchmark to run.
 The system is fixed with 2 CPU cores, MESI Two Level system cache and 3 GiB
-DDR4 memory. It uses the x86 board.
-
-This script will count the total number of instructions executed
-in the ROI. It also tracks how much wallclock and simulated time.
+DDR4 memory. It uses the X86Board.
 
 Usage:
 ------
@@ -74,11 +71,7 @@ parser = argparse.ArgumentParser(
     description="An example configuration script to run the GAPBS benchmarks."
 )
 
-gapbs_suite = obtain_resource(
-    "gapbs-benchmark-suite", resource_version="1.0.0"
-)
-
-# The only positional argument accepted is the benchmark name in this script.
+# The only argument accepted is the benchmark name.
 
 parser.add_argument(
     "--benchmark",
@@ -107,19 +100,18 @@ cache_hierarchy = MESITwoLevelCacheHierarchy(
     l2_assoc=16,
     num_l2_banks=2,
 )
-# Memory: Dual Channel DDR4 2400 DRAM device.
-# The X86 board only supports 3 GiB of main memory.
 
+# Memory: Dual Channel DDR4 2400 DRAM device.
+# The X86Board only supports 3 GiB of main memory.
 memory = DualChannelDDR4_2400(size="3GiB")
 
-# Here we setup the processor. This is a special switchable processor in which
+# Here we set up the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
 # configuration is instantiated a user may call `processor.switch()` or
 # `simulator.switch_processor()` if using a hypercall handler to switch
 # from the starting core types to the switch core types. In this simulation
 # we start with KVM cores to simulate the OS boot, then switch to the Timing
 # cores for the command we wish to run after boot.
-
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.TIMING,
@@ -127,7 +119,8 @@ processor = SimpleSwitchableProcessor(
     num_cores=2,
 )
 
-# Here we set up the board. The X86Board allows for Full-System X86 simulations
+# Here we set up the board. The X86Board allows for FS mode (full system) and
+# SE mode (syscall emulation) X86 simulations.
 
 board = X86Board(
     clk_freq="3GHz",
@@ -136,15 +129,9 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Here we set the FS workload, i.e., gapbs benchmark program
-# After simulation has ended you may inspect `m5out/board.pc.com_1.device`
-# to see the stdout of the simulated program.
-
-# After the system boots, we execute the benchmark program and wait until the
-# ROI `workbegin` annotation is reached. We start collecting the number of
-# committed instructions until ROI ends (marked by `workend`). We then finish
-# executing the rest of the benchmark.
-
+# Here we set the FS workload, i.e., GAPBS benchmark program
+# You may inspect `m5out/board.pc.com_1.device` to see the stdout of the
+# simulated program.
 board.set_workload(
     obtain_resource(
         f"x86-ubuntu-24.04-gapbs-{args.benchmark}-test",
@@ -153,6 +140,10 @@ board.set_workload(
 )
 
 
+# After the system boots, we execute the benchmark program and wait until the
+# start of the ROI, which is marked by a call to `m5_hypercall_addr(4)` in
+# the benchmark on the disk image. Once we encounter the end of the ROI, marked
+# by `m5_hypercall_addr(5)`, we dump stats and exit the simulation.
 class CustomWorkBeginExitHandler(WorkBeginExitHandler):
     @overrides(WorkBeginExitHandler)
     def _process(self, simulator: "Simulator") -> None:

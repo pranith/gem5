@@ -38,7 +38,7 @@ parameters until completion.
 Usage
 -----
 
-# Compile gem5 for RISC-V
+# Compile gem5. The ALL build includes the RISCV target ISA.
 scons build/ALL/gem5.opt
 
 # Run the simulation

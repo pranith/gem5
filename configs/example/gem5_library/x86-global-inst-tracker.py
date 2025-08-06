@@ -31,11 +31,11 @@ monitor and control the simulation based on the number of instructions
 committed.
 
 This script will create a global instruction tracker to manage each local
-instruction tracker and connects each local instruction tracker to a core.
+instruction tracker and will connect each local instruction tracker to a core.
 The global instruction tracker will raise an event when the number of
 instructions committed across all cores reaches a certain threshold.
 
-In this script, we expect to start monitorning the instruction committed from
+In this script, we expect to start monitoring the instructions committed from
 the start of the simulation and raise a SIMPOINT_BEGIN exit event when all
 cores in combination have committed 100,000,000 instructions. Then, we will
 change the threshold to 20,000 instructions and raise another SIMPOINT_BEGIN
@@ -87,17 +87,17 @@ global_inst_tracker = GlobalInstTracker(
     inst_thresholds=[100_000_000, 100_020_000]
 )
 
-# then, we create a local instruction tracker for each core
-# and store them in a list
+# then, we create a local instruction tracker for each core and store them in a
+# list
 all_trackers = []
 
 for core in processor.get_cores():
     tracker = LocalInstTracker(
-        # we pass in the glboal instruction tracker to the local one
+        # we pass in the global instruction tracker to the local one
         global_inst_tracker=global_inst_tracker,
         # this parameter tells the tracker to start listening to instructions
         # from the beginning of the simulation. If set to False, the tracker
-        # will
+        # won't listen until `tracker.startListening()` is called.
         start_listening=True,
     )
     # we attach the tracker to the core
@@ -114,24 +114,26 @@ board = SimpleBoard(
 )
 
 board.set_se_binary_workload(
-    binary=obtain_resource(resource_id="x86-matrix-multiply-omp"),
+    binary=obtain_resource(
+        resource_id="x86-matrix-multiply-omp", resource_version="1.0.0"
+    ),
     arguments=[100, 8],
 )
 
 
 def max_inst_handler():
     # this handler tests the instruction tracker
-    # when it reached this function, it means that it successfully raised
-    # the ExitEvent.MAX_INSTS event
-    print("Reached MAX_INSTS with 100000000 instructions")
+    # when the simulation reaches this function, it means that it has
+    # successfully raised the ExitEvent.MAX_INSTS event
+    print("Reached MAX_INSTS with 100,000,000 instructions")
     yield False
-    print("Reached MAX_INSTS with 100020000 instructions")
+    print("Reached MAX_INSTS with 100,020,000 instructions")
     # we can get the current counter of the global instruction tracker
     print(f"Current counter: {global_inst_tracker.getCounter()}")
     # we can reset the counter
     global_inst_tracker.resetCounter()
     print(f"After reset, current counter: {global_inst_tracker.getCounter()}")
-    # we can add new threshold to the global instruction tracker
+    # we can add a new threshold to the global instruction tracker
     global_inst_tracker.addThreshold(20000)
     # we can get the thresholds
     print(f"Current thresholds: {global_inst_tracker.getThresholds()}")

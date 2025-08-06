@@ -25,8 +25,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script can be used to run a simple Ubunutu boot with the RiscvDemoBoard.
-The script will boot the the OS to login before exiting the simulation.
+This script can be used to run a simple Ubuntu boot with the RiscvDemoBoard.
+The script will boot the OS to login before exiting the simulation.
 
 A detailed terminal output can be found in `m5out/board.platform.terminal`.
 
@@ -46,8 +46,6 @@ scons build/ALL/gem5.opt
 
 import argparse
 
-import m5
-
 from gem5.prebuilt.demo.riscv_demo_board import RiscvDemoBoard
 from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
@@ -59,6 +57,7 @@ parser.add_argument(
     help="Enter the name of the workload you would like to run. You can browse"
     " through the available workloads and resources at "
     "https://resources.gem5.org",
+    default="riscv-ubuntu-24.04-boot-no-systemd",
 )
 
 parser.add_argument(

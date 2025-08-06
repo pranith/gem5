@@ -25,7 +25,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script utilizes the X86DemoBoard to run a simple Ubunutu boot. The script
+This script utilizes the X86DemoBoard to run a simple Ubuntu boot. The script
 will boot the the OS to login before exiting the simulation.
 
 A detailed terminal output can be found in `m5out/board.pc.com_1.device`.
@@ -48,8 +48,9 @@ from gem5.prebuilt.demo.x86_demo_board import X86DemoBoard
 from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
 
-# Here we setup the board. The prebuilt X86DemoBoard allows for Full-System X86
-# simulation.
+# Here we set up the board. The prebuilt X86DemoBoard allows for for FS mode
+# (full system) or SE mode (syscall emulation) X86 simulation.
+
 board = X86DemoBoard()
 
 workload = obtain_resource(

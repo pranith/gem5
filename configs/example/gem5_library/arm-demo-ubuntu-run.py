@@ -25,8 +25,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script shows an example of booting an ARM full system Ubuntu
-disk image. This simulation boots the disk image using the ArmDemoBoard.
+This script boots an ARM Ubuntu disk image in FS (full system) mode using the
+ArmDemoBoard.
 
 Usage
 -----
@@ -61,7 +61,6 @@ board.set_workload(
     )
 )
 
-# We define the system with the aforementioned system defined.
 simulator = Simulator(board=board)
 
 simulator.run()

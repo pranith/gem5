@@ -26,7 +26,7 @@
 
 """
 This gem5 configuation script creates a simple board to run the first
-10^6 ticks of "riscv-hello" binary simulation and saves a checkpoint.
+million ticks of the "riscv-hello" binary simulation and saves a checkpoint.
 This configuration serves as an example of taking a checkpoint.
 
 This setup is close to the simplest setup possible using the gem5
@@ -44,8 +44,6 @@ scons build/ALL/gem5.opt
 """
 
 import argparse
-
-import m5
 
 from gem5.components.boards.simple_board import SimpleBoard
 from gem5.components.cachehierarchies.classic.no_cache import NoCache
@@ -86,8 +84,7 @@ processor = SimpleProcessor(
     cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=1
 )
 
-# The gem5 library simple board which can be used to run simple SE-mode
-# simulations.
+# The gem5 library simple board which can be used to run SE-mode simulations.
 board = SimpleBoard(
     clk_freq="3GHz",
     processor=processor,
@@ -99,7 +96,9 @@ board = SimpleBoard(
 # program compiled to the RISCV ISA. The `obtain_resource` function will
 # automatically download the binary from the gem5 Resources cloud bucket if
 # it's not already present.
-board.set_se_binary_workload(obtain_resource("riscv-hello"))
+board.set_se_binary_workload(
+    obtain_resource("riscv-hello", resource_version="1.0.0")
+)
 
 
 class SimpointScheduledExitHandler(ScheduledExitEventHandler):
@@ -107,8 +106,8 @@ class SimpointScheduledExitHandler(ScheduledExitEventHandler):
 
     @overrides(ScheduledExitEventHandler)
     def _process(self, simulator: "Simulator") -> None:
-        print("Taking a checkpoint at", simulator._checkpoint_path)
-        simulator.save_checkpoint(simulator._checkpoint_path)
+        print("Taking a checkpoint at", args.checkpoint_path)
+        simulator.save_checkpoint(args.checkpoint_path)
         print("Done taking a checkpoint")
 
     @overrides(ScheduledExitEventHandler)
@@ -117,7 +116,7 @@ class SimpointScheduledExitHandler(ScheduledExitEventHandler):
 
 
 # Lastly we run the simulation.
-simulator = Simulator(board=board, checkpoint_path=args.checkpoint_path)
+simulator = Simulator(board=board)
 simulator.set_hypercall_absolute_max_ticks(
     1_000_000, "Max ticks reached, taking checkpoint!"
 )

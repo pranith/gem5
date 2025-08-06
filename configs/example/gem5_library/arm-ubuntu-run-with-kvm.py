@@ -26,10 +26,11 @@
 
 """
 This script shows an example of booting an ARM based full system Ubuntu
-disk image. This simulation boots the disk image using 2 TIMING CPU cores. The
-simulation ends when the startup is completed successfully (i.e. when the
-simulation reaches a `gem5-bridge hypercall 3` command in the script the disk
-image runs after booting).
+disk image. This simulation boots the disk image using 2 KVM cores, then
+switches to TIMING cores after the second hypercall exit, which occurs after
+Ubuntu has successfully booted. The simulation ends soon after, when the
+simulation reaches a `gem5-bridge hypercall 3` command in the script the
+simulation runs after booting.
 
 Usage
 -----
@@ -75,10 +76,10 @@ memory = DualChannelDDR4_2400(size="2GiB")
 # Here we set up the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
 # configuration is instantiated a user may call `processor.switch()` or
-# `simulator.switch_processor` (if switching processors within a hypercall exit
-# handler) to switch from the starting core types to the switch core types.
-# In this simulation we start with KVM cores to simulate the OS boot, then
-# switch to the Timing cores for the command we wish to run after boot.
+# `simulator.switch_processor()` (if switching processors within a hypercall
+# exit handler) to switch from the starting core types to the switch core
+# types. In this simulation we start with KVM cores to simulate the OS boot,
+# then switch to the Timing cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.TIMING,
@@ -96,7 +97,8 @@ release = ArmDefaultRelease.for_kvm()
 # on the ArmBoard at the moment.
 platform = VExpress_GEM5_V1()
 
-# Here we setup the board. The ArmBoard allows for Full-System ARM simulations.
+# Here we set up the board. The ArmBoard allows for Full-System ARM
+# simulations.
 board = ArmBoard(
     clk_freq="3GHz",
     processor=processor,
@@ -113,15 +115,16 @@ workload = obtain_resource(
 )
 board.set_workload(workload)
 
-# Examples of how you can override the default exit handler behaviors.
+# Examples of how you can override the default hypercall exit handler
+# behaviors.
 # Exit handlers don't have to be specified in the config script if you don't
 # want to modify/override their default behaviors. Below, we override the
 # default after-boot exit handler to switch processors.
 
-# You can inherit from either the class that handles a certain hypercall by
-# default, or inherit directly from ExitHandler and specify a hypercall number.
+# You can inherit from either the class that handles a certain hypercall,
+# or inherit directly from ExitHandler and specify a hypercall number.
 # See src/python/gem5/simulate/exit_handler.py for more information on which
-# behaviors map to which hypercalls, and what the default behaviors are.
+# handlers map to which hypercalls, and what the default behaviors are.
 
 
 class CustomKernelBootedExitHandler(ExitHandler, hypercall_num=1):

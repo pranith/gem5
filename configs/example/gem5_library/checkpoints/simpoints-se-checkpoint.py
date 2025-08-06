@@ -26,11 +26,11 @@
 
 """
 This configuration script demonstrates how to take checkpoints for SimPoints
-using the gem5 stdlib. Simpoints are set via a Workload and the gem5 SimPoint
-module will calculate where to take checkpoints based on the SimPoints,
-SimPoints' interval length, and the warmup instruction length.
+using the gem5 stdlib. Simpoints are set via `board.set_se_simpoint_workload`
+and the gem5 SimPoint module will calculate where to take checkpoints based on
+the SimPoints, SimPoints' interval length, and the warmup instruction length.
 
-This scipt builds a simple board with the gem5 stdlib with no cache and a
+This script builds a simple board with the gem5 stdlib with no cache and a
 simple memory structure to take checkpoints. Some of the components, such as
 cache hierarchy, can be changed when restoring checkpoints.
 
@@ -57,9 +57,9 @@ from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import (
+    SimpointResource,
     obtain_resource,
 )
-from gem5.resources.workload import Workload
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.exit_event_generators import save_checkpoint_generator
 from gem5.simulate.simulator import Simulator
@@ -109,22 +109,16 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Below we set the simpount manually.
-# board.set_se_simpoint_workload(
-#     binary=obtain_resource("x86-print-this"),
-#     arguments=["print this", 15000],
-#     simpoint=SimpointResource(
-#         simpoint_interval=1000000,
-#         simpoint_list=[2, 3, 4, 15],
-#         weight_list=[0.1, 0.2, 0.4, 0.3],
-#         warmup_interval=1000000,
-#     ),
-# )
-
-board.set_workload(
-    obtain_resource(
-        "x86-print-this-15000-with-simpoints", resource_version="2.0.0"
-    )
+# Below we set the SimPoint manually.
+board.set_se_simpoint_workload(
+    binary=obtain_resource("x86-print-this"),
+    arguments=["print this", 15000],
+    simpoint=SimpointResource(
+        simpoint_interval=1000000,
+        simpoint_list=[2, 3, 4, 15],
+        weight_list=[0.1, 0.2, 0.4, 0.3],
+        warmup_interval=1000000,
+    ),
 )
 
 dir = Path(args.checkpoint_path)
@@ -136,7 +130,6 @@ simulator = Simulator(
         # checkpoints
         ExitEvent.SIMPOINT_BEGIN: save_checkpoint_generator(dir)
     },
-    checkpoint_path=args.checkpoint_path,
 )
 
 simulator.run()

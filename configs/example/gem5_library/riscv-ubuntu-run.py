@@ -57,22 +57,21 @@ from gem5.simulate.exit_handler import (
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
 
-# Here we setup the parameters of the l1 and l2 caches.
+# Here we set up the parameters of the l1 and l2 caches.
 cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
     l1d_size="16KiB", l1i_size="16KiB", l2_size="256KiB"
 )
 
 # Memory: Dual Channel DDR4 2400 DRAM device.
-
 memory = DualChannelDDR4_2400(size="3GiB")
 
-# Here we setup the processor. We use a simple processor.
+# Here we set up the processor. We use a simple processor.
 processor = SimpleProcessor(
     cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=2
 )
 
-# Here we setup the board. The RiscvBoard allows for Full-System RISCV
-# simulations.
+# Here we set up the board. The RiscvBoard allows for FS mode (full system) and
+# SE mode (syscall emulation) RISCV simulations.
 board = RiscvBoard(
     clk_freq="3GHz",
     processor=processor,
@@ -80,24 +79,27 @@ board = RiscvBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-# Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
-# Ubuntu 24.04. Once the system successfully boots it encounters an
-# `gem5-bridge hypercall 3` command which stops the simulation. When the
-# simulation has ended you may inspect `m5out/board.platform.terminal` to see
-# the simulated system's stdout.
+# Here we set a full system workload, "riscv-ubuntu-24.04-boot", which boots
+# Ubuntu 24.04. Once the system successfully boots it encounters a
+# `gem5-bridge hypercall 3` command which stops the simulation.
+
+# The simulated system's stdout can be viewed in
+# `m5out/board.platform.terminal`.
+
 board.set_workload(
     obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")
 )
 
-# Examples of how you can override the default exit handler behaviors.
+# Examples of how you can override the default hypercall exit handler
+# behaviors.
 # Exit handlers don't have to be specified in the config script if you don't
 # want to modify/override their default behaviors.
 
 
-# You can inherit from either the class that handles a certain hypercall by
-# default, or inherit directly from ExitHandler and specify a hypercall number.
+# You can inherit from either the class that handles a certain hypercall, or
+# inherit directly from ExitHandler and specify a hypercall number.
 # See src/python/gem5/simulate/exit_handler.py for more information on which
-# behaviors map to which hypercalls, and what the default behaviors are.
+# handlers map to which hypercalls, and what the default behaviors are.
 class CustomKernelBootedExitHandler(KernelBootedExitHandler):
     @overrides(KernelBootedExitHandler)
     def _process(self, simulator: "Simulator") -> None:

@@ -71,8 +71,7 @@ processor = SimpleProcessor(
     cpu_type=CPUTypes.TIMING, isa=ISA.RISCV, num_cores=1
 )
 
-# The gem5 library simple board which can be used to run simple SE-mode
-# simulations.
+# The gem5 library simple board which can be used to run SE-mode simulations.
 board = SimpleBoard(
     clk_freq="3GHz",
     processor=processor,
@@ -85,11 +84,11 @@ board = SimpleBoard(
 # automatically download the binary from the gem5 Resources cloud bucket if
 # it's not already present.
 # We get the pre-taken checkpoint from gem5-resources. This checkpoint
-# was taken from running this gem5 configuration script,
+# was taken by running
 # configs/example/gem5_library/checkpoints/riscv-hello-save-checkpoint.py
 
 board.set_se_binary_workload(
-    # the workload should be the same as the save-checkpoint script
+    # the workload should be the same as the one in the save-checkpoint script
     obtain_resource("riscv-hello"),
     checkpoint=obtain_resource(
         "riscv-hello-example-checkpoint", resource_version="6.0.0"

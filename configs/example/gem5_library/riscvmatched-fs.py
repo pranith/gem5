@@ -25,8 +25,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This gem5 configuration script runs the RISCVMatchedBoard in FS mode with a
-an Ubuntu 24.04 image and exits after the simulation has booted the OS.
+This gem5 configuration script boots Ubuntu 24.04 on the RISCVMatchedBoard in
+FS mode. If -i or --to-kernel-init is passed, the simulation will exit after
+the kernel is booted. Otherwise, it will exit after Ubuntu boots.
 
 Usage
 ---
@@ -54,12 +55,11 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument(
     "-i",
-    "--to-init",
+    "--to-kernel-init",
     action="store_true",
     help="Exit the simulation after the Linux Kernel boot.",
 )
 
-global args
 args = parser.parse_args()
 
 
@@ -67,7 +67,7 @@ args = parser.parse_args()
 class CustomKernelBootedExitHandler(KernelBootedExitHandler):
     @overrides(KernelBootedExitHandler)
     def _exit_simulation(self) -> bool:
-        if args.i:
+        if args.to_kernel_init:
             return True
         return False
 
@@ -81,8 +81,8 @@ board = RISCVMatchedBoard(
 
 # Here we a full system workload: "riscv-ubuntu-24.04-boot" which boots
 # Ubuntu 24.04. Once the system successfully boots it encounters hypercall 3,
-# which stops the simulation. When the simulation has ended you may inspect
-# `m5out/board.platform.terminal` to see the stdout of the simulated system.
+# which stops the simulation. You may inspect `m5out/board.platform.terminal`
+# to see the stdout of the simulated system.
 
 workload = obtain_resource("riscv-ubuntu-24.04-boot", resource_version="2.0.0")
 

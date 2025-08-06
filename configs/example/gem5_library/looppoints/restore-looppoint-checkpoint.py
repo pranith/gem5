@@ -56,7 +56,10 @@ from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
-from gem5.resources.resource import obtain_resource
+from gem5.resources.resource import (
+    CheckpointResource,
+    obtain_resource,
+)
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
@@ -116,6 +119,8 @@ board = SimpleBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
+# The looppoint JSON file mentioned in the comments at the top of this file is
+# included in the following workload.
 board.set_workload(
     obtain_resource(
         f"x86-matrix-multiply-omp-100-8-looppoint-region-{args.checkpoint_region}"

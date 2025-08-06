@@ -26,7 +26,7 @@
 
 """
 
-This script demonstrates how to use KVM CPU without perf.
+This script demonstrates how to use the KVM CPU without perf.
 This simulation boots Ubuntu 24.04 using 2 KVM CPUs without using perf.
 
 Usage
@@ -58,8 +58,8 @@ from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
-# This simulation requires using KVM with gem5 compiled for X86 simulation
-# and with MESI_Two_Level cache coherence protocol.
+# This checks if the host system supports KVM. It also checks if the gem5
+# binary is compiled to include the MESI_Two_Level cache coherence protocol.
 requires(
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
     kvm_required=True,
@@ -82,12 +82,13 @@ cache_hierarchy = MESITwoLevelCacheHierarchy(
 # Main memory
 memory = SingleChannelDDR4_2400(size="3GiB")
 
-# This is a switchable CPU. We first boot Ubuntu using KVM, then the guest
-# will exit the simulation by calling "m5 exit" (see the `command` variable
-# below, which contains the command to be run in the guest after booting).
-# Upon exiting from the simulation, the Exit Event handler will switch the
-# CPU type (see the ExitEvent.EXIT line below, which contains a map to
-# a function to be called when an exit event happens).
+# Here we set up the processor. This is a special switchable processor in which
+# a starting core type and a switch core type must be specified. Once a
+# configuration is instantiated a user may call `processor.switch()` or
+# `simulator.switch_processor()`, if using a hypercall exit handler, to switch
+# from the starting core types to the switch core types. In this simulation
+# we start with KVM cores to simulate the OS boot, then switch to the Timing
+# cores for the command we wish to run after boot.
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.TIMING,
@@ -99,7 +100,7 @@ processor = SimpleSwitchableProcessor(
 for proc in processor.start:
     proc.core.usePerf = False
 
-# Here we setup the board. The X86Board allows for Full-System X86 simulations.
+# Here we set up the board. The X86Board allows for Full-System X86 simulations.
 board = X86Board(
     clk_freq="3GHz",
     processor=processor,

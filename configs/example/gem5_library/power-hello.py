@@ -51,7 +51,7 @@ from gem5.resources.resource import obtain_resource
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
-# This check ensures the gem5 binary is compiled to the POWER ISA target.
+# This check ensures the gem5 binary contains the POWER ISA target.
 # If not, an exception will be thrown.
 requires(isa_required=ISA.POWER)
 
@@ -66,8 +66,7 @@ processor = SimpleProcessor(
     cpu_type=CPUTypes.ATOMIC, isa=ISA.POWER, num_cores=1
 )
 
-# The gem5 library simple board which can be used to run simple SE-mode
-# simulations.
+# The gem5 library simple board which can be used to run SE-mode simulations.
 board = SimpleBoard(
     clk_freq="3GHz",
     processor=processor,

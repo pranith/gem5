@@ -54,8 +54,8 @@ from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
-# This runs a check to ensure the gem5 binary is compiled to X86 and to the
-# MESI Two Level coherence protocol.
+# This checks if the host system supports KVM. It also checks if the gem5
+# binary is compiled to include the MESI_Two_Level cache coherence protocol.
 requires(
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
     kvm_required=True,
@@ -81,10 +81,12 @@ memory = SingleChannelDDR3_1600(size="3GiB")
 
 # Here we set up the processor. This is a special switchable processor in which
 # a starting core type and a switch core type must be specified. Once a
-# configuration is instantiated a user may call `processor.switch()` to switch
+# configuration is instantiated a user may call `processor.switch()` or
+# `simulator.switch_processor()`, if using a hypercall exit handler, to switch
 # from the starting core types to the switch core types. In this simulation
 # we start with KVM cores to simulate the OS boot, then switch to the Timing
 # cores for the command we wish to run after boot.
+
 processor = SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
     switch_core_type=CPUTypes.TIMING,
@@ -92,7 +94,9 @@ processor = SimpleSwitchableProcessor(
     num_cores=2,
 )
 
-# Here we setup the board. The X86Board allows for Full-System X86 simulations.
+# Here we set up the board. The X86Board allows for FS mode (full system) or
+# SE mode (syscall emulation) X86 simulations.
+
 board = X86Board(
     clk_freq="3GHz",
     processor=processor,
@@ -101,7 +105,9 @@ board = X86Board(
 )
 
 
-workload = obtain_resource("x86-ubuntu-24.04-boot-with-systemd")
+workload = obtain_resource(
+    "x86-ubuntu-24.04-boot-with-systemd", resource_version="5.0.0"
+)
 board.set_workload(workload)
 
 

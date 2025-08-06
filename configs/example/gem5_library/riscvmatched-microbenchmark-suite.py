@@ -68,5 +68,5 @@ print(microbenchmarks.get_input_groups())
 board.set_workload(list(microbenchmarks.with_input_group("cca"))[0])
 
 # run the simulation with the RISCV Matched board
-simulator = Simulator(board=board, full_system=False)
+simulator = Simulator(board=board)
 simulator.run()

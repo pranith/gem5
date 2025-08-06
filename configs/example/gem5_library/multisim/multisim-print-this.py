@@ -28,13 +28,19 @@
 An example of a single configuration script for defining multiple
 simulations through the gem5 `multisim` module.
 
-This script is very simple and prints a simple message with the process id once
-for each simulation.
+This script is very simple and prints a message with the process id once for
+each simulation.
 
 Usage
 -----
 
-1. To run all the simulations defined in this script::
+The instructions below assume you are running this script from the `gem5`
+directory. The simulation outputs will be outputted into `gem5/m5out`. Multisim
+currently does not support modifying the output directory from the run command,
+so you will have to `cd` into the directory you want `m5out` to be outputted
+into beforehand.
+
+1. To run all the simulations defined in this script:
 
 ```shell
 <gem5-binary> -m gem5.utils.multisim \
@@ -45,7 +51,7 @@ Usage
 
 ```shell
 <gem5-binary> configs/example/gem5_library/multisim/multisim-print-this.py \
-    process_id_1
+    process_1
 ```
 
 3. To list all the IDs of the simulations defined in this script:

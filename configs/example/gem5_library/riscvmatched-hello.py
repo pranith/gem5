@@ -24,7 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
-This gem5 configuation script runs a "hello world" binary on the
+This gem5 configuration script runs a "hello world" binary on the
 RISCVMatched prebuilt board found in src/python/gem5/prebuilt/riscvmatched/
 
 Usage
@@ -32,8 +32,7 @@ Usage
 
 ```
 scons build/ALL/gem5.opt
-./build/ALL/gem5.opt \
-    configs/example/gem5_library/riscvmatched-hello.py
+./build/ALL/gem5.opt configs/example/gem5_library/riscvmatched-hello.py
 ```
 """
 
@@ -43,9 +42,6 @@ from gem5.simulate.simulator import Simulator
 
 # Instantiate the RISCV Matched board with default parameters
 board = RISCVMatchedBoard()
-
-# The riscv-hello binary on gem5 resources needs to be updated to say it is
-# compatible with gem5 v25.0
 
 # Set the "hello world" RISCV binary as the board's workload
 board.set_se_binary_workload(

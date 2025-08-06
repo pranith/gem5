@@ -25,10 +25,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
-This script shows an example of booting an ARM based full system Ubuntu
-disk image. This simulation boots the disk image using 2 TIMING CPU cores. The
-simulation ends when the startup is completed successfully (i.e. when an
-`gem5-bridge hypercall 3` command is reached on successful boot).
+This script boots an ARM Ubuntu disk image in FS (full system) mode. This
+simulation boots the disk image using 2 TIMING CPU cores. The simulation ends
+after the Ubuntu boot is completed successfully, and the simulation
+reaches a `gem5-bridge hypercall 3` command in `after_boot.sh`, which the
+simulation runs after booting.
 
 Usage
 -----
@@ -61,18 +62,16 @@ from gem5.simulate.exit_handler import (
 from gem5.simulate.simulator import Simulator
 from gem5.utils.override import overrides
 
-# Here we setup the parameters of the l1 and l2 caches.
+# Here we set up the parameters of the l1 and l2 caches.
 cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
     l1d_size="16KiB", l1i_size="16KiB", l2_size="256KiB"
 )
 
 # Memory: Dual Channel DDR4 2400 DRAM device.
-
 memory = DualChannelDDR4_2400(size="2GiB")
 
-# Here we setup the processor. We use a simple TIMING processor. The config
-# script was also tested with ATOMIC processor.
-
+# Here we set up the processor. We use a simple processor with TIMING cores.
+# This config script was also tested with ATOMIC cores.
 processor = SimpleProcessor(cpu_type=CPUTypes.TIMING, num_cores=2, isa=ISA.ARM)
 
 # The ArmBoard requires a `release` to be specified. This adds all the
@@ -82,11 +81,9 @@ release = ArmDefaultRelease()
 
 # The platform sets up the memory ranges of all the on-chip and off-chip
 # devices present on the ARM system.
-
 platform = VExpress_GEM5_Foundation()
 
-# Here we setup the board. The ArmBoard allows for Full-System ARM simulations.
-
+# Here we set up the board. The ArmBoard allows for Full-System ARM simulation.
 board = ArmBoard(
     clk_freq="3GHz",
     processor=processor,
@@ -96,8 +93,8 @@ board = ArmBoard(
     platform=platform,
 )
 
-# Here we set a full system workload. The "arm-ubuntu-24.04-boot-with-systemd" boots
-# Ubuntu 24.04.
+# Here we set a full system workload. The workload
+# "arm-ubuntu-24.04-boot-with-systemd" boots Ubuntu 24.04.
 workload = obtain_resource(
     "arm-ubuntu-24.04-boot-with-systemd", resource_version="3.0.0"
 )
@@ -107,11 +104,12 @@ board.set_workload(workload)
 # Exit handlers don't have to be specified in the config script if you don't
 # want to modify/override their default behaviors.
 
-
 # You can inherit from either the class that handles a certain hypercall by
 # default, or inherit directly from ExitHandler and specify a hypercall number.
 # See src/python/gem5/simulate/exit_handler.py for more information on which
-# behaviors map to which hypercalls, and what the default behaviors are.
+# handlers map to which hypercalls, and what the default behaviors are.
+
+
 class CustomKernelBootedExitHandler(KernelBootedExitHandler):
     @overrides(KernelBootedExitHandler)
     def _process(self, simulator: "Simulator") -> None:
