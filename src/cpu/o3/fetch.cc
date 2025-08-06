@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 ARM Limited
+ * Copyright (c) 2010-2014, 2025 Arm Limited
  * Copyright (c) 2012-2013 AMD
  * Copyright (c) 2022-2023 The University of Edinburgh
  * All rights reserved.
@@ -1032,9 +1032,9 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
 
 #if TRACING_ON
     if (trace) {
-        instruction->traceData =
-            cpu->getTracer()->getInstRecord(curTick(), cpu->tcBase(tid),
-                    instruction->staticInst, this_pc, curMacroop);
+        instruction->traceData = cpu->getTracer()->getInstRecord(
+            curTick(), cpu->tcBase(tid), instruction.get(),
+            instruction->staticInst, this_pc, curMacroop);
     }
 #else
     instruction->traceData = NULL;
