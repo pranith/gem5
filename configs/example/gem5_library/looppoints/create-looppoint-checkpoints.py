@@ -45,6 +45,9 @@ scons build/ALL/gem5.opt
 ./build/ALL/gem5.opt \
     configs/example/gem5_library/looppoints/create-looppoint-checkpoints.py
 ```
+
+# Note: This config script will only run on an X86 host.
+
 """
 
 import argparse

@@ -49,6 +49,8 @@ scons build/ALL/gem5.opt
 ./build/ALL/gem5.opt [--debug-flags=InstTracker] \
     configs/example/gem5_library/x86-global-inst-tracker.py
 
+# Note: This config script will only run on an X86 host.
+
 """
 
 from m5.objects import (
