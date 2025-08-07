@@ -750,6 +750,8 @@ Rename::renameInsts(ThreadID tid)
         // this instruction have been renamed.
         ppRename->notify(inst);
 
+        inst->renameEndTick = curTick() - inst->fetchTick;
+
         // Put instruction in rename queue.
         toIEW->insts[toIEWIndex] = inst;
         ++(toIEW->size);

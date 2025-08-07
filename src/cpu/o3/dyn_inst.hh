@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, 2016, 2021 ARM Limited
+ * Copyright (c) 2010, 2016, 2021, 2025 Arm Limited
  * Copyright (c) 2013 Advanced Micro Devices, Inc.
  * All rights reserved
  *
@@ -1005,6 +1005,7 @@ class DynInst : public ExecContext, public RefCounted
     Tick fetchTick = -1;      // instruction fetch is completed.
     int32_t decodeTick = -1;  // instruction enters decode phase
     int32_t renameTick = -1;  // instruction enters rename phase
+    int32_t renameEndTick = -1; // instruction exits rename phase
     int32_t dispatchTick = -1;
     int32_t issueTick = -1;
     int32_t completeTick = -1;
