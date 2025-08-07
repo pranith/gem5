@@ -1,6 +1,6 @@
 /*
  * Copyright 2014 Google, Inc.
- * Copyright (c) 2010-2014, 2017, 2020 ARM Limited
+ * Copyright (c) 2010-2014, 2017, 2020, 2025 ARM Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -1223,13 +1223,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     DPRINTF(Commit,
             "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
             tid, head_inst->seqNum, head_inst->pcState());
-    if (head_inst->traceData) {
-        head_inst->traceData->setFetchSeq(head_inst->seqNum);
-        head_inst->traceData->setCPSeq(thread[tid]->numOp);
-        head_inst->traceData->dump();
-        delete head_inst->traceData;
-        head_inst->traceData = NULL;
-    }
+
     if (head_inst->isReturn()) {
         DPRINTF(Commit,
                 "[tid:%i] [sn:%llu] Return Instruction Committed PC %s \n",
@@ -1251,6 +1245,14 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     rob->retireHead(tid);
 
     head_inst->commitTick = curTick() - head_inst->fetchTick;
+
+    if (head_inst->traceData) {
+        head_inst->traceData->setFetchSeq(head_inst->seqNum);
+        head_inst->traceData->setCPSeq(thread[tid]->numOp);
+        head_inst->traceData->dump();
+        delete head_inst->traceData;
+        head_inst->traceData = NULL;
+    }
 
     // If this was a store, record it for this cycle.
     if (head_inst->isStore() || head_inst->isAtomic())
