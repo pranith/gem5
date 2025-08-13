@@ -68,6 +68,10 @@ class O3_ARM_v7a_FP(FUDesc):
         OpDesc(opClass="SimdFloatMultAcc", opLat=5),
         OpDesc(opClass="SimdFloatMatMultAcc", opLat=5),
         OpDesc(opClass="SimdFloatSqrt", opLat=9),
+        OpDesc(opClass="SimdBf16Cvt", opLat=3),
+        OpDesc(opClass="SimdBf16DotProd", opLat=4),
+        OpDesc(opClass="SimdBf16MatMultAcc", opLat=5),
+        OpDesc(opClass="SimdBf16MultAcc", opLat=4),
         OpDesc(opClass="FloatAdd", opLat=5),
         OpDesc(opClass="FloatCmp", opLat=5),
         OpDesc(opClass="FloatCvt", opLat=5),
@@ -76,6 +80,7 @@ class O3_ARM_v7a_FP(FUDesc):
         OpDesc(opClass="FloatMult", opLat=4),
         OpDesc(opClass="FloatMultAcc", opLat=5),
         OpDesc(opClass="FloatMisc", opLat=3),
+        OpDesc(opClass="Bf16Cvt", opLat=3),
     ]
     count = 2
 
