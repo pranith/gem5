@@ -228,6 +228,8 @@ class MMU : public BaseMMU
      */
     bool translateFunctional(ThreadContext *tc, Addr vaddr, Addr &paddr);
 
+    TlbEntry *translateFunctional(ThreadContext *tc, Addr vaddr);
+
     Fault translateFunctional(const RequestPtr &req, ThreadContext *tc,
         BaseMMU::Mode mode) override;
 
