@@ -67,41 +67,47 @@ FetchDirectedPrefetcher::FetchDirectedPrefetcher(
 void
 FetchDirectedPrefetcher::notifyFTQInsert(const o3::FetchTargetPtr &ft)
 {
-    Addr blk_addr = blockAddress(ft->startAddress());
+    const Addr start_blk_addr = blockAddress(ft->startAddress());
+    const Addr end_blk_addr = blockAddress(ft->endAddress());
 
-    // Check if the address is already in the prefetch queue
-    auto it = std::find(pfq.begin(), pfq.end(), blk_addr);
-    if (it != pfq.end()) {
-        DPRINTF(HWPrefetch, "%#x already in prefetch_queue\n", blk_addr);
-        stats.pfInPFQ++;
-        return;
+    for (Addr blk_addr = start_blk_addr; blk_addr <= end_blk_addr;
+         blk_addr += blkSize) {
+
+        // Check if the address is already in the prefetch queue
+        auto it = std::find(pfq.begin(), pfq.end(), blk_addr);
+        if (it != pfq.end()) {
+            DPRINTF(HWPrefetch, "%#x already in prefetch_queue\n", blk_addr);
+            stats.pfInPFQ++;
+            continue;
+        }
+
+        it = std::find(translationq.begin(), translationq.end(), blk_addr);
+        if (it != translationq.end()) {
+            DPRINTF(HWPrefetch, "%#x already in translation queue\n",
+                    blk_addr);
+            stats.pfInTQ++;
+            continue;
+        }
+
+        stats.pfIdentified++;
+
+        if (translationq.size() >= tqSize) {
+            DPRINTF(HWPrefetch, "Translation queue full, dropping %#x\n",
+                    blk_addr);
+            stats.tqDrops++;
+            continue;
+        }
+        // TODO add also check for pfq to save unnecessary translations
+        // Maybe merge the two queues
+        translationq.emplace_back(*this, blk_addr, ft->getTid(), ft->ftNum());
+        DPRINTF(HWPrefetch, "Start translation for %#x, reqID=%i, ctxID=%i\n",
+                blk_addr, translationq.back().req->requestorId(),
+                translationq.back().req->contextId());
+        translationq.back().startTranslation();
+        stats.tqInserts++;
+        stats.tqSizeDistAtNotify.sample(translationq.size());
+        stats.pfqSizeDistAtNotify.sample(pfq.size());
     }
-
-    it = std::find(translationq.begin(), translationq.end(), blk_addr);
-    if (it != translationq.end()) {
-        DPRINTF(HWPrefetch, "%#x already in translation queue\n", blk_addr);
-        stats.pfInTQ++;
-        return;
-    }
-
-    stats.pfIdentified++;
-
-    if (translationq.size() >= tqSize) {
-        DPRINTF(HWPrefetch, "Translation queue full, dropping %#x\n",
-                blk_addr);
-        stats.tqDrops++;
-        return;
-    }
-    // TODO add also check for pfq to save unnecessary translations
-    // Maybe merge the two queues
-    translationq.emplace_back(*this, blk_addr, ft->getTid(), ft->ftNum());
-    DPRINTF(HWPrefetch, "Start translation for %#x, reqID=%i, ctxID=%i\n",
-            blk_addr, translationq.back().req->requestorId(),
-            translationq.back().req->contextId());
-    translationq.back().startTranslation();
-    stats.tqInserts++;
-    stats.tqSizeDistAtNotify.sample(translationq.size());
-    stats.pfqSizeDistAtNotify.sample(pfq.size());
 }
 
 void
@@ -111,26 +117,28 @@ FetchDirectedPrefetcher::notifyFTQRemove(const o3::FetchTargetPtr &ft)
         return;
     }
 
-    // If the FT represents an in-flight translation, mark it as
-    // canceled. This will block it from progressing to the `pfq` when
-    // translation is complete. We cannot simply remove the FT from
-    // the `translationq` as the asynchronous `translationComplete`
-    // callback assumes the `translationq` still contains the entry.
+    // Mark any in-flight translations associated with the fetch
+    // target as canceled. This will block them from progressing to
+    // the `pfq` when translation is complete. We cannot simply remove
+    // them from the `translationq` as the asynchronous
+    // `translationComplete` callback assumes the `translationq` still
+    // contains the entry.
     for (auto &pr : translationq) {
         if (pr.ftn == ft->ftNum()) {
             pr.markCanceled();
             stats.pfSquashed++;
-            return;
         }
     }
 
-    // Otherwise, remove the prefetch request that belongs to this
-    // fetch target.
-    for (auto it = pfq.begin(); it != pfq.end(); it++) {
+    // Remove any existing prefetch requests that belong to this fetch
+    // target.
+    auto it = pfq.begin();
+    while (it != pfq.end()) {
         if (it->ftn == ft->ftNum()) {
-            pfq.erase(it);
+            it = pfq.erase(it);
             stats.pfSquashed++;
-            return;
+        } else {
+            ++it;
         }
     }
 }
