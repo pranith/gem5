@@ -75,22 +75,8 @@ _drain_manager = _m5.drain.DrainManager.instance()
 _instantiated = False  # Has m5.instantiate() been called?
 
 
-# The final call to instantiate the SimObject graph and initialize the
-# system.
-def instantiate(ckpt_dir=None):
-    global _instantiated
-    from m5 import options
-
-    if _instantiated:
-        fatal("m5.instantiate() called twice.")
-
-    _instantiated = True
-
-    root = objects.Root.getInstance()
-
-    if not root:
-        fatal("Need to instantiate Root() before calling instantiate()")
-
+def _fix_all_objects(root):
+    """Makes all parameters concrete of all objects that are childred of root."""
     # we need to fix the global frequency
     ticks.fixGlobalFrequency()
 
@@ -102,6 +88,13 @@ def instantiate(ckpt_dir=None):
     # Unproxy in sorted order for determinism
     for obj in root.descendants():
         obj.unproxyParams()
+
+    # Initialize the global statistics
+    stats.initSimStats()
+
+
+def _dump_configs(root):
+    from m5 import options
 
     if options.dump_config:
         ini_file = open(os.path.join(options.outdir, options.dump_config), "w")
@@ -127,8 +120,22 @@ def instantiate(ckpt_dir=None):
         do_dot(root, options.outdir, options.dot_config)
         do_ruby_dot(root, options.outdir, options.dot_config)
 
-    # Initialize the global statistics
-    stats.initSimStats()
+    gather_citations(root)
+
+
+def _create_cpp_objects(root, ckpt_dir):
+    """Does simboject initialization.
+
+    1. Instatiates C++ classes (calls the constructors)
+    2. Calls `init()` on each object (the C++ function)
+    3. Calls `regStats` on each "group"
+    4. Registers the probe points (must be after regStats)
+    5. Registers the probe listeners (must be after probe points)
+    6. Enable stats
+    7. Call `initState` or `loadState` (if loading checkpoint) on all objects
+    ...
+    Later, in `simulate` we will call `startup` on all objects
+    """
 
     # Create the C++ sim objects and connect ports
     for obj in root.descendants():
@@ -152,12 +159,6 @@ def instantiate(ckpt_dir=None):
     for obj in root.descendants():
         obj.regProbeListeners()
 
-    # We want to generate the DVFS diagram for the system. This can only be
-    # done once all of the CPP objects have been created and initialised so
-    # that we are able to figure out which object belongs to which domain.
-    if options.dot_dvfs_config:
-        do_dvfs_dot(root, options.outdir, options.dot_dvfs_config)
-
     # We're done registering statistics.  Enable the stats package now.
     stats.enable()
 
@@ -175,7 +176,39 @@ def instantiate(ckpt_dir=None):
     # a checkpoint, If so, this call will shift them to be at a valid time.
     updateStatEvents()
 
-    gather_citations(root)
+
+def _dump_configs_post_cpp(root):
+    # We want to generate the DVFS diagram for the system. This can only be
+    # done once all of the CPP objects have been created and initialised so
+    # that we are able to figure out which object belongs to which domain.
+    from m5 import options
+
+    if options.dot_dvfs_config:
+        do_dvfs_dot(root, options.outdir, options.dot_dvfs_config)
+
+
+# The final call to instantiate the SimObject graph and initialize the
+# system.
+def instantiate(ckpt_dir=None):
+    global _instantiated
+
+    if _instantiated:
+        fatal("m5.instantiate() called twice.")
+
+    _instantiated = True
+
+    root = objects.Root.getInstance()
+
+    if not root:
+        fatal("Need to instantiate Root() before calling instantiate()")
+
+    _fix_all_objects(root)
+
+    _dump_configs(root)
+
+    _create_cpp_objects(root, ckpt_dir)
+
+    _dump_configs_post_cpp(root)
 
 
 need_startup = True
