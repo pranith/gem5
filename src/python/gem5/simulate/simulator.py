@@ -101,7 +101,6 @@ class Simulator:
             ]
         ] = None,
         expected_execution_order: Optional[List[ExitEvent]] = None,
-        checkpoint_path: Optional[Path] = None,
         max_ticks: Optional[int] = m5.MaxTick,
         id: Optional[int] = None,
     ) -> None:
@@ -138,12 +137,6 @@ class Simulator:
                                 executed each time the associated exit event is encountered.
 
                                 See `ClassicGeneratorExitHandler` for more details
-        :param checkpoint_path: An optional parameter specifying the directory of
-                                the checkpoint to instantiate from. When the path
-                                is ``None``, no checkpoint will be loaded. By default,
-                                the path is ``None``. **This parameter is deprecated.
-                                Please set the checkpoint when setting the board's
-                                workload**.
         :param max_ticks: The maximum number of ticks to execute  in the
                           simulation run before exiting with a ``MAX_TICK``
                           exit event. If not set this value is to `m5.MaxTick`,
@@ -191,18 +184,6 @@ class Simulator:
 
         self._last_exit_event = None
         self._exit_event_count = 0
-
-        if checkpoint_path:
-            warn(
-                "Setting the checkpoint path via the Simulator constructor is "
-                "deprecated and will be removed in future releases of gem5. "
-                "Please set this through via the appropriate workload "
-                "function (i.e., `set_se_binary_workload` or "
-                "`set_kernel_disk_workload`). If both are set the workload "
-                "function set takes precedence."
-            )
-
-        self._checkpoint_path = checkpoint_path
 
         # Set up the classic event generators.
         ClassicGeneratorExitHandler.set_exit_event_map(
@@ -572,8 +553,6 @@ class Simulator:
             # will be restored.
             if self._board._checkpoint:
                 m5.instantiate(self._board._checkpoint.as_posix())
-            else:
-                m5.instantiate(self._checkpoint_path)
             self._instantiated = True
 
             # Let the board know that instantiate has been called so it can do
