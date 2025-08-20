@@ -120,7 +120,7 @@ def _dump_configs(root):
         do_dot(root, options.outdir, options.dot_config)
         do_ruby_dot(root, options.outdir, options.dot_config)
 
-    gather_citations(root)
+    gather_citations(root, options.outdir)
 
 
 def _create_cpp_objects(root, ckpt_dir):
