@@ -40,6 +40,7 @@
 import atexit
 import os
 import sys
+from typing import Optional
 
 from m5.util.dot_writer import (
     do_dot,
@@ -93,34 +94,56 @@ def _fix_all_objects(root):
     stats.initSimStats()
 
 
-def _dump_configs(root):
-    from m5 import options
+def _dump_configs(
+    root,
+    outdir: Optional[str] = None,
+    ini_config: Optional[str] = None,
+    json_config: Optional[str] = None,
+    dot_config: Optional[str] = None,
+):
+    # Use a slightly convoluted way to set these variables for backwards
+    # compatibility. Now, this function is no longer dependent on main.py and
+    # options
+    if outdir is None:
+        from m5 import options
 
-    if options.dump_config:
-        ini_file = open(os.path.join(options.outdir, options.dump_config), "w")
+        outdir = options.outdir
+    if ini_config is None:
+        from m5 import options
+
+        dump_config = options.dump_config
+    if json_config is None:
+        from m5 import options
+
+        json_config = options.json_config
+    if dot_config is None:
+        from m5 import options
+
+        dot_config = options.dot_config
+
+    if ini_config:
+        ini_file = open(os.path.join(outdir, ini_config), "w")
         # Print ini sections in sorted order for easier diffing
         for obj in sorted(root.descendants(), key=lambda o: o.path()):
             obj.print_ini(ini_file)
         ini_file.close()
 
-    if options.json_config:
+    if json_config:
         try:
             import json
 
-            json_file = open(
-                os.path.join(options.outdir, options.json_config), "w"
-            )
+            json_file = open(os.path.join(outdir, json_config), "w")
             d = root.get_config_as_dict()
             json.dump(d, json_file, indent=4)
             json_file.close()
         except ImportError:
             pass
 
-    if options.dot_config:
-        do_dot(root, options.outdir, options.dot_config)
-        do_ruby_dot(root, options.outdir, options.dot_config)
+    if dot_config:
+        do_dot(root, outdir, dot_config)
+        do_ruby_dot(root, outdir, dot_config)
 
-    gather_citations(root, options.outdir)
+    gather_citations(root, outdir)
 
 
 def _create_cpp_objects(root, ckpt_dir):
@@ -177,19 +200,28 @@ def _create_cpp_objects(root, ckpt_dir):
     updateStatEvents()
 
 
-def _dump_configs_post_cpp(root):
+def _dump_configs_post_cpp(root, outdir=None, dot_dvfs_config=None):
+    if outdir is None:
+        from m5 import options
+
+        outdir = options.outdir
+    if dot_dvfs_config is None:
+        from m5 import options
+
+        dot_dvfs_config = options.dot_dvfs_config
+
     # We want to generate the DVFS diagram for the system. This can only be
     # done once all of the CPP objects have been created and initialised so
     # that we are able to figure out which object belongs to which domain.
-    from m5 import options
-
-    if options.dot_dvfs_config:
-        do_dvfs_dot(root, options.outdir, options.dot_dvfs_config)
+    if dot_dvfs_config:
+        do_dvfs_dot(root, outdir, dot_dvfs_config)
 
 
 # The final call to instantiate the SimObject graph and initialize the
 # system.
 def instantiate(ckpt_dir=None):
+    """Instantiate all of the C++ SimObjects, initialize them, and dump configs"""
+
     global _instantiated
 
     if _instantiated:
