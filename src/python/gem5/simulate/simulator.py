@@ -547,6 +547,7 @@ class Simulator:
             self._root = self._board._pre_instantiate(
                 full_system=self._full_system
             )
+            assert self._root is not None
 
             # m5.instantiate() takes a parameter specifying the path to the
             # checkpoint directory. If the parameter is None, no checkpoint

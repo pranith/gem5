@@ -49,6 +49,7 @@ from m5.objects import (
     PciVirtIO,
     Port,
     RawDiskImage,
+    Root,
     SimObject,
     SrcClockDomain,
     Terminal,
@@ -341,8 +342,8 @@ class ArmBoard(ArmSystem, AbstractBoard, KernelDiskWorkload):
         self.system_port = port
 
     @overrides(AbstractBoard)
-    def _pre_instantiate(self, full_system: Optional[bool] = None) -> None:
-        super()._pre_instantiate(full_system=full_system)
+    def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
+        root = super()._pre_instantiate(full_system=full_system)
 
         # Add the PCI devices.
         self.pci_devices = self._pci_devices
@@ -360,6 +361,8 @@ class ArmBoard(ArmSystem, AbstractBoard, KernelDiskWorkload):
         # Calling generateDtb from class ArmSystem to add memory information to
         # the dtb file.
         self.generateDtb(self._get_dtb_filename())
+
+        return root
 
     def _get_dtb_filename(self) -> str:
         """Returns the ``dtb`` file location.
