@@ -103,6 +103,7 @@ class Simulator:
         expected_execution_order: Optional[List[ExitEvent]] = None,
         max_ticks: Optional[int] = m5.MaxTick,
         id: Optional[int] = None,
+        outdir: Optional[str | Path] = None,
     ) -> None:
         """
         :param board: The board to be simulated.
@@ -195,6 +196,15 @@ class Simulator:
         # matters (say an exit event acts differently for the Nth time it is
         # hit)
         self._exit_event_id_log = {}
+
+        if outdir is None:
+            # Use the command line option from gem5 binary
+            from m5 import options
+
+            self._outdir = Path(options.outdir)
+        else:
+            self._outdir = Path(outdir)
+            self.override_outdir(self._outdir)
 
     def switch_processor(self) -> None:
         """
@@ -530,8 +540,9 @@ class Simulator:
         if not new_outdir.is_dir():
             raise Exception(f"'{new_outdir}' is not a directory")
 
-        options.outdir = str(new_outdir)
+        options.outdir = str(new_outdir)  # for backwards compatibility
         setOutputDir(options.outdir)
+        self._outdir = new_outdir
 
     def _instantiate(self) -> None:
         """
@@ -549,11 +560,32 @@ class Simulator:
             )
             assert self._root is not None
 
-            # m5.instantiate() takes a parameter specifying the path to the
+            if m5._simulate_module._instantiated:
+                raise Exception(
+                    "m5.instantiate() called before `Simulator.run`"
+                    " Use either legacy m5.simulate or stdlib."
+                )
+            m5._simulate_module._instantiated = True
+
+            m5._simulate_module._fix_all_objects(self._root)
+            m5._simulate_module._dump_configs(self._root, str(self._outdir))
+
+            # _create_cpp_objects() takes a parameter specifying the path to the
             # checkpoint directory. If the parameter is None, no checkpoint
             # will be restored.
             if self._board._checkpoint:
-                m5.instantiate(self._board._checkpoint.as_posix())
+                m5._simulate_module._create_cpp_objects(
+                    self._root, ckpt_dir=self._board._checkpoint.as_posix()
+                )
+            else:
+                m5._simulate_module._create_cpp_objects(
+                    self._root, ckpt_dir=None
+                )
+
+            m5._simulate_module._dump_configs_post_cpp(
+                self._root, str(self._outdir)
+            )
+
             self._instantiated = True
 
             # Let the board know that instantiate has been called so it can do
