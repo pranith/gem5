@@ -55,6 +55,8 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--workload",
+    type=str,
+    required=True,
     help="Enter the name of the workload you would like to run. You can browse"
     " through the available workloads and resources at "
     "https://resources.gem5.org",
@@ -62,6 +64,8 @@ parser.add_argument(
 
 parser.add_argument(
     "--version",
+    type=str,
+    default=None,
     help="Enter the workload version you would like to use. The latest version"
     " will be used if this is left blank.",
 )
