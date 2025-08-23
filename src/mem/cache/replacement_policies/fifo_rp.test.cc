@@ -90,7 +90,8 @@ class FIFORPVictimizationTestF : public FIFORPTestF
   public:
     // The number of entries is arbitrary. It does not need to be high, since
     // having more entries is not expected to increase coverage
-    FIFORPVictimizationTestF() : FIFORPTestF(), entries(4) {
+    FIFORPVictimizationTestF() : FIFORPTestF(), entries(4)
+    {
         for (auto &entry : entries) {
             entry.replacementData = rp->instantiateEntry();
             candidates.push_back(&entry);
@@ -109,14 +110,12 @@ TEST_F(FIFORPVictimizationTestF, GetVictimAllInvalid)
     ASSERT_EQ(rp->getVictim(candidates), expected_victim);
 
     // Since all candidates are already invalid, nothing changes if we
-    // invalidate all of them again
-    for (auto &entry : entries) {
-        rp->invalidate(entry.replacementData);
+    // invalidate all of them again. Do it with a reversed invalidation
+    // order to show that we always pick the front candidate, even if it
+    // was invalidated last
+    for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
+        rp->invalidate((*it)->replacementData);
     }
-    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
-
-    // Even if we invalidate the entry being selected for victimization last
-    rp->invalidate(expected_victim->replacementData);
     ASSERT_EQ(rp->getVictim(candidates), expected_victim);
 }
 
