@@ -38,8 +38,6 @@
 #ifndef __SIM_THERMAL_ENTITY_HH__
 #define __SIM_THERMAL_ENTITY_HH__
 
-#include "sim/sim_object.hh"
-
 namespace gem5
 {
 
