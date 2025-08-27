@@ -55,6 +55,8 @@ class ThermalEntity
     // Get the equation given a node and a step in seconds (assuming N nodes)
     virtual LinearEquation getEquation(ThermalNode *tn, unsigned n,
                                        double step) const = 0;
+
+    virtual ~ThermalEntity() = default;
 };
 
 } // namespace gem5
