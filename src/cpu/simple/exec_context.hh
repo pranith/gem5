@@ -83,9 +83,9 @@ class SimpleExecContext : public ExecContext
     struct ExecContextStats : public statistics::Group
     {
         ExecContextStats(BaseSimpleCPU *cpu, SimpleThread *thread)
-            : statistics::Group(cpu,
-                           csprintf("exec_context.thread_%i",
-                                    thread->threadId()).c_str()),
+            : statistics::Group(
+                  cpu, csprintf("exec_context.thread_%i", thread->threadId())
+                           .c_str()),
               ADD_STAT(numMatAluAccesses, statistics::units::Count::get(),
                        "Number of matrix alu accesses"),
               ADD_STAT(numMatInsts, statistics::units::Count::get(),
@@ -108,9 +108,8 @@ class SimpleExecContext : public ExecContext
                   &(cpu->executeStats[thread->threadId()]->numVecRegReads),
                   &(cpu->executeStats[thread->threadId()]->numVecRegReads),
                   &(cpu->executeStats[thread->threadId()]->numVecPredRegReads),
-                  &(cpu->executeStats[thread->threadId()]->numCCRegReads),
-                  &numMatRegReads
-              },
+                  &numMatRegReads,
+                  &(cpu->executeStats[thread->threadId()]->numCCRegReads)},
               numRegWrites{
                   &(cpu->executeStats[thread->threadId()]->numIntRegWrites),
                   &(cpu->executeStats[thread->threadId()]->numFpRegWrites),
@@ -118,9 +117,8 @@ class SimpleExecContext : public ExecContext
                   &(cpu->executeStats[thread->threadId()]->numVecRegWrites),
                   &(cpu->executeStats[thread->threadId()]
                         ->numVecPredRegWrites),
-                  &(cpu->executeStats[thread->threadId()]->numCCRegWrites),
-                  &numMatRegWrites
-              }
+                  &numMatRegWrites,
+                  &(cpu->executeStats[thread->threadId()]->numCCRegWrites)}
         {
             idleFraction = statistics::constant(1.0) - notIdleFraction;
             numIdleCycles = idleFraction * cpu->baseStats.numCycles;
