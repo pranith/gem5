@@ -183,6 +183,11 @@ BaseSimpleCPU::countCommitInst()
         // increment thread level and core level numInsts count
         commitStats[tid]->numInsts++;
         baseStats.numInsts++;
+        t_info.thread->threadStats.numInsts++;
+        executeStats[tid]->numInsts++;
+        if (!is_nop) {
+            commitStats[tid]->numInstsNotNOP++;
+        }
         if (in_user_mode) {
             commitStats[tid]->numUserInsts++;
         }
