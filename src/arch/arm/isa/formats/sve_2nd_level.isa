@@ -4537,6 +4537,43 @@ namespace Aarch64
         return new Unknown64(machInst);
     }
 
+    // C4.1.74.1 SVE2 crypto unary operations
+    StaticInstPtr
+    decodeSve2CryptUnaryOp(ExtMachInst machInst)
+    {
+        RegIndex zdn = (RegIndex) (uint8_t) bits(machInst, 4, 0);
+        uint8_t size_op = (bits(machInst, 23, 22) << 1) | bits(machInst, 10);
+
+        switch (size_op) {
+          case 0x0: // size=0 op=0
+            return new SveAesmc<uint8_t>(machInst, zdn, zdn, zdn);
+          case 0x1: // size=0 op=1
+            return new SveAesimc<uint8_t>(machInst, zdn, zdn, zdn);
+        }
+        return new Unknown64(machInst);
+    }  // decodeSve2CryptUnaryOp
+
+    // C4.1.74.2 SVE2 crypto destructive binary operations
+    StaticInstPtr
+    decodeSve2CryptBinOp(ExtMachInst machInst)
+    {
+        RegIndex zdn = (RegIndex) (uint8_t) bits(machInst, 4, 0);
+        RegIndex zm = (RegIndex) (uint8_t) bits(machInst, 9, 5);
+        uint8_t size_op_o2 = (bits(machInst, 23, 22) << 2) |
+                             (bits(machInst, 16) << 1) | bits(machInst, 10);
+
+        switch (size_op_o2) {
+          case 0x0:   // op=0 o2=0
+            return new SveAese<uint8_t>(machInst, zdn, zdn, zm);
+          case 0x1:   // op=0 o2=1
+            return new SveAesd<uint8_t>(machInst, zdn, zdn, zm);
+          case 0x2:   // op=1 o2=0
+            return new SveSm4e<uint32_t>(machInst, zdn, zdn, zm);
+        }
+        return new Unknown64(machInst);
+    }  // decodeSve2CryptBinOp
+
+    // C4.1.74.3 SVE2 crypto constructive binary operations
     StaticInstPtr
     decodeSve2CryptBinConstr(ExtMachInst machInst)
     {
@@ -4548,27 +4585,38 @@ namespace Aarch64
         uint8_t size_opc = (size << 1) | opc;
 
         switch (size_opc) {
+          case 0x0:
+            return new SveSm4ekey<uint32_t>(machInst, zd, zn, zm);
           case 0x1:
             return new SveRax1<uint64_t>(machInst, zd, zn, zm);
-          case 0x0:
-            // SM4EKEY
-          default:
-            return new Unknown64(machInst);
         }
+        return new Unknown64(machInst);
     }  // decodeSve2CryptBinConstr
 
-    // SVE2 Crypto Extensions
+    // C4.1.74 SVE2 Crypto Extensions
     StaticInstPtr
     decodeSve2Crypto(ExtMachInst machInst)
     {
+        uint8_t op0_op1 = bits(machInst, 20, 16);
         uint8_t op2 = bits(machInst, 12, 11);
+        uint8_t op3 = bits(machInst, 9, 5);
         switch (op2) {
-          case 0x2:
+          case 0x0: // op2=00x
+            switch (op0_op1) {
+              case 0x00:  // op0=000 op1=00 op2=00x
+                if (op3 == 0x0) { // op0=000 op1=00 op2=00x op3=00000
+                    return decodeSve2CryptUnaryOp(machInst);
+                }
+                break;
+              case 0x02: case 0x03:  // op0=000 op1=1x op2=00x
+                return decodeSve2CryptBinOp(machInst);
+            }
+            break;
+          case 0x2: // op2=10x
             return decodeSve2CryptBinConstr(machInst);
-          default:
-            return new Unknown64(machInst);
         }
-    }
+        return new Unknown64(machInst);
+    }  // decodeSve2Crypto
 
     // C4.1.76.1 SVE BFloat16 floating-point dot product (indexed)
     StaticInstPtr

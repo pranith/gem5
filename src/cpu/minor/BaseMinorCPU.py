@@ -217,6 +217,7 @@ class MinorDefaultFloatSimdFU(MinorFU):
             "SimdSha256Hash2",
             "SimdShaSigma2",
             "SimdShaSigma3",
+            "SimdSm4e",
             "Matrix",
             "MatrixMov",
             "MatrixOP",

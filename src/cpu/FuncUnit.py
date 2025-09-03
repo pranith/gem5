@@ -90,6 +90,7 @@ class OpClass(Enum):
         "SimdSha256Hash2",
         "SimdShaSigma2",
         "SimdShaSigma3",
+        "SimdSm4e",
         "SimdPredAlu",
         "Matrix",
         "MatrixMov",

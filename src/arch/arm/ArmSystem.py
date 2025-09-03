@@ -121,6 +121,10 @@ class ArmExtension(ScopedEnum):
         # Armv9.0
         "FEAT_SVE2",
         "FEAT_SVE_BitPerm",
+        "FEAT_SVE_AES",
+        "FEAT_SVE_SHA3",
+        "FEAT_SVE_SM4",
+        "FEAT_SVE_PMULL128",
         # Armv9.2
         "FEAT_SME",  # Optional in Armv9.2
         # Armv9.4

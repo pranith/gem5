@@ -6751,10 +6751,16 @@ ISA::initializeMiscRegMetadata()
             zfr0_el1.f32mm = release->has(ArmExtension::FEAT_F32MM) ? 1 : 0;
             zfr0_el1.f64mm = release->has(ArmExtension::FEAT_F64MM) ? 1 : 0;
             zfr0_el1.i8mm = release->has(ArmExtension::FEAT_I8MM) ? 1 : 0;
+            zfr0_el1.sm4 = release->has(ArmExtension::FEAT_SVE_SM4) ? 1 : 0;
+            zfr0_el1.sha3 = release->has(ArmExtension::FEAT_SVE_SHA3) ? 1 : 0;
             zfr0_el1.b16b16 =
                 release->has(ArmExtension::FEAT_SVE_B16B16) ? 0x1 : 0x0;
             zfr0_el1.bf16 = release->has(ArmExtension::FEAT_EBF16) ? 0x2 :
                           (release->has(ArmExtension::FEAT_BF16) ? 0x1 : 0x0);
+            zfr0_el1.aes =
+                release->has(ArmExtension::FEAT_SVE_PMULL128)
+                    ? 0x2
+                    : (release->has(ArmExtension::FEAT_SVE_AES) ? 0x1 : 0x0);
             zfr0_el1.sveVer =
                 release->has(ArmExtension::FEAT_SVE2p1)
                     ? 0x2
