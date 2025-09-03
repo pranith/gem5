@@ -205,7 +205,19 @@ class ExecContext : public gem5::ExecContext
     void *
     getWritableRegOperand(const StaticInst *si, int idx) override
     {
-        return thread.getWritableReg(si->destRegIdx(idx));
+        const RegId &reg = si->destRegIdx(idx);
+        int tid = thread.threadId();
+        switch (reg.classValue()) {
+            case VecRegClass:
+                cpu.executeStats[tid]->numVecRegWrites++;
+                break;
+            case VecPredRegClass:
+                cpu.executeStats[tid]->numVecPredRegWrites++;
+                break;
+            default:
+                break;
+        }
+        return thread.getWritableReg(reg);
     }
 
     void
