@@ -177,7 +177,7 @@ class EthernetAddr(ParamValue):
         return self.value
 
     @classmethod
-    def cxx_ini_parse(self, code, src, dest, ret):
+    def cxx_ini_parse(cls, code, src, dest, ret):
         code(f"{dest} = networking::EthAddr({src});")
         code(f"{ret} true;")
 
@@ -424,5 +424,5 @@ class NetworkBandwidth(float, ParamValue):
         code("#include <sstream>", add_once=True)
 
     @classmethod
-    def cxx_ini_parse(self, code, src, dest, ret):
+    def cxx_ini_parse(cls, code, src, dest, ret):
         code(f"{ret} (std::istringstream({src}) >> {dest}).eof();")
