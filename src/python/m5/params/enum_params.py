@@ -162,6 +162,8 @@ class Enum(ParamValue, metaclass=MetaEnum):
 
     def __eq__(self, __o: object) -> bool:
         """Checks if two enum values are the same."""
+        if not isinstance(__o, Enum):
+            return False
         return type(self) == type(__o) and self.value == __o.value
 
     def __hash__(self):
