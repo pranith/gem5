@@ -724,17 +724,6 @@ time_formats = [
 
 
 def parse_time(value):
-    from datetime import (
-        date,
-        datetime,
-    )
-    from time import (
-        gmtime,
-        strptime,
-        struct_time,
-        time,
-    )
-
     if isinstance(value, struct_time):
         return value
 
