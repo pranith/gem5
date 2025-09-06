@@ -47,6 +47,7 @@ from .enum_params import *
 from .network_params import *
 from .null_params import *
 from .param_types import *
+from .pin_params import *
 from .port_params import *
 from .power_params import *
 from .time_params import *
@@ -138,4 +139,13 @@ __all__ = [
     "Latency",
     "Frequency",
     "Clock",
+    # pin_params
+    "IntSourcePin",
+    "VectorIntSourcePin",
+    "IntSinkPin",
+    "VectorIntSinkPin",
+    "ResetRequestPort",
+    "ResetResponsePort",
+    "VectorResetRequestPort",
+    "VectorResetResponsePort",
 ]
