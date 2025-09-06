@@ -28,8 +28,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cassert>
-
 #include "mem/cache/replacement_policies/tree_plru_rp.hh"
 #include "params/TreePLRURP.hh"
 
@@ -37,21 +35,14 @@ class TreePLRUTestF : public ::testing::Test
 {
   public:
     std::shared_ptr<gem5::replacement_policy::TreePLRU> rp;
-    int num_leaves = 8;
+    int numLeaves = 8;
 
-    TreePLRUTestF()
+    TreePLRUTestF(int num_entries = 8)
     {
         gem5::TreePLRURPParams params;
         params.eventq_index = 0;
-        params.num_leaves = num_leaves;
-        rp = std::make_shared<gem5::replacement_policy::TreePLRU>(params);
-    }
-    TreePLRUTestF(int num_entries)
-    {
-        gem5::TreePLRURPParams params;
-        params.eventq_index = 0;
-        num_leaves = num_entries;
-        params.num_leaves = num_leaves;
+        numLeaves = num_entries;
+        params.num_leaves = numLeaves;
         rp = std::make_shared<gem5::replacement_policy::TreePLRU>(params);
     }
 };
@@ -64,11 +55,6 @@ TEST_F(TreePLRUTestF, InstantiatedEntry)
 
 /// Test that if there is one candidate and it is invalid, it will be
 /// the victim
-
-// I'm not sure that it makes sense to test this for TreePLRU.
-// Mostly just taken from the FIFO SimObject unit tests introduced in
-// https://github.com/gem5/gem5/pull/1977.
-
 TEST_F(TreePLRUTestF, GetVictim1Candidate)
 {
     gem5::ReplaceableEntry entry;
@@ -85,10 +71,10 @@ TEST_F(TreePLRUTestF, GetVictim1Candidate)
 class TreePLRUVictimizationTestF : public TreePLRUTestF
 {
   protected:
-    // The entries being victimized
+    /// The entries being victimized
     std::vector<gem5::ReplaceableEntry> entries;
 
-    // The entries, in candidate form
+    /// The entries, in candidate form
     gem5::ReplacementCandidates candidates;
 
   public:
@@ -100,28 +86,54 @@ class TreePLRUVictimizationTestF : public TreePLRUTestF
             candidates.push_back(&entry);
         }
     }
-    // We use 8 entries here
-    TreePLRUVictimizationTestF() : TreePLRUTestF(), entries(num_leaves)
-    {
-        instantiateAllEntries();
-    }
-    TreePLRUVictimizationTestF(int num_entries)
-        : TreePLRUTestF(num_entries), entries(num_leaves)
+
+    TreePLRUVictimizationTestF(int num_entries = 8)
+        : TreePLRUTestF(num_entries), entries(numLeaves)
     {
         instantiateAllEntries();
     }
 };
 
-// Test only resetting one entry
+/// Test that when all entries are invalid the first candidate will always be
+/// selected, regardless of the order of the invalidations. The order of
+/// invalidations of this test is reversed in comparison to the other test.
+TEST_F(TreePLRUVictimizationTestF, GetVictimAllInvalid2)
+{
+    auto expected_victim = &entries.front();
 
-// Test that if the entry at index 0 is the most recently used, the entry at
-// index 4 will be the victim.
-// The tree looks like this after candidate A is reset:
-//    ____1____
-//  __1__   __0__
-// _1_ _0_ _0_ _0_
-// A B C D E F G H
-// The tree points to candidate E as the victim.
+    // At this point all tree nodes should have values of 0, as no entries have
+    // ever been reset. The tree points toward the first entry.
+    ///    ____0____
+    ///  __0__   __0__
+    /// _0_ _0_ _0_ _0_
+    /// A B C D E F G H
+    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
+
+    // Since all candidates are already invalid, nothing changes if we
+    // invalidate all of them again.
+    for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
+        rp->invalidate((*it)->replacementData);
+    }
+    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
+}
+
+/// Test resetting no entries. The tree's nodes should all have values of 0,
+/// pointing toward entry A at index 0.
+TEST_F(TreePLRUVictimizationTestF, GetVictimNoReset)
+{
+    ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
+}
+
+/// Test only resetting one entry
+
+/// Test that if the entry at index 0 is the most recently used, the entry at
+/// index 4 will be the victim.
+/// The tree looks like this after candidate A is reset:
+///    ____1____
+///  __1__   __0__
+/// _1_ _0_ _0_ _0_
+/// A B C D E F G H
+/// The tree points to candidate E as the victim.
 
 TEST_F(TreePLRUVictimizationTestF, GetVictimSingleResetLeftmost)
 {
@@ -129,30 +141,57 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimSingleResetLeftmost)
     ASSERT_EQ(rp->getVictim(candidates), &entries[4]);
 }
 
-// Reset entry H and entry A will be victimized.
+/// Reset entry H and entry A will be victimized.
+/// The tree after reset:
+///    ____0____
+///  __0__   __0__
+/// _0_ _0_ _0_ _0_
+/// A B C D E F G H
+
 TEST_F(TreePLRUVictimizationTestF, GetVictimSingleResetRightmost)
 {
     rp->reset(entries[7].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
 }
 
-// Reset entry B and entry E will be victimized.
+/// Reset entry B and entry E will be victimized.
+/// The tree after reset:
+///    ____1____
+///  __1__   __0__
+/// _0_ _0_ _0_ _0_
+/// A B C D E F G H
+
 TEST_F(TreePLRUVictimizationTestF, GetVictimSingleResetMiddle)
 {
     rp->reset(entries[1].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[4]);
 }
 
-// Test resetting no entries. The tree's nodes should all have values of 0,
-// pointing toward entry A at index 0.
-
-TEST_F(TreePLRUVictimizationTestF, GetVictimNoReset)
-{
-    ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
-}
-
-// Entries A, B, E, and F are reset, in that order. The victimized entry
-// should be C at index 2.
+/// Entries A, B, E, and F are reset, in that order. The victimized entry
+/// should be C at index 2.
+/// The tree after resetting entry A
+///    ____1____
+///  __1__   __0__
+/// _1_ _0_ _0_ _0_
+/// A B C D E F G H
+///
+/// The tree after resetting entry B
+///    ____1____
+///  __1__   __0__
+/// _0_ _0_ _0_ _0_
+/// A B C D E F G H
+///
+/// The tree after resetting entry E
+///    ____0____
+///  __1__   __1__
+/// _0_ _0_ _1_ _0_
+/// A B C D E F G H
+///
+/// The tree after resetting entry F
+///    ____0____
+///  __1__   __1__
+/// _0_ _0_ _0_ _0_
+/// A B C D E F G H
 
 TEST_F(TreePLRUVictimizationTestF, GetVictimHalfReset)
 {
@@ -163,8 +202,8 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimHalfReset)
     ASSERT_EQ(rp->getVictim(candidates), &entries[2]);
 }
 
-// Reset all entries once, starting from the leftmost side of the tree. The
-// victimized entry should be A, as it was the least recently used.
+/// Reset all entries once, starting from the leftmost side of the tree. The
+/// victimized entry should be A.
 
 TEST_F(TreePLRUVictimizationTestF, GetVictimAllReset)
 {
@@ -175,9 +214,9 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimAllReset)
     ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
 }
 
-// Reset all entries twice, starting from the leftmost side, then from the
-// rightmost side. The victimized entry should be the rightmost entry,
-// H, at index 7.
+/// Reset all entries twice, starting from the leftmost side, then from the
+/// rightmost side. The victimized entry should be the rightmost entry,
+/// H, at index 7.
 
 TEST_F(TreePLRUVictimizationTestF, GetVictimAllTwiceReset)
 {
@@ -192,36 +231,33 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimAllTwiceReset)
     ASSERT_EQ(rp->getVictim(candidates), &entries[7]);
 }
 
-// Test that when there is at least a single invalid entry, it will be
-// selected during the victimization
-// Taken directly from the FIFO SimObject unit tests, introduced by
-// https://github.com/gem5/gem5/pull/1977
+/// Test that when there is at least a single invalid entry, it will be
+/// selected during the victimization
 
 TEST_F(TreePLRUVictimizationTestF, GetVictimOneInvalid)
 {
     for (auto &entry : entries) {
-        // Validate all entries to start from a clean state
+        /// Validate all entries to start from a clean state
         for (auto &entry : entries) {
             rp->reset(entry.replacementData);
         }
 
-        // Set one of the entries as invalid
+        /// Set one of the entries as invalid
         rp->invalidate(entry.replacementData);
 
         ASSERT_EQ(rp->getVictim(candidates), &entry);
     }
 }
 
+/// Instantiate enough entries to fill two trees, then check that making
+/// changes in one tree doesn't affect the other
 TEST_F(TreePLRUVictimizationTestF, TestTwoTrees)
 {
-    // Instantiate enough entries to fill two trees, then check that making
-    // changes in one tree doesn't affect the other
-
-    // we store entries from both trees in `entries`, so resize it to
-    // accomodate all entries
+    /// we store entries from both trees in `entries`, so resize it to
+    /// accomodate all entries
     entries.resize(16);
-    // ensure that the first `candidates` vector has the correct memory
-    // locations
+    /// ensure that the first `candidates` vector has the correct memory
+    /// locations
     for (int i = 0; i < 8; i++) {
         candidates[i] = &entries[i];
     }
@@ -232,14 +268,14 @@ TEST_F(TreePLRUVictimizationTestF, TestTwoTrees)
         second_candidates[i - 8] = &entries[i];
     }
 
-    // if the trees are separate (as they should be), then the victim entry
-    // should be entries[4]. If not, entries[8] will be selected.
+    /// if the trees are separate (as they should be), then the victim entry
+    /// should be entries[4]. If not, entries[8] will be selected.
     rp->reset(entries[0].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[4]);
     ASSERT_NE(rp->getVictim(candidates), &entries[8]);
 
-    // If the entries are all (incorrectly) in the same tree, then entries[7]
-    // will be selected.
+    /// If the entries are all (incorrectly) in the same tree, then entries[7]
+    /// will be selected.
     rp->reset(entries[8].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[4]);
     ASSERT_NE(rp->getVictim(candidates), &entries[7]);
@@ -250,21 +286,19 @@ TEST_F(TreePLRUVictimizationTestF, TestTwoTrees)
 
 TEST_F(TreePLRUVictimizationTestF, TestMixedResetInvalidate)
 {
-    // If the entry is correctly invalidated, the entry at index 5 will be
-    // selected.
-    // If nothing happens when invalidate is called, the entry at index 4 will
-    // be selected.
+    /// If the entry is correctly invalidated, the entry at index 5 will be
+    /// selected.
     rp->reset(entries[0].replacementData);
     rp->invalidate(entries[5].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[5]);
-    ASSERT_NE(rp->getVictim(candidates), &entries[4]);
 
+    /// Check that there aren't any issues with calling reset and invalidate
+    /// on the same entry
     rp->reset(entries[1].replacementData);
     rp->invalidate(entries[1].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[1]);
 }
 
-// Test the smallest tree size (2 leaves) and a large tree size (512 leaves)
 class SmallTreePLRUVictimizationTestF : public TreePLRUVictimizationTestF
 {
   public:
@@ -279,11 +313,11 @@ class LargeTreePLRUVictimizationTestF : public TreePLRUVictimizationTestF
 
 TEST_F(SmallTreePLRUVictimizationTestF, TestSmallTree)
 {
-    // check that the test has been set up correctly
+    /// check that the test has been set up correctly
     ASSERT_EQ(entries.size(), 2);
     ASSERT_EQ(candidates.size(), 2);
 
-    // check that resetting one entry will cause the other to be selected
+    /// check that resetting one entry will cause the other to be selected
     rp->reset(entries[0].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[1]);
 
@@ -293,14 +327,14 @@ TEST_F(SmallTreePLRUVictimizationTestF, TestSmallTree)
     rp->reset(entries[1].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
 
-    // check invalidate
+    /// check invalidate
     rp->invalidate(entries[1].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[1]);
 }
 
 TEST_F(LargeTreePLRUVictimizationTestF, TestLargeTree)
 {
-    // check that the test has been set up correctly
+    /// check that the test has been set up correctly
     ASSERT_EQ(entries.size(), 512);
     ASSERT_EQ(candidates.size(), 512);
 
@@ -310,9 +344,6 @@ TEST_F(LargeTreePLRUVictimizationTestF, TestLargeTree)
     rp->invalidate(entries[511].replacementData);
     ASSERT_EQ(rp->getVictim(candidates), &entries[511]);
 }
-
-// Taken directly from the FIFO SimObject unit tests, introduced by
-// https://github.com/gem5/gem5/pull/1977
 
 typedef TreePLRUTestF TreePLRUDeathTest;
 
@@ -335,4 +366,13 @@ TEST_F(TreePLRUDeathTest, NoCandidates)
 {
     gem5::ReplacementCandidates candidates;
     ASSERT_DEATH(rp->getVictim(candidates), "");
+}
+
+TEST_F(TreePLRUDeathTest, InvalidNumLeaves)
+{
+    gem5::TreePLRURPParams params;
+    params.eventq_index = 0;
+    params.num_leaves = 0;
+    ASSERT_ANY_THROW(
+        std::make_shared<gem5::replacement_policy::TreePLRU>(params));
 }
