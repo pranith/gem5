@@ -231,6 +231,30 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimAllTwiceReset)
     ASSERT_EQ(rp->getVictim(candidates), &entries[7]);
 }
 
+/// In the definition of the TreePLRU replacement policy, `reset()` has the
+/// same functionality as `touch()`, and calling `touch()` is the only thing
+/// `reset()` does. This unit test checks if `touch()` and `reset()` have the
+// same functionality.
+TEST_F(TreePLRUVictimizationTestF, CheckTouchResetSame)
+{
+    /// We touch/reset the same entries as in GetVictimHalfReset, but swap
+    /// out a varying number of the resets for touches. The victim should still
+    /// remain the same.
+    std::vector<int> indices{0, 1, 4, 5};
+    for (int i = 1; i < 4; i++) {
+        for (int j = 0; j < i; j++) {
+            rp->touch(entries[indices[j]].replacementData);
+        }
+        for (int j = i; j < 4; j++) {
+            rp->reset(entries[indices[j]].replacementData);
+        }
+        ASSERT_EQ(rp->getVictim(candidates), &entries[2]);
+        for (auto &entry : entries) {
+            rp->reset(entry.replacementData);
+        }
+    }
+}
+
 /// Test that when there is at least a single invalid entry, it will be
 /// selected during the victimization
 
