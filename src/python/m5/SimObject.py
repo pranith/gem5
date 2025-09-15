@@ -1421,7 +1421,7 @@ def isSimObjectOrSequence(value):
 
 
 def isRoot(obj):
-    from m5.objects import Root
+    from m5.objects.Root import Root
 
     return obj and obj is Root.getInstance()
 
