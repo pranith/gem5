@@ -653,3 +653,6 @@ class Simulator:
                                will be saved.
         """
         m5.checkpoint(str(checkpoint_dir))
+
+    def get_checkpoint_dir(self) -> Optional[Path]:
+        return self._board.get_checkpoint_dir()
