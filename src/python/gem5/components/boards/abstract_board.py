@@ -38,15 +38,17 @@ from typing import (
 )
 
 from m5.objects import (
-    AddrRange,
     ClockDomain,
     IOXBar,
     PciBus,
-    Port,
     Root,
     SrcClockDomain,
     System,
     VoltageDomain,
+)
+from m5.params import (
+    AddrRange,
+    Port,
 )
 
 from ...resources.resource import WorkloadResource

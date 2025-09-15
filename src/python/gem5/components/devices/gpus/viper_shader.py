@@ -30,7 +30,6 @@
 from typing import List
 
 from m5.objects import (
-    AddrRange,
     AMDGPUDevice,
     AMDGPUInterruptHandler,
     AMDGPUMemoryManager,
@@ -56,6 +55,7 @@ from m5.objects import (
     VegaTLBCoalescer,
     Wavefront,
 )
+from m5.params import AddrRange
 
 
 class ViperCU(ComputeUnit):

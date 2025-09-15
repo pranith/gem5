@@ -34,10 +34,12 @@ from typing import (
 
 from m5.objects import (
     AbstractMemory,
-    AddrRange,
     MemCtrl,
-    Port,
     SimpleMemory,
+)
+from m5.params import (
+    AddrRange,
+    Port,
 )
 from m5.util.convert import toMemorySize
 

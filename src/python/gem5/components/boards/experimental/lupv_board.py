@@ -29,7 +29,6 @@ from typing import List
 
 import m5
 from m5.objects import (
-    AddrRange,
     Bridge,
     Clint,
     CowDiskImage,
@@ -47,11 +46,14 @@ from m5.objects import (
     PciBus,
     Plic,
     PMAChecker,
-    Port,
     RawDiskImage,
     RiscvLinux,
     RiscvRTC,
     Terminal,
+)
+from m5.params import (
+    AddrRange,
+    Port,
 )
 from m5.util.fdthelper import (
     Fdt,
