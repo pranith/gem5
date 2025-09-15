@@ -33,6 +33,7 @@ from typing import (
 )
 
 from m5.objects import (
+    AbstractMemory,
     AddrRange,
     MemCtrl,
     Port,
@@ -84,6 +85,14 @@ class SingleChannelSimpleMemory(AbstractMemorySystem):
     @overrides(AbstractMemorySystem)
     def get_size(self) -> int:
         return self._size
+
+    @overrides(AbstractMemorySystem)
+    def get_uninterleaved_range(self) -> AddrRange:
+        return self.module.range
+
+    @overrides(AbstractMemorySystem)
+    def get_mem_interfaces(self) -> List[AbstractMemory]:
+        return [self.module]
 
     @overrides(AbstractMemorySystem)
     def set_memory_range(self, ranges: List[AddrRange]) -> None:
