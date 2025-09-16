@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "arch/generic/interrupts.hh"
+#include "arch/generic/mmu.hh"
 #include "base/statistics.hh"
 #include "debug/Mwait.hh"
 #include "dev/intpin.hh"
@@ -58,7 +59,6 @@
 #include "sim/probe/pmu.hh"
 #include "sim/probe/probe.hh"
 #include "sim/signal.hh"
-#include "sim/system.hh"
 
 namespace gem5
 {
@@ -67,6 +67,7 @@ class BaseCPU;
 struct BaseCPUParams;
 class CheckerCPU;
 class ThreadContext;
+class System;
 
 struct AddressMonitor
 {
@@ -322,11 +323,7 @@ class BaseCPU : public ClockedObject
     }
 
     /// Convert ContextID to threadID
-    ThreadID
-    contextToThread(ContextID cid)
-    {
-        return static_cast<ThreadID>(cid - threadContexts[0]->contextId());
-    }
+    ThreadID contextToThread(ContextID cid);
 
   public:
     PARAMS(BaseCPU);
