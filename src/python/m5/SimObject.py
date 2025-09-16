@@ -40,7 +40,6 @@
 
 import importlib
 import inspect
-import sys
 from functools import wraps
 from types import (
     FunctionType,
@@ -50,10 +49,6 @@ from types import (
 
 import m5
 from m5.citations import gem5_citations
-
-# Use the pyfdt and not the helper class, because the fdthelper
-# relies on the SimObject definition
-from m5.ext.pyfdt import pyfdt
 
 # There are a few things we need that aren't in params.__all__ since
 # normal users don't need them
