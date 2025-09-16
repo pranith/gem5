@@ -29,6 +29,7 @@ from abc import (
     ABCMeta,
     abstractmethod,
 )
+from pathlib import Path
 from typing import (
     List,
     Optional,
@@ -362,6 +363,9 @@ class AbstractBoard:
         CPU-side port for which coherent I/O (DMA) is issued.
         """
         raise NotImplementedError
+
+    def get_checkpoint_dir(self) -> Optional[Path]:
+        return self._checkpoint
 
     @abstractmethod
     def _setup_memory_ranges(self) -> None:

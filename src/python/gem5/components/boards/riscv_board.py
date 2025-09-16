@@ -49,6 +49,7 @@ from m5.objects import (
     RiscvBootloaderKernelWorkload,
     RiscvMmioVirtIO,
     RiscvRTC,
+    Root,
     VirtIOBlock,
     VirtIORng,
 )
@@ -547,7 +548,7 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         return "/dev/vda"
 
     @overrides(AbstractSystemBoard)
-    def _pre_instantiate(self, full_system: Optional[bool] = None):
+    def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         # This is a bit of a hack necessary to get the RiscDemoBoard working
         # At the time of writing the RiscvBoard does not support SE mode so
         # this branch looks pointless. However, the RiscvDemoBoard does and
@@ -577,7 +578,7 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 m5.options.outdir, "device.dtb"
             )
 
-        super()._pre_instantiate(full_system=full_system)
+        return super()._pre_instantiate(full_system=full_system)
 
     @overrides(KernelDiskWorkload)
     def _add_disk_to_board(self, disk_image: AbstractResource):

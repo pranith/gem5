@@ -52,6 +52,7 @@ if in_gem5:
     if defines.buildEnv["USE_SYSTEMC"]:
         from . import systemc
         from . import tlm
+    from . import simulate as _simulate_module
     from . import util
     from .event import *
     from .main import main
