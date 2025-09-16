@@ -1,4 +1,4 @@
-# Copyright 2022 Google, Inc.
+# Copyright 2019,2022 Google, Inc.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -23,10 +23,49 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from m5.params import (
+from .port_params import (
     Port,
     VectorPort,
 )
+
+INT_SOURCE_ROLE = "Int Source Pin"
+INT_SINK_ROLE = "Int Sink Pin"
+Port.compat(INT_SOURCE_ROLE, INT_SINK_ROLE)
+
+
+# A source pin generally represents a single pin which might connect to
+# multiple sinks.
+class IntSourcePin(VectorPort):
+    def __init__(self, desc):
+        super().__init__(INT_SOURCE_ROLE, desc, is_source=True)
+
+
+# A vector of source pins which might represent a bank of physical pins. Unlike
+# IntSourcePin, each source pin in VectorIntSourcePin can only connect to a
+# single sink pin. VectorIntSourcePin has the same definition as IntSourcePin
+# right now, but will likely be implemented differently in the future.
+# VectorIntSourcePin is defined as its own separate type to differentiate it
+# from IntSourcePin and make it clear to the user how it should be interpreted
+# and used.
+class VectorIntSourcePin(VectorPort):
+    def __init__(self, desc):
+        super().__init__(INT_SOURCE_ROLE, desc, is_source=True)
+
+
+# Each "physical" pin can be driven by a single source pin since there are no
+# provisions for resolving competing signals running to the same pin.
+class IntSinkPin(Port):
+    def __init__(self, desc):
+        super().__init__(INT_SINK_ROLE, desc)
+
+
+# A vector of sink pins represents a bank of physical pins. For instance, an
+# interrupt controller with many numbered input interrupts could represent them
+# as a VectorIntSinkPin.
+class VectorIntSinkPin(VectorPort):
+    def __init__(self, desc):
+        super().__init__(INT_SINK_ROLE, desc)
+
 
 RESET_REQUEST_ROLE = "Reset Request"
 RESET_RESPONSE_ROLE = "Reset Response"

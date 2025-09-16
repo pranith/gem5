@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Huawei International
+# Copyright (c) 2012-2014, 2017-2019, 2021, 2024-2025 Arm Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -9,6 +9,10 @@
 # terms below provided that you ensure that this notice is replicated
 # unmodified and in its entirety in all distributions of the software,
 # modified or unmodified, in source code or in binary form.
+#
+# Copyright (c) 2004-2006 The Regents of The University of Michigan
+# Copyright (c) 2010-2011 Advanced Micro Devices, Inc.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -33,50 +37,86 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from m5.objects.Device import BasicPioDevice
-from m5.params import *
-from m5.proxy import *
-from m5.util.fdthelper import *
+from ..util import Singleton
 
 
-class Clint(BasicPioDevice):
-    """
-    This implementation of CLINT is based on
-    the SiFive U54MC datasheet:
-    https://sifive.cdn.prismic.io/sifive/fab000f6-
-    0e07-48d0-9602-e437d5367806_sifive_U54MC_rtl_
-    full_20G1.03.00_manual.pdf
-    """
+# Special class for NULL pointers.  Note the special check in
+# make_param_value() above that lets these be assigned where a
+# SimObject is required.
+# only one copy of a particular node
+class NullSimObject(metaclass=Singleton):
+    _name = "Null"
 
-    type = "Clint"
-    cxx_header = "dev/riscv/clint.hh"
-    cxx_class = "gem5::Clint"
-    int_pin = IntSinkPin("Pin to receive RTC signal")
-    pio_size = Param.Addr(0xC000, "PIO Size")
-    num_threads = Param.Int("Number of threads in the system.")
-    reset = ResetResponsePort("Reset")
-    reset_mtimecmp = Param.Bool(
-        False, "Change mtimecmp to `mtimecmp_reset_value` when reset"
-    )
-    mtimecmp_reset_value = Param.UInt64(
-        0xFFFFFFFFFFFFFFFF, "mtimecmp reset value"
-    )
+    def __call__(cls):
+        return cls
 
-    def generateDeviceTree(self, state):
-        node = self.generateBasicPioDeviceNode(
-            state, "clint", self.pio_addr, self.pio_size
-        )
+    def _instantiate(self, parent=None, path=""):
+        pass
 
-        cpus = self.system.unproxy(self).cpu
-        int_extended = list()
-        for cpu in cpus:
-            phandle = state.phandle(cpu)
-            int_extended.append(phandle)
-            int_extended.append(0x3)
-            int_extended.append(phandle)
-            int_extended.append(0x7)
+    def ini_str(self):
+        return "Null"
 
-        node.append(FdtPropertyWords("interrupts-extended", int_extended))
-        node.appendCompatible(["riscv,clint0"])
+    def unproxy(self, base):
+        return self
 
-        yield node
+    def set_path(self, parent, name):
+        pass
+
+    def set_parent(self, parent, name):
+        pass
+
+    def clear_parent(self, old_parent):
+        pass
+
+    def descendants(self):
+        return
+        yield None
+
+    def get_config_as_dict(self):
+        return {}
+
+    def __str__(self):
+        return self._name
+
+    def config_value(self):
+        return None
+
+    def getValue(self):
+        return None
+
+
+# The only instance you'll ever need...
+NULL = NullSimObject()
+
+
+def isNullPointer(value):
+    return isinstance(value, NullSimObject)
+
+
+class NullOptT(metaclass=Singleton):
+    _name = "NullOpt"
+
+    def __call__(cls):
+        return cls
+
+    def ini_str(self):
+        return "NullOpt"
+
+    def unproxy(self, base):
+        return self
+
+    def __str__(self):
+        return self._name
+
+    def config_value(self):
+        return None
+
+    def getValue(self):
+        return None
+
+
+NullOpt = NullOptT()
+
+
+def isNullOpt(value):
+    return isinstance(value, NullOptT)
