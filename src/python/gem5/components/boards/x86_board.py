@@ -31,8 +31,6 @@ from typing import (
 )
 
 from m5.objects import (
-    Addr,
-    AddrRange,
     BaseXBar,
     Bridge,
     CowDiskImage,
@@ -40,7 +38,6 @@ from m5.objects import (
     IOXBar,
     Pc,
     PciBus,
-    Port,
     RawDiskImage,
     X86ACPIMadt,
     X86ACPIMadtIntSourceOverride,
@@ -54,6 +51,11 @@ from m5.objects import (
     X86IntelMPIOIntAssignment,
     X86IntelMPProcessor,
     X86SMBiosBiosInformation,
+)
+from m5.params import (
+    Addr,
+    AddrRange,
+    Port,
 )
 from m5.util.convert import toMemorySize
 

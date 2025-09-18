@@ -33,7 +33,6 @@ from typing import (
 
 import m5
 from m5.objects import (
-    AddrRange,
     BadAddr,
     Bridge,
     CowDiskImage,
@@ -44,7 +43,6 @@ from m5.objects import (
     IOXBar,
     PciBus,
     PMAChecker,
-    Port,
     RawDiskImage,
     RiscvBootloaderKernelWorkload,
     RiscvMmioVirtIO,
@@ -52,6 +50,10 @@ from m5.objects import (
     Root,
     VirtIOBlock,
     VirtIORng,
+)
+from m5.params import (
+    AddrRange,
+    Port,
 )
 from m5.util.fdthelper import (
     Fdt,

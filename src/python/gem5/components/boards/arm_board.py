@@ -35,7 +35,6 @@ from typing import (
 
 import m5
 from m5.objects import (
-    AddrRange,
     ArmDefaultRelease,
     ArmFsLinux,
     ArmRelease,
@@ -47,7 +46,6 @@ from m5.objects import (
     IOXBar,
     PciBus,
     PciVirtIO,
-    Port,
     RawDiskImage,
     Root,
     SimObject,
@@ -59,6 +57,10 @@ from m5.objects import (
     VirtIOBlock,
     VncServer,
     VoltageDomain,
+)
+from m5.params import (
+    AddrRange,
+    Port,
 )
 
 from ...isas import ISA

@@ -38,9 +38,12 @@ from typing import (
 
 from m5.objects import (
     AbstractMemory,
-    AddrRange,
     DRAMInterface,
     HBMCtrl,
+    MemInterface,
+)
+from m5.params import (
+    AddrRange,
     Port,
 )
 
