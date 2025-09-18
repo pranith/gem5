@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 The University of Edinburgh
+ * Copyright (c) 2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -135,6 +136,11 @@ class FetchDirectedPrefetcher : public Base
         /** The time when the prefetch is ready to be sent to the cache. */
         Tick readyTime;
 
+        /** Marks a Prefetch Request as canceled if notifyFTQRemove was
+         * called during translation. In this case the prefetch will not
+         * proceed to the prefetch queue. */
+        bool canceled;
+
         bool
         operator==(const int &a) const
         {
@@ -153,6 +159,18 @@ class FetchDirectedPrefetcher : public Base
         void
         markDelayed() override
         {}
+
+        void
+        markCanceled()
+        {
+            canceled = true;
+        }
+
+        bool
+        isCanceled() const
+        {
+            return canceled;
+        }
     };
 
     /** The prefetch queue */

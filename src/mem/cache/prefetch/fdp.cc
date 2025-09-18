@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 The University of Edinburgh
+ * Copyright (c) 2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -109,8 +110,22 @@ FetchDirectedPrefetcher::notifyFTQRemove(const o3::FetchTargetPtr &ft)
     if (!squashPrefetches) {
         return;
     }
-    // Remove the prefetch or translation request that belong too this
-    // fetch target. Start from the back.
+
+    // If the FT represents an in-flight translation, mark it as
+    // canceled. This will block it from progressing to the `pfq` when
+    // translation is complete. We cannot simply remove the FT from
+    // the `translationq` as the asynchronous `translationComplete`
+    // callback assumes the `translationq` still contains the entry.
+    for (auto &pr : translationq) {
+        if (pr.ftn == ft->ftNum()) {
+            pr.markCanceled();
+            stats.pfSquashed++;
+            return;
+        }
+    }
+
+    // Otherwise, remove the prefetch request that belongs to this
+    // fetch target.
     for (auto it = pfq.begin(); it != pfq.end(); it++) {
         if (it->ftn == ft->ftNum()) {
             pfq.erase(it);
@@ -141,7 +156,11 @@ FetchDirectedPrefetcher::translationComplete(PrefetchRequest *pfr, bool failed)
         DPRINTF(HWPrefetch, "Translation of %#x succeeded\n", it->addr);
         stats.translationSuccess++;
 
-        if (it->req->isUncacheable()) {
+        if (it->isCanceled()) {
+            DPRINTF(HWPrefetch,
+                    "Drop Packet. Canceled by notifyFTQRemove during "
+                    "translation.\n");
+        } else if (it->req->isUncacheable()) {
             DPRINTF(HWPrefetch, "Drop uncacheable requests.\n");
         } else if (cacheSnoop && cache &&
                    (cache->inCache(it->req->getPaddr(), it->req->isSecure()) ||
@@ -199,7 +218,8 @@ FetchDirectedPrefetcher::PrefetchRequest::PrefetchRequest(
       ftn(_ftn),
       req(nullptr),
       pkt(nullptr),
-      readyTime(MaxTick)
+      readyTime(MaxTick),
+      canceled(false)
 {
     req = std::make_shared<Request>(addr, owner.blkSize, Request::INST_FETCH,
                                     owner.requestorId, addr,
