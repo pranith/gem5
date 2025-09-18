@@ -39,14 +39,12 @@ from typing import (
 )
 
 import m5
-import m5.options
-import m5.ticks
+from m5 import options as m5_options
 from m5.ext.pystats.simstat import SimStat
 from m5.stats import addStatVisitor
 from m5.util import warn
 
-from gem5.components.boards.abstract_board import AbstractBoard
-
+from ..components.boards.abstract_board import AbstractBoard
 from ..resources.resource import WorkloadResource
 from .exit_event import ExitEvent
 from .exit_handler import (
@@ -509,7 +507,7 @@ class Simulator:
         Show exit event messages. This will print the exit event messages to
         the console.
         """
-        m5.options.show_exit_event_messages = True
+        m5_options.show_exit_event_messages = True
 
     def override_outdir(self, new_outdir: Path) -> None:
         """This function can be used to override the output directory locatiomn
@@ -642,7 +640,7 @@ class Simulator:
                 exit_event_hypercall_id
             ](self._last_exit_event.getPayload())
 
-            if m5.options.show_exit_event_messages:
+            if m5_options.show_exit_event_messages:
                 print(
                     f"Exit event: {exit_handler.get_handler_description()} called at tick {self.get_current_tick()}"
                 )

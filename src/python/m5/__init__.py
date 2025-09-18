@@ -30,10 +30,10 @@
 
 try:
     # Try to import a native module
-    import _m5.core
+    from _m5 import core
 
     # Try to grab something from it in case demandimport is being used
-    _m5.core.curTick
+    core.curTick
     in_gem5 = True
 except ImportError:
     # The import failed, we're being called from the build system
