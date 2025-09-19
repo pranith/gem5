@@ -1143,6 +1143,8 @@ TableWalker::processWalkAArch64()
     currState->longDesc.physAddrRange = _physAddrRange;
     currState->longDesc.isStage2 = isStage2;
 
+    assert(start_lookup_level < LookupLevel::Num_ArmLookupLevel);
+
     fetchDescriptor(desc_addr, currState->longDesc,
                     sizeof(uint64_t), flag, start_lookup_level,
                     LongDescEventByLevel[start_lookup_level],
