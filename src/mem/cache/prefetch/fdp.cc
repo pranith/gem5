@@ -60,7 +60,7 @@ FetchDirectedPrefetcher::FetchDirectedPrefetcher(
       latency(cyclesToTicks(p.latency)),
       pfqSize(p.pfq_size),
       tqSize(p.tq_size),
-      cacheSnoop(true),
+      cacheSnoop(p.cache_snoop),
       stats(this, p.pfq_size, p.tq_size)
 {}
 
