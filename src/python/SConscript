@@ -79,6 +79,8 @@ PySource('gem5.components.cachehierarchies.chi.nodes',
 PySource('gem5.components.cachehierarchies.chi.nodes',
     'gem5/components/cachehierarchies/chi/nodes/l1_cache.py')
 PySource('gem5.components.cachehierarchies.chi.nodes',
+    'gem5/components/cachehierarchies/chi/nodes/l2_cache.py')
+PySource('gem5.components.cachehierarchies.chi.nodes',
     'gem5/components/cachehierarchies/chi/nodes/memory_controller.py')
 PySource('gem5.components.cachehierarchies.classic',
     'gem5/components/cachehierarchies/classic/__init__.py')
