@@ -77,7 +77,7 @@ PySource('gem5.components.cachehierarchies.chi.nodes',
 PySource('gem5.components.cachehierarchies.chi.nodes',
     'gem5/components/cachehierarchies/chi/nodes/dma_requestor.py')
 PySource('gem5.components.cachehierarchies.chi.nodes',
-    'gem5/components/cachehierarchies/chi/nodes/private_l1_moesi_cache.py')
+    'gem5/components/cachehierarchies/chi/nodes/l1_cache.py')
 PySource('gem5.components.cachehierarchies.chi.nodes',
     'gem5/components/cachehierarchies/chi/nodes/memory_controller.py')
 PySource('gem5.components.cachehierarchies.classic',
