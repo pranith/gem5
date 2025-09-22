@@ -1324,6 +1324,8 @@ Commit::updateComInstStats(const DynInstPtr &inst)
     const ThreadID tid = inst->threadNumber;
     const bool in_user_mode = cpu->inUserMode(tid);
 
+    // Count number of instructions, ensure we don't
+    // double count Microops as insts.
     if (!inst->isMicroop() || inst->isLastMicroop()) {
         cpu->commitStats[tid]->numInsts++;
         cpu->baseStats.numInsts++;
