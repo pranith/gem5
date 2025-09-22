@@ -42,12 +42,14 @@ from m5.objects import (
     HiFive,
     IGbE_e1000,
     IOXBar,
+    PciBus,
     PMAChecker,
     Port,
     RawDiskImage,
     RiscvBootloaderKernelWorkload,
     RiscvMmioVirtIO,
     RiscvRTC,
+    Root,
     VirtIOBlock,
     VirtIORng,
 )
@@ -194,20 +196,33 @@ class RISCVMatchedBoard(
         """Connect the I/O devices to the I/O bus in FS mode."""
         if self._fs:
             # Add PCI
-            self.platform.pci_host.pio = self.iobus.mem_side_ports
+            self.iobus.mem_side_ports = (
+                self.platform.pci_host.up_response_port()
+            )
+            self.iobus.cpu_side_ports = (
+                self.platform.pci_host.up_request_port()
+            )
+            self.platform.pci_bus.default = (
+                self.platform.pci_host.down_response_port()
+            )
+            self.platform.pci_bus.cpu_side_ports = (
+                self.platform.pci_host.down_request_port()
+            )
+            self.platform.pci_bus.config_error_port = (
+                self.platform.pci_host.config_error.pio
+            )
 
             # Add Ethernet card
             self.ethernet = IGbE_e1000(
-                pci_bus=0,
                 pci_dev=0,
                 pci_func=0,
                 InterruptLine=1,
                 InterruptPin=1,
             )
 
-            self.ethernet.host = self.platform.pci_host
-            self.ethernet.pio = self.iobus.mem_side_ports
-            self.ethernet.dma = self.iobus.cpu_side_ports
+            self.ethernet.upstream = self.platform.pci_host
+            self.ethernet.pio = self.platform.pci_bus.mem_side_ports
+            self.ethernet.dma = self.platform.pci_bus.cpu_side_ports
 
             if self.get_cache_hierarchy().is_ruby():
                 for device in self._off_chip_devices + self._on_chip_devices:
@@ -279,6 +294,20 @@ class RISCVMatchedBoard(
             )
 
     @overrides(AbstractSystemBoard)
+    def has_pci_bus(self) -> bool:
+        return self.is_fullsystem()
+
+    @overrides(AbstractSystemBoard)
+    def get_pci_bus(self) -> PciBus:
+        if self.has_pci_bus():
+            return self.platform.pci_bus
+        else:
+            raise Exception(
+                "Cannot execute `get_pci_bus()`: Board does not have a PCI "
+                "bus to return. Use `has_pci_bus()` to check this."
+            )
+
+    @overrides(AbstractSystemBoard)
     def has_coherent_io(self) -> bool:
         return self._fs
 
@@ -313,7 +342,7 @@ class RISCVMatchedBoard(
             memory.set_memory_range(self.mem_ranges)
 
     @overrides(AbstractSystemBoard)
-    def _pre_instantiate(self, full_system: Optional[bool] = None) -> None:
+    def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         if self._fs:
             if len(self._bootloader) > 0:
                 self.workload.bootloader_addr = 0x80000000
@@ -326,7 +355,7 @@ class RISCVMatchedBoard(
                 self.workload.kernel_addr = 0x80000000
                 self.workload.entry_point = 0x80000000
 
-        super()._pre_instantiate(full_system=full_system)
+        return super()._pre_instantiate(full_system=full_system)
 
     def generate_device_tree(self, outdir: str) -> None:
         """Creates the ``dtb`` and ``dts`` files.
@@ -357,7 +386,7 @@ class RISCVMatchedBoard(
         node = FdtNode(f"chosen")
         bootargs = self.workload.command_line
         node.append(FdtPropertyStrings("bootargs", [bootargs]))
-        node.append(FdtPropertyStrings("stdout-path", ["/uart@10000000"]))
+        node.append(FdtPropertyStrings("stdout-path", ["/soc/uart@10000000"]))
         root.append(node)
 
         # See Documentation/devicetree/bindings/riscv/cpus.txt for details.

@@ -508,6 +508,19 @@ ISA::readMiscReg(RegIndex idx)
 
       case MISCREG_CPSR_Q:
         panic("shouldn't be reading this register seperately\n");
+      case MISCREG_FPCR:
+        {
+          FPCR fpcr = readMiscRegNoEffect(MISCREG_FPCR);
+          if (!release->has(ArmExtension::FEAT_AFP)) {
+              fpcr.nep = 0;
+              fpcr.ah = 0;
+              fpcr.fiz = 0;
+          }
+          if (!release->has(ArmExtension::FEAT_EBF16)) {
+              fpcr.ebf = 0;
+          }
+          return fpcr;
+        }
       case MISCREG_FPSCR:
         {
           FPCR fpcr = readMiscRegNoEffect(MISCREG_FPCR);
@@ -643,8 +656,15 @@ ISA::readMiscReg(RegIndex idx)
       // Generic Timer registers
       case MISCREG_CNTFRQ ... MISCREG_CNTVOFF:
       case MISCREG_CNTFRQ_EL0 ... MISCREG_CNTVOFF_EL2:
-        return getGenericTimer().readMiscReg(idx);
-
+          if (FullSystem) {
+              return getGenericTimer().readMiscReg(idx);
+          } else {
+              warn("Call to %s attempts to access a system timer which is "
+                   "inaccessible within SE mode. Divergent behaviour is "
+                   "possible.",
+                   miscRegName[idx]);
+              return 0;
+          }
       case MISCREG_ICC_AP0R0 ... MISCREG_ICH_LRC15:
       case MISCREG_ICC_PMR_EL1 ... MISCREG_ICC_IGRPEN1_EL3:
       case MISCREG_ICH_AP0R0_EL2 ... MISCREG_ICH_LR15_EL2:
@@ -858,6 +878,20 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
             warn("Calling DC ZVA! Not Implemeted! Expect WEIRD results\n");
             return;
 
+          case MISCREG_FPCR:
+            {
+                FPCR fpcr_val = (FPCR)newVal;
+                if (!release->has(ArmExtension::FEAT_AFP)) {
+                    fpcr_val.nep = 0;
+                    fpcr_val.ah = 0;
+                    fpcr_val.fiz = 0;
+                }
+                if (!release->has(ArmExtension::FEAT_EBF16)) {
+                    fpcr_val.ebf = 0;
+                }
+                setMiscRegNoEffect(MISCREG_FPCR, fpcr_val);
+            }
+            break;
           case MISCREG_FPSCR:
             tc->getDecoderPtr()->as<Decoder>().setContext(newVal);
             {

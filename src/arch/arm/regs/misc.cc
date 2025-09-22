@@ -1438,6 +1438,9 @@ Fault
 faultFgtEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = EL2Enabled(tc) && hcr.e2h && hcr.tge;
     if (fgtEnabled(tc) && !in_host &&
@@ -1890,6 +1893,9 @@ Fault
 faultCtrEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
      const SCTLR sctlr = tc->readMiscReg(MISCREG_SCTLR_EL1);
      const SCTLR sctlr2 = tc->readMiscReg(MISCREG_SCTLR_EL2);
      const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
@@ -1917,6 +1923,9 @@ Fault
 faultMdccsrEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const DBGDS32 mdscr = tc->readMiscReg(MISCREG_MDSCR_EL1);
     const HDCR mdcr_el2 = tc->readMiscReg(MISCREG_MDCR_EL2);
     const HDCR mdcr_el3 = tc->readMiscReg(MISCREG_MDCR_EL3);
@@ -2441,6 +2450,9 @@ Fault
 faultGenericTimerEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const bool el2_enabled = EL2Enabled(tc);
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = el2_enabled && hcr.e2h && hcr.tge;
@@ -2462,6 +2474,9 @@ Fault
 faultCntpctEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const bool el2_enabled = EL2Enabled(tc);
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = el2_enabled && hcr.e2h && hcr.tge;
@@ -2508,6 +2523,9 @@ Fault
 faultCntvctEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const bool el2_enabled = EL2Enabled(tc);
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = el2_enabled && hcr.e2h && hcr.tge;
@@ -2544,6 +2562,9 @@ Fault
 faultCntpCtlEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const bool el2_enabled = EL2Enabled(tc);
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = el2_enabled && hcr.e2h && hcr.tge;
@@ -2591,6 +2612,9 @@ Fault
 faultCntvCtlEL0(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
 {
+    if (!FullSystem) {
+        return NoFault;
+    }
     const bool el2_enabled = EL2Enabled(tc);
     const HCR hcr = tc->readMiscReg(MISCREG_HCR_EL2);
     const bool in_host = el2_enabled && hcr.e2h && hcr.tge;
@@ -3579,6 +3603,7 @@ ISA::initializeMiscRegMetadata()
         isar6.jscvt = release->has(ArmExtension::FEAT_JSCVT) ? 0x1 : 0x0;
         isar6.fhm = release->has(ArmExtension::FEAT_FP16) ? 0x1 :
                     (release->has(ArmExtension::FEAT_FHM) ? 0x1 : 0x0);
+        isar6.bf16 = release->has(ArmExtension::FEAT_AA32BF16) ? 0x1 : 0x0;
         return isar6;
       }())
       .allPrivileges().exceptUserMode().writes(0);
@@ -4989,6 +5014,8 @@ ISA::initializeMiscRegMetadata()
           isar1_el1.gpa = release->has(ArmExtension::FEAT_PAuth) ? 0x1 : 0x0;
           isar1_el1.frintts =
               release->has(ArmExtension::FEAT_FRINTTS) ? 0x1 : 0x0;
+          isar1_el1.bf16 = release->has(ArmExtension::FEAT_EBF16) ? 0x2 :
+                           (release->has(ArmExtension::FEAT_BF16) ? 0x1 : 0x0);
           return isar1_el1;
       }())
       .faultRead(EL0, faultIdst)
@@ -5013,6 +5040,7 @@ ISA::initializeMiscRegMetadata()
           mmfr1_el1.hpds = release->has(ArmExtension::FEAT_HPDS) ? 0x1 : 0x0;
           mmfr1_el1.pan = release->has(ArmExtension::FEAT_PAN) ? 0x1 : 0x0;
           mmfr1_el1.hcx = release->has(ArmExtension::FEAT_HCX) ? 0x1 : 0x0;
+          mmfr1_el1.afp = release->has(ArmExtension::FEAT_AFP) ? 0x1 : 0x0;
           return mmfr1_el1;
       }())
       .faultRead(EL0, faultIdst)
@@ -6723,6 +6751,8 @@ ISA::initializeMiscRegMetadata()
             zfr0_el1.f32mm = release->has(ArmExtension::FEAT_F32MM) ? 1 : 0;
             zfr0_el1.f64mm = release->has(ArmExtension::FEAT_F64MM) ? 1 : 0;
             zfr0_el1.i8mm = release->has(ArmExtension::FEAT_I8MM) ? 1 : 0;
+            zfr0_el1.bf16 = release->has(ArmExtension::FEAT_EBF16) ? 0x2 :
+                          (release->has(ArmExtension::FEAT_BF16) ? 0x1 : 0x0);
             return zfr0_el1;
         }())
         .faultRead(EL0, faultIdst)

@@ -109,6 +109,7 @@
 #include "sim/syscall_desc.hh"
 #include "sim/syscall_emul_buf.hh"
 #include "sim/syscall_return.hh"
+#include "sim/system.hh"
 
 #if defined(__APPLE__) && defined(__MACH__) && !defined(CMSG_ALIGN)
 #define CMSG_ALIGN(len) (((len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
@@ -140,6 +141,10 @@ SyscallReturn ignoreFunc(SyscallDesc *desc, ThreadContext *tc);
 /// Like above, but only prints a warning once per syscall desc it's used with.
 SyscallReturn
 ignoreWarnOnceFunc(SyscallDesc *desc, ThreadContext *tc);
+
+/// Handler for unimplemented syscalls that return -ENOSYS to the target
+/// program.
+SyscallReturn ignoreWithEnosysFunc(SyscallDesc *desc, ThreadContext *tc);
 
 /// Target exit() handler: terminate current context.
 SyscallReturn exitFunc(SyscallDesc *desc, ThreadContext *tc, int status);

@@ -237,6 +237,12 @@ BaseCPU::~BaseCPU()
 {
 }
 
+ThreadID
+BaseCPU::contextToThread(ContextID cid)
+{
+    return static_cast<ThreadID>(cid - threadContexts[0]->contextId());
+}
+
 void
 BaseCPU::postInterrupt(ThreadID tid, int int_num, int index)
 {
