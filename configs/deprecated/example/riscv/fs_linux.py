@@ -182,7 +182,7 @@ np = args.num_cpus
 
 # ---------------------------- Setup System ---------------------------- #
 # Default Setup
-system = System()
+system = RiscvSystem()
 mdesc = SysConfig(
     disks=args.disk_image,
     rootdev=args.root_device,

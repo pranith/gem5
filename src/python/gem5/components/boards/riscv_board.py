@@ -47,7 +47,9 @@ from m5.objects import (
     RiscvBootloaderKernelWorkload,
     RiscvMmioVirtIO,
     RiscvRTC,
+    RiscvSystem,
     Root,
+    SimObject,
     VirtIOBlock,
     VirtIORng,
 )
@@ -71,11 +73,13 @@ from ...utils.override import overrides
 from ..cachehierarchies.abstract_cache_hierarchy import AbstractCacheHierarchy
 from ..memory.abstract_memory_system import AbstractMemorySystem
 from ..processors.abstract_processor import AbstractProcessor
-from .abstract_system_board import AbstractSystemBoard
+from .abstract_board import AbstractBoard
 from .kernel_disk_workload import KernelDiskWorkload
 
 
-class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
+class RiscvBoard(
+    RiscvSystem, AbstractBoard, KernelDiskWorkload, SEBinaryWorkload
+):
     """
     A board capable of full system simulation for RISC-V.
 
@@ -94,7 +98,10 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
         memory: AbstractMemorySystem,
         cache_hierarchy: AbstractCacheHierarchy,
     ) -> None:
-        super().__init__(clk_freq, processor, memory, cache_hierarchy)
+        super().__init__()
+        AbstractBoard.__init__(
+            self, clk_freq, processor, memory, cache_hierarchy
+        )
 
         if processor.get_isa() != ISA.RISCV:
             raise Exception(
@@ -103,7 +110,7 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 f"'{processor.get_isa().name}'."
             )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def _setup_board(self) -> None:
         if self.is_fullsystem():
             self.workload = RiscvBootloaderKernelWorkload()
@@ -222,22 +229,22 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 uncacheable=uncacheable_range
             )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def has_dma_ports(self) -> bool:
         return False
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def get_dma_ports(self) -> List[Port]:
         raise Exception(
             "Cannot execute `get_dma_ports()`: Board does not have DMA ports "
             "to return. Use `has_dma_ports()` to check this."
         )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def has_io_bus(self) -> bool:
         return self.is_fullsystem()
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def get_io_bus(self) -> IOXBar:
         if self.has_io_bus():
             return self.iobus
@@ -247,11 +254,11 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 "bus to return. Use `has_io_bus()` to check this."
             )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def has_pci_bus(self) -> bool:
         return self.is_fullsystem()
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def get_pci_bus(self) -> PciBus:
         if self.has_pci_bus():
             return self.platform.pci_bus
@@ -261,11 +268,11 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 "bus to return. Use `has_pci_bus()` to check this."
             )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def has_coherent_io(self) -> bool:
         return self.is_fullsystem()
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def get_mem_side_coherent_io_port(self) -> Port:
         if self.has_coherent_io():
             return self.iobus.mem_side_ports
@@ -276,7 +283,7 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
                 "check this."
             )
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def _setup_memory_ranges(self):
         memory = self.get_memory()
         mem_size = memory.get_size()
@@ -549,7 +556,7 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
     def get_disk_device(self):
         return "/dev/vda"
 
-    @overrides(AbstractSystemBoard)
+    @overrides(AbstractBoard)
     def _pre_instantiate(self, full_system: Optional[bool] = None) -> Root:
         # This is a bit of a hack necessary to get the RiscDemoBoard working
         # At the time of writing the RiscvBoard does not support SE mode so
@@ -604,3 +611,12 @@ class RiscvBoard(AbstractSystemBoard, KernelDiskWorkload, SEBinaryWorkload):
             "disk_device={disk_device}",
             "rw",
         ]
+
+    @overrides(SimObject)
+    def createCCObject(self):
+        """We override this function as it is called in ``m5.instantiate``. This
+        means we can insert a check to ensure the ``_connect_things`` function
+        has been run.
+        """
+        super()._connect_things_check()
+        super().createCCObject()
