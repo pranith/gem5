@@ -151,24 +151,24 @@ class ExecContext : public gem5::ExecContext
         if (reg.is(InvalidRegClass))
             return 0;
         switch (reg.classValue()) {
-                case IntRegClass:
-                  cpu.executeStats[tid]->numIntRegReads++;
-                  break;
-                case FloatRegClass:
-                  cpu.executeStats[tid]->numFpRegReads++;
-                  break;
-                case CCRegClass:
-                  cpu.executeStats[tid]->numCCRegReads++;
-                  break;
-                case VecRegClass:
-                case VecElemClass:
-                  cpu.executeStats[tid]->numVecRegReads++;
-                  break;
-                case VecPredRegClass:
-                  cpu.executeStats[tid]->numVecPredRegReads++;
-                  break;
-                default:
-                  break;
+            case IntRegClass:
+                cpu.executeStats[tid]->numIntRegReads++;
+                break;
+            case FloatRegClass:
+                cpu.executeStats[tid]->numFpRegReads++;
+                break;
+            case CCRegClass:
+                cpu.executeStats[tid]->numCCRegReads++;
+                break;
+            case VecRegClass:
+            case VecElemClass:
+                cpu.executeStats[tid]->numVecRegReads++;
+                break;
+            case VecPredRegClass:
+                cpu.executeStats[tid]->numVecPredRegReads++;
+                break;
+            default:
+                break;
         }
         return thread.getReg(reg);
     }
@@ -179,24 +179,24 @@ class ExecContext : public gem5::ExecContext
         const RegId &reg = si->srcRegIdx(idx);
         int tid = thread.threadId();
         switch (reg.classValue()) {
-                case IntRegClass:
-                  cpu.executeStats[tid]->numIntRegReads++;
-                  break;
-                case FloatRegClass:
-                  cpu.executeStats[tid]->numFpRegReads++;
-                  break;
-                case CCRegClass:
-                  cpu.executeStats[tid]->numCCRegReads++;
-                  break;
-                case VecRegClass:
-                case VecElemClass:
-                  cpu.executeStats[tid]->numVecRegReads++;
-                  break;
-                case VecPredRegClass:
-                  cpu.executeStats[tid]->numVecPredRegReads++;
-                  break;
-                default:
-                  break;
+            case IntRegClass:
+                cpu.executeStats[tid]->numIntRegReads++;
+                break;
+            case FloatRegClass:
+                cpu.executeStats[tid]->numFpRegReads++;
+                break;
+            case CCRegClass:
+                cpu.executeStats[tid]->numCCRegReads++;
+                break;
+            case VecRegClass:
+            case VecElemClass:
+                cpu.executeStats[tid]->numVecRegReads++;
+                break;
+            case VecPredRegClass:
+                cpu.executeStats[tid]->numVecPredRegReads++;
+                break;
+            default:
+                break;
         }
 
         thread.getReg(si->srcRegIdx(idx), val);
@@ -228,24 +228,24 @@ class ExecContext : public gem5::ExecContext
         if (reg.is(InvalidRegClass))
             return;
         switch (reg.classValue()) {
-                case IntRegClass:
-                  cpu.executeStats[tid]->numIntRegWrites++;
-                  break;
-                case FloatRegClass:
-                  cpu.executeStats[tid]->numFpRegWrites++;
-                  break;
-                case CCRegClass:
-                  cpu.executeStats[tid]->numCCRegWrites++;
-                  break;
-                case VecRegClass:
-                case VecElemClass:
-                  cpu.executeStats[tid]->numVecRegWrites++;
-                  break;
-                case VecPredRegClass:
-                  cpu.executeStats[tid]->numVecPredRegWrites++;
-                  break;
-                default:
-                  break;
+            case IntRegClass:
+                cpu.executeStats[tid]->numIntRegWrites++;
+                break;
+            case FloatRegClass:
+                cpu.executeStats[tid]->numFpRegWrites++;
+                break;
+            case CCRegClass:
+                cpu.executeStats[tid]->numCCRegWrites++;
+                break;
+            case VecRegClass:
+            case VecElemClass:
+                cpu.executeStats[tid]->numVecRegWrites++;
+                break;
+            case VecPredRegClass:
+                cpu.executeStats[tid]->numVecPredRegWrites++;
+                break;
+            default:
+                break;
         }
         thread.setReg(si->destRegIdx(idx), val);
     }
@@ -256,24 +256,24 @@ class ExecContext : public gem5::ExecContext
         const RegId &reg = si->destRegIdx(idx);
         int tid = thread.threadId();
         switch (reg.classValue()) {
-                case IntRegClass:
-                  cpu.executeStats[tid]->numIntRegWrites++;
-                  break;
-                case FloatRegClass:
-                  cpu.executeStats[tid]->numFpRegWrites++;
-                  break;
-                case CCRegClass:
-                  cpu.executeStats[tid]->numCCRegWrites++;
-                  break;
-                case VecRegClass:
-                case VecElemClass:
-                  cpu.executeStats[tid]->numVecRegWrites++;
-                  break;
-                case VecPredRegClass:
-                  cpu.executeStats[tid]->numVecPredRegWrites++;
-                  break;
-                default:
-                  break;
+            case IntRegClass:
+                cpu.executeStats[tid]->numIntRegWrites++;
+                break;
+            case FloatRegClass:
+                cpu.executeStats[tid]->numFpRegWrites++;
+                break;
+            case CCRegClass:
+                cpu.executeStats[tid]->numCCRegWrites++;
+                break;
+            case VecRegClass:
+            case VecElemClass:
+                cpu.executeStats[tid]->numVecRegWrites++;
+                break;
+            case VecPredRegClass:
+                cpu.executeStats[tid]->numVecPredRegWrites++;
+                break;
+            default:
+                break;
         }
         thread.setReg(si->destRegIdx(idx), val);
     }

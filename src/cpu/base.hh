@@ -795,7 +795,6 @@ class BaseCPU : public ClockedObject
 
         /* Number of ops discarded before committing */
         statistics::Scalar numDiscardedOps;
-
     };
 
     struct CommitCPUStats: public statistics::Group

@@ -404,8 +404,9 @@ TimingSimpleCPU::translationFault(const Fault &fault)
         traceFault();
     }
 
-    if (fault == NoFault)
+    if (fault == NoFault) {
         postExecute();
+    }
 
     advanceInst(fault);
 }
@@ -865,8 +866,9 @@ TimingSimpleCPU::completeIfetch(PacketPtr pkt)
                 traceFault();
             }
 
-            if (fault == NoFault)
+            if (fault == NoFault) {
                 postExecute();
+            }
             // @todo remove me after debugging with legion done
             if (curStaticInst && (!curStaticInst->isMicroop() ||
                         curStaticInst->isFirstMicroop()))
@@ -1065,7 +1067,7 @@ TimingSimpleCPU::completeDataAccess(PacketPtr pkt)
     }
 
     // keep an instruction count
-    if (fault == NoFault){
+    if (fault == NoFault) {
         postExecute();
         countInst();
     } else if (traceData) {
@@ -1073,7 +1075,6 @@ TimingSimpleCPU::completeDataAccess(PacketPtr pkt)
     }
 
     delete pkt;
-
 
     advanceInst(fault);
 }

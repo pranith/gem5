@@ -483,10 +483,10 @@ BaseSimpleCPU::postExecute()
     }
 
     // same as above, but *just* calls
-    if (curStaticInst->isCall()){
+    if (curStaticInst->isCall()) {
         commitStats[t_info.thread->threadId()]->functionCalls++;
     }
-    if (curStaticInst->isControl()){
+    if (curStaticInst->isControl()) {
         executeStats[t_info.thread->threadId()]->numBranches++;
     }
 
@@ -501,8 +501,7 @@ BaseSimpleCPU::postExecute()
     }
     /* End power model statistics */
 
-    commitStats[t_info.thread->threadId()]
-        ->committedInstType[op_class]++;
+    commitStats[t_info.thread->threadId()]->committedInstType[op_class]++;
     commitStats[t_info.thread->threadId()]->updateComCtrlStats(curStaticInst);
 
     /* increment the committed numInsts and numOps stats */

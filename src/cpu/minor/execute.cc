@@ -60,40 +60,37 @@ namespace gem5
 namespace minor
 {
 
-Execute::Execute(const std::string &name_,
-    MinorCPU &cpu_,
-    const BaseMinorCPUParams &params,
-    Latch<ForwardInstData>::Output inp_,
-    Latch<BranchData>::Input out_) :
-    Named(name_),
-    inp(inp_),
-    out(out_),
-    cpu(cpu_),
-    issueLimit(params.executeIssueLimit),
-    memoryIssueLimit(params.executeMemoryIssueLimit),
-    commitLimit(params.executeCommitLimit),
-    memoryCommitLimit(params.executeMemoryCommitLimit),
-    processMoreThanOneInput(params.executeCycleInput),
-    fuDescriptions(*params.executeFuncUnits),
-    numFuncUnits(fuDescriptions.funcUnits.size()),
-    setTraceTimeOnCommit(params.executeSetTraceTimeOnCommit),
-    setTraceTimeOnIssue(params.executeSetTraceTimeOnIssue),
-    allowEarlyMemIssue(params.executeAllowEarlyMemoryIssue),
-    noCostFUIndex(fuDescriptions.funcUnits.size() + 1),
-    lsq(name_ + ".lsq", name_ + ".dcache_port",
-        cpu_, *this,
-        params.executeMaxAccessesInMemory,
-        params.executeMemoryWidth,
-        params.executeLSQRequestsQueueSize,
-        params.executeLSQTransfersQueueSize,
-        params.executeLSQStoreBufferSize,
-        params.executeLSQMaxStoreBufferStoresPerCycle),
-    executeInfo(params.numThreads,
-            ExecuteThreadInfo(params.executeCommitLimit)),
-    interruptPriority(0),
-    issuePriority(0),
-    commitPriority(0),
-    issueStats(&cpu_)
+Execute::Execute(const std::string &name_, MinorCPU &cpu_,
+                 const BaseMinorCPUParams &params,
+                 Latch<ForwardInstData>::Output inp_,
+                 Latch<BranchData>::Input out_)
+    : Named(name_),
+      inp(inp_),
+      out(out_),
+      cpu(cpu_),
+      issueLimit(params.executeIssueLimit),
+      memoryIssueLimit(params.executeMemoryIssueLimit),
+      commitLimit(params.executeCommitLimit),
+      memoryCommitLimit(params.executeMemoryCommitLimit),
+      processMoreThanOneInput(params.executeCycleInput),
+      fuDescriptions(*params.executeFuncUnits),
+      numFuncUnits(fuDescriptions.funcUnits.size()),
+      setTraceTimeOnCommit(params.executeSetTraceTimeOnCommit),
+      setTraceTimeOnIssue(params.executeSetTraceTimeOnIssue),
+      allowEarlyMemIssue(params.executeAllowEarlyMemoryIssue),
+      noCostFUIndex(fuDescriptions.funcUnits.size() + 1),
+      lsq(name_ + ".lsq", name_ + ".dcache_port", cpu_, *this,
+          params.executeMaxAccessesInMemory, params.executeMemoryWidth,
+          params.executeLSQRequestsQueueSize,
+          params.executeLSQTransfersQueueSize,
+          params.executeLSQStoreBufferSize,
+          params.executeLSQMaxStoreBufferStoresPerCycle),
+      executeInfo(params.numThreads,
+                  ExecuteThreadInfo(params.executeCommitLimit)),
+      interruptPriority(0),
+      issuePriority(0),
+      commitPriority(0),
+      issueStats(&cpu_)
 {
     if (commitLimit < 1) {
         fatal("%s: executeCommitLimit must be >= 1 (%d)\n", name_,
@@ -407,7 +404,6 @@ Execute::handleMemResponse(MinorDynInstPtr inst,
             context.readPredicate() : false));
     }
 
-
     /* Generate output to account for branches */
     tryToBranch(inst, fault, branch);
 }
@@ -604,7 +600,6 @@ Execute::issue(ThreadID thread_id)
             do {
                 FUPipeline *fu = funcUnits[fu_index];
 
-
                 DPRINTF(MinorExecute, "Trying to issue inst: %s to FU: %d\n",
                     *inst, fu_index);
 
@@ -759,8 +754,8 @@ Execute::issue(ThreadID thread_id)
 
                         /* Update the # of insts. issued per OpClass type */
                         if (!inst->isFault()) {
-                           auto opclass = inst->staticInst->opClass();
-                           issueStats.issuedInstType[thread_id][opclass]++;
+                            auto opclass = inst->staticInst->opClass();
+                            issueStats.issuedInstType[thread_id][opclass]++;
                         }
 
                         /* Issue to FU */
@@ -913,32 +908,32 @@ Execute::doInstCommitAccounting(MinorDynInstPtr inst)
         thread->threadStats.numMemRefs++;
     }
     if (inst->staticInst->isLoad()) {
-            cpu.executeStats[tid]->numLoadInsts++;
-            cpu.commitStats[tid]->numLoadInsts++;
+        cpu.executeStats[tid]->numLoadInsts++;
+        cpu.commitStats[tid]->numLoadInsts++;
     }
 
     if (inst->staticInst->isStore() || inst->staticInst->isAtomic()) {
-            cpu.commitStats[tid]->numStoreInsts++;
+        cpu.commitStats[tid]->numStoreInsts++;
     }
     if (inst->staticInst->isInteger()) {
-            cpu.commitStats[tid]->numIntInsts++;
+        cpu.commitStats[tid]->numIntInsts++;
     }
 
     if (inst->staticInst->isFloating()) {
-            cpu.commitStats[tid]->numFpInsts++;
+        cpu.commitStats[tid]->numFpInsts++;
     }
 
     if (inst->staticInst->isVector()) {
-            cpu.commitStats[tid]->numVecInsts++;
+        cpu.commitStats[tid]->numVecInsts++;
     }
     if (inst->staticInst->isControl()) {
-            cpu.executeStats[tid]->numBranches++;
+        cpu.executeStats[tid]->numBranches++;
     }
     if (inst->staticInst->isCall() || inst->staticInst->isReturn()) {
-            cpu.commitStats[tid]->numCallsReturns++;
+        cpu.commitStats[tid]->numCallsReturns++;
     }
     if (inst->staticInst->isCall()) {
-            cpu.commitStats[tid]->functionCalls++;
+        cpu.commitStats[tid]->functionCalls++;
     }
 
     cpu.commitStats[tid]->numOps++;
@@ -1478,9 +1473,9 @@ Execute::commit(ThreadID thread_id, bool only_commit_microops, bool discard,
             if (num_mem_refs_committed == memoryCommitLimit)
                 DPRINTF(MinorExecute, "Reached mem ref commit limit\n");
 
-            if (fault == NoFault)
+            if (fault == NoFault) {
                 doInstCommitAccounting(inst);
-
+            }
         }
     }
 }
@@ -1968,15 +1963,13 @@ Execute::getDcachePort()
 }
 
 Execute::IssueStats::IssueStats(MinorCPU *cpu)
-        : statistics::Group(cpu),
-        ADD_STAT(issuedInstType, statistics::units::Count::get(),
-                 "Number of instructions issued per FU type, per thread")
+    : statistics::Group(cpu),
+      ADD_STAT(issuedInstType, statistics::units::Count::get(),
+               "Number of instructions issued per FU type, per thread")
 {
-        issuedInstType
-            .init(cpu->numThreads, enums::Num_OpClass)
-            .flags(statistics::total | statistics::pdf | statistics::dist);
-        issuedInstType.ysubnames(enums::OpClassStrings);
-
+    issuedInstType.init(cpu->numThreads, enums::Num_OpClass)
+        .flags(statistics::total | statistics::pdf | statistics::dist);
+    issuedInstType.ysubnames(enums::OpClassStrings);
 }
 
 } // namespace minor

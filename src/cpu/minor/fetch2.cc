@@ -605,7 +605,7 @@ Fetch2::isDrained()
 }
 
 Fetch2::Fetch2Stats::Fetch2Stats(MinorCPU *cpu)
-      : statistics::Group(cpu, "fetch2"),
+    : statistics::Group(cpu, "fetch2"),
       ADD_STAT(totalInstructions, statistics::units::Count::get(),
                "Total number of instructions successfully decoded"),
       ADD_STAT(intInstructions, statistics::units::Count::get(),
@@ -621,20 +621,13 @@ Fetch2::Fetch2Stats::Fetch2Stats(MinorCPU *cpu)
       ADD_STAT(amoInstructions, statistics::units::Count::get(),
                "Number of memory atomic instructions successfully decoded")
 {
-        totalInstructions
-            .flags(statistics::total);
-        intInstructions
-            .flags(statistics::total);
-        fpInstructions
-            .flags(statistics::total);
-        vecInstructions
-            .flags(statistics::total);
-        loadInstructions
-            .flags(statistics::total);
-        storeInstructions
-            .flags(statistics::total);
-        amoInstructions
-            .flags(statistics::total);
+    totalInstructions.flags(statistics::total);
+    intInstructions.flags(statistics::total);
+    fpInstructions.flags(statistics::total);
+    vecInstructions.flags(statistics::total);
+    loadInstructions.flags(statistics::total);
+    storeInstructions.flags(statistics::total);
+    amoInstructions.flags(statistics::total);
 }
 
 void
