@@ -94,34 +94,32 @@ class TreePLRUVictimizationTestF : public TreePLRUTestF
     }
 };
 
-/// Test that when all entries are invalid the first candidate will always be
-/// selected, regardless of the order of the invalidations. The order of
-/// invalidations of this test is reversed in comparison to the other test.
-TEST_F(TreePLRUVictimizationTestF, GetVictimAllInvalid2)
-{
-    auto expected_victim = &entries.front();
-
-    // At this point all tree nodes should have values of 0, as no entries have
-    // ever been reset. The tree points toward the first entry.
-    ///    ____0____
-    ///  __0__   __0__
-    /// _0_ _0_ _0_ _0_
-    /// A B C D E F G H
-    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
-
-    // Since all candidates are already invalid, nothing changes if we
-    // invalidate all of them again.
-    for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
-        rp->invalidate((*it)->replacementData);
-    }
-    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
-}
-
 /// Test resetting no entries. The tree's nodes should all have values of 0,
 /// pointing toward entry A at index 0.
 TEST_F(TreePLRUVictimizationTestF, GetVictimNoReset)
 {
     ASSERT_EQ(rp->getVictim(candidates), &entries[0]);
+}
+
+/// Test that when all entries are invalid the first candidate will always be
+/// selected, regardless of the order of the invalidations.
+TEST_F(TreePLRUVictimizationTestF, GetVictimAllInvalid)
+{
+    auto expected_victim = &entries.front();
+
+    /// At this point all tree nodes should have values of 0, as no entries
+    /// have ever been reset. The tree points toward the first entry.
+    ///    ____0____
+    ///  __0__   __0__
+    /// _0_ _0_ _0_ _0_
+    /// A B C D E F G H
+
+    /// Since all candidates are already invalid, nothing changes if we
+    /// invalidate all of them again.
+    for (auto it = candidates.rbegin(); it != candidates.rend(); ++it) {
+        rp->invalidate((*it)->replacementData);
+    }
+    ASSERT_EQ(rp->getVictim(candidates), expected_victim);
 }
 
 /// Test only resetting one entry
@@ -231,10 +229,8 @@ TEST_F(TreePLRUVictimizationTestF, GetVictimAllTwiceReset)
     ASSERT_EQ(rp->getVictim(candidates), &entries[7]);
 }
 
-/// In the definition of the TreePLRU replacement policy, `reset()` has the
-/// same functionality as `touch()`, and calling `touch()` is the only thing
-/// `reset()` does. This unit test checks if `touch()` and `reset()` have the
-// same functionality.
+/// `touch()` and `reset()` should have the same behavior for the TreePLRU
+/// replacement policy. This unit test checks this.
 TEST_F(TreePLRUVictimizationTestF, CheckTouchResetSame)
 {
     /// We touch/reset the same entries as in GetVictimHalfReset, but swap
@@ -371,6 +367,12 @@ TEST_F(LargeTreePLRUVictimizationTestF, TestLargeTree)
 
 typedef TreePLRUTestF TreePLRUDeathTest;
 
+class OneLeafTreePLRUDeathTestF : public TreePLRUVictimizationTestF
+{
+  public:
+    OneLeafTreePLRUDeathTestF() : TreePLRUVictimizationTestF(1) {}
+};
+
 TEST_F(TreePLRUDeathTest, InvalidateNull)
 {
     ASSERT_DEATH(rp->invalidate(nullptr), "");
@@ -399,4 +401,13 @@ TEST_F(TreePLRUDeathTest, InvalidNumLeaves)
     params.num_leaves = 0;
     ASSERT_ANY_THROW(
         std::make_shared<gem5::replacement_policy::TreePLRU>(params));
+}
+
+/// We expect any operations on specific entries to fail for a TreePLRU
+/// replacement policy that only accommodates one leaf.
+TEST_F(OneLeafTreePLRUDeathTestF, OneLeafTree)
+{
+    ASSERT_ANY_THROW(rp->reset(entries[0].replacementData));
+    ASSERT_ANY_THROW(rp->invalidate(entries[0].replacementData));
+    ASSERT_ANY_THROW(rp->touch(entries[0].replacementData));
 }
