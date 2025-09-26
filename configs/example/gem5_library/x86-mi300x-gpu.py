@@ -99,6 +99,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--opts",
+    type=str,
+    default="",
+    help="Additional arguments for the GPU application",
+)
+
+parser.add_argument(
     "--kvm-perf",
     default=False,
     action="store_true",
@@ -136,7 +143,7 @@ kernel = FileResource(local_path=args.kernel)
 board.set_kernel_disk_workload(
     kernel=kernel,
     disk_image=disk,
-    readfile_contents=board.make_gpu_app(gpu0, args.app),
+    readfile_contents=board.make_gpu_app(gpu0, args.app, args.opts),
 )
 
 simulator = Simulator(board=board)

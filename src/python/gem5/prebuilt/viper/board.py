@@ -257,14 +257,14 @@ class ViperBoard(X86Board):
     # Replicate the capability of the old GPUFS config, which embed a binary
     # application or script into a bash script setting up the environment and
     # loading the GPU driver.
-    def make_gpu_app(self, gpu: BaseViperGPU, app: str, debug: bool = False):
+    def make_gpu_app(self, gpu: BaseViperGPU, app: str, opts: str):
         with open(os.path.abspath(app), "rb") as binfile:
             encodedBin = base64.b64encode(binfile.read()).decode()
 
         application_command = (
             f'echo "{encodedBin}" | base64 -d > myapp\n'
             "chmod +x myapp\n"
-            "./myapp {}\n"
+            f"./myapp {opts}\n"
             "/sbin/m5 exit\n"
         )
 
