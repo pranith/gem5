@@ -68,14 +68,14 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
 
     def __init__(
         self,
-        l1d_size: str,
-        l1d_assoc: int,
-        l1i_size: str,
-        l1i_assoc: int,
-        l2_size: str,
-        l2_assoc: int,
-        l3_size: str,
-        l3_assoc: int,
+        l1d_size: str = "32KiB",
+        l1d_assoc: int = 8,
+        l1i_size: str = "32KiB",
+        l1i_assoc: int = 8,
+        l2_size: str = "1MiB",
+        l2_assoc: int = 16,
+        l3_size: str = "16MiB",
+        l3_assoc: int = 16,
     ):
         """
         :param size: The size of each cache in the heirarchy.

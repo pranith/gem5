@@ -120,24 +120,14 @@ for core in processor.cores:
 # CPU cache hierarchy.
 gpu0 = MI300X(gpu_memory=HBM2Stack(size="16GiB"))
 
-cache_hierarchy = ViperCPUCacheHierarchy(
-    l1d_size="32KiB",
-    l1d_assoc=8,
-    l1i_size="32KiB",
-    l1i_assoc=8,
-    l2_size="1MiB",
-    l2_assoc=16,
-    l3_size="16MiB",
-    l3_assoc=16,
-)
-
 board = ViperBoard(
     clk_freq="3GHz",
     processor=processor,
     memory=memory,
-    cache_hierarchy=cache_hierarchy,
+    cache_hierarchy=ViperCPUCacheHierarchy(),
     gpus=[gpu0],
 )
+
 
 # Example of using a local disk image resource
 disk = DiskImageResource(local_path=args.image, root_partition="1")
