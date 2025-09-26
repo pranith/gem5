@@ -35,7 +35,7 @@ Usage:
 ```
 scons build/VEGA_X86/gem5.opt
 ./build/VEGA_X86/gem5.opt
-    configs/example/gem5_library/x86-viper-gpu.py
+    configs/example/gem5_library/x86-mi300x-gpu.py
     --image <disk image>
     --kernel <kernel>
     --app <gpu application>
@@ -45,7 +45,7 @@ Example:
 --------
 ```
 ./build/VEGA_X86/gem5.opt
-    configs/example/gem5_library/x86-viper-gpu.py
+    configs/example/gem5_library/x86-mix300x-gpu.py
     --image ./gem5-resources/src/x86-ubuntu-gpu-ml/disk-image/x86-ubuntu-gpu-ml
     --kernel ./gem5-resources/src/x86-ubuntu-gpu-ml/vmlinux-gpu-ml
     --app ./gem5-resources/src/gpu/square/bin.default/square.default
@@ -107,9 +107,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-# stdlib only supports up to 3GiB currently. This will need to be expanded in
-# the future.
-memory = SingleChannelDDR4_2400(size="3GiB")
+memory = SingleChannelDDR4_2400(size="8GiB")
 
 # Note: Only KVM and ATOMIC work due to buggy MOESI_AMD_Base protocol.
 processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=2)

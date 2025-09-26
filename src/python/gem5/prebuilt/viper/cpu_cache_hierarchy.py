@@ -209,6 +209,31 @@ class ViperCPUCacheHierarchy(AbstractRubyCacheHierarchy):
                 tagAccessLatency=15,
             )
 
+        # Baseline X86 board does not support >3GiB of memory. To fix that we
+        # create "low memory" controllers that cover the minimum amount of
+        # memory required to boot Linux.
+        for addr_range, port in board.get_low_mem_ports():
+            dir = ViperCPUDirectory(
+                self.ruby_system.network,
+                board.get_cache_line_size(),
+                addr_range,
+                port,
+            )
+            dir.ruby_system = self.ruby_system
+            dir.version = len(self._directory_controllers)
+            self._directory_controllers.append(dir)
+
+            dir.L3CacheMemory = RubyCache(
+                size=self._l3_size,
+                assoc=self._l3_assoc,
+                replacement_policy=TreePLRURP(),
+                resourceStalls=False,
+                dataArrayBanks=16,
+                tagArrayBanks=16,
+                dataAccessLatency=20,
+                tagAccessLatency=15,
+            )
+
         # Create the DMA Controllers, if required.
         self._dma_controllers = []
         if board.has_dma_ports():
