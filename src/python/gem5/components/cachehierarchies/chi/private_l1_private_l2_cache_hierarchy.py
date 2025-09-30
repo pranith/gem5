@@ -1,3 +1,15 @@
+# Copyright (c) 2025 Arm Limited
+# All rights reserved.
+#
+# The license below extends only to copyright in the software and shall
+# not be construed as granting a license to any other intellectual
+# property including but not limited to intellectual property relating
+# to a hardware implementation of the functionality of the software
+# licensed hereunder.  You may use the software subject to the license
+# terms below provided that you ensure that this notice is replicated
+# unmodified and in its entirety in all distributions of the software,
+# modified or unmodified, in source code or in binary form.
+#
 # Copyright (c) 2021 The Regents of the University of California
 # All Rights Reserved.
 #
@@ -44,6 +56,9 @@ from gem5.components.boards.abstract_board import AbstractBoard
 from gem5.components.cachehierarchies.abstract_cache_hierarchy import (
     AbstractCacheHierarchy,
 )
+from gem5.components.cachehierarchies.abstract_two_level_cache_hierarchy import (
+    AbstractTwoLevelCacheHierarchy,
+)
 from gem5.components.cachehierarchies.ruby.abstract_ruby_cache_hierarchy import (
     AbstractRubyCacheHierarchy,
 )
@@ -57,28 +72,50 @@ from gem5.utils.override import overrides
 from .nodes.directory import SimpleDirectory
 from .nodes.dma_requestor import DMARequestor
 from .nodes.l1_cache import L1CacheController
+from .nodes.l2_cache import L2CacheController
 from .nodes.memory_controller import MemoryController
 
 
-class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
-    """A single level cache based on CHI for RISC-V
+class PrivateL1PrivateL2CacheHierarchy(
+    AbstractRubyCacheHierarchy, AbstractTwoLevelCacheHierarchy
+):
+    """A two level cache hierarchy based on CHI
 
-    This hierarchy has a split I/D L1 caches per CPU, a single directory (HNF),
+    This hierarchy has a split I/D L1 caches per CPU, a second
+    level of caches (L2) which are private per CPU, a single directory (HNF),
     and as many memory controllers (SNF) as memory channels. The directory does
     not have an associated cache.
 
     The network is a simple point-to-point between all of the controllers.
     """
 
-    def __init__(self, size: str, assoc: int) -> None:
+    def __init__(
+        self,
+        l1i_size: str,
+        l1i_assoc: int,
+        l1d_size: str,
+        l1d_assoc: int,
+        l2_size: str,
+        l2_assoc: int,
+    ):
         """
-        :param size: The size of the priavte I/D caches in the hierarchy.
-        :param assoc: The associativity of each cache.
+        :param l1i_size: The size of the L1 Instruction cache
+        :param l1i_assoc: The associativity of the L1 Instruction cache
+        :param l1d_size: The size of the L1 Data cache
+        :param l1d_assoc: The associativity of the L1 Data cache
+        :param l2_size: The size of the L2 cache
+        :param l2_assoc: The associativity of the L2 cache
         """
-        super().__init__()
-
-        self._size = size
-        self._assoc = assoc
+        AbstractRubyCacheHierarchy.__init__(self=self)
+        AbstractTwoLevelCacheHierarchy.__init__(
+            self,
+            l1i_size=l1i_size,
+            l1i_assoc=l1i_assoc,
+            l1d_size=l1d_size,
+            l1d_assoc=l1d_assoc,
+            l2_size=l2_size,
+            l2_assoc=l2_assoc,
+        )
 
     @overrides(AbstractCacheHierarchy)
     def get_coherence_protocol(self):
@@ -128,7 +165,7 @@ class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
             list(
                 chain.from_iterable(  # Grab the controllers from each cluster
                     [
-                        (cluster.dcache, cluster.icache)
+                        (cluster.dcache, cluster.icache, cluster.l2)
                         for cluster in self.core_clusters
                     ]
                 )
@@ -155,8 +192,8 @@ class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
         """
         cluster = SubSystem()
         cluster.dcache = L1CacheController(
-            size=self._size,
-            assoc=self._assoc,
+            size=self._l1d_size,
+            assoc=self._l1d_assoc,
             network=self.ruby_system.network,
             core=core,
             cache_line_size=board.get_cache_line_size(),
@@ -164,8 +201,8 @@ class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
             clk_domain=board.get_clock_domain(),
         )
         cluster.icache = L1CacheController(
-            size=self._size,
-            assoc=self._assoc,
+            size=self._l1i_size,
+            assoc=self._l1i_assoc,
             network=self.ruby_system.network,
             core=core,
             cache_line_size=board.get_cache_line_size(),
@@ -186,18 +223,27 @@ class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
             ruby_system=self.ruby_system,
         )
 
+        cluster.l2 = L2CacheController(
+            size=self._l2_size,
+            assoc=self._l2_assoc,
+            network=self.ruby_system.network,
+            cache_line_size=board.get_cache_line_size(),
+            clk_domain=board.get_clock_domain(),
+        )
+
         if board.has_io_bus():
             cluster.dcache.sequencer.connectIOPorts(board.get_io_bus())
 
         cluster.dcache.ruby_system = self.ruby_system
         cluster.icache.ruby_system = self.ruby_system
+        cluster.l2.ruby_system = self.ruby_system
 
         core.connect_icache(cluster.icache.sequencer.in_ports)
         core.connect_dcache(cluster.dcache.sequencer.in_ports)
 
         core.connect_walker_ports(
-            cluster.icache.sequencer.in_ports,
             cluster.dcache.sequencer.in_ports,
+            cluster.icache.sequencer.in_ports,
         )
 
         # Connect the interrupt ports
@@ -208,8 +254,9 @@ class PrivateL1CacheHierarchy(AbstractRubyCacheHierarchy):
         else:
             core.connect_interrupt()
 
-        cluster.dcache.downstream_destinations = [self.directory]
-        cluster.icache.downstream_destinations = [self.directory]
+        cluster.dcache.downstream_destinations = [cluster.l2]
+        cluster.icache.downstream_destinations = [cluster.l2]
+        cluster.l2.downstream_destinations = [self.directory]
 
         return cluster
 

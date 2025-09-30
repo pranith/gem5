@@ -37,7 +37,7 @@ from gem5.isas import ISA
 from .abstract_node import AbstractNode
 
 
-class PrivateL1MOESICache(AbstractNode):
+class L1CacheController(AbstractNode):
     def __init__(
         self,
         size: str,
