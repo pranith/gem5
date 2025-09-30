@@ -4500,6 +4500,30 @@ decode QUADRANT default Unknown::unknown() {
                         Vd_vu[i] = ei;
                     }}, OPMVV, SimdMiscOp);
                 }
+                format VectorCompressFormat {
+                    0x17: vcompress_vm({{
+                        static uint64_t vcompress_cnt;
+                        static uint64_t vcompress_buf[65536];
+                        if(this->microIdx == 0) {
+                            vcompress_cnt = 0;
+                        }
+                        for (uint32_t i = 0; i < microVl; i++) {
+                            uint32_t num_regs = vtype_regs_per_group(vtype);
+                            uint32_t ei = i + num_elements_reg(vtype, vlen) *
+                                (this->microIdx % num_regs);
+                            if (elem_mask(Vs1_vu, ei) &&
+                                this->microIdx < num_regs) {
+                                vcompress_buf[vcompress_cnt] = Vs2_vu[i];
+                                Vd_vu[i] = vcompress_buf[vcompress_cnt];
+                                vcompress_cnt ++;
+                            }
+                            if (ei < vcompress_cnt &&
+                                this->microIdx >= num_regs) {
+                                Vd_vu[i] = vcompress_buf[ei];
+                            }
+                        }
+                    }}, OPMVV, SimdMiscOp);
+                }
                 format VectorMaskFormat {
                     0x18: vmandn_mm({{
                         Vd_ub[i/8] = ASSIGN_VD_BIT(i,
