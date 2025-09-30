@@ -3701,6 +3701,9 @@ decode QUADRANT default Unknown::unknown() {
                     0x0: vadd_vv({{
                         Vd_vu[i] = Vs2_vu[i] + Vs1_vu[i];
                     }}, OPIVV, SimdAddOp);
+                    0x1: vandn_vv({{
+                        Vd_vu[i] = Vs2_vu[i] & (~Vs1_vu[i]);
+                    }}, OPIVV, SimdAluOp);
                     0x2: vsub_vv({{
                         Vd_vu[i] = Vs2_vu[i] - Vs1_vu[i];
                     }}, OPIVV, SimdAddOp);
@@ -3771,6 +3774,16 @@ decode QUADRANT default Unknown::unknown() {
                         }}, OPIVV, SimdAddOp);
                         // the unmasked versions (vm=1) are reserved
                     }
+                    0x14: vror_vv({{
+                        Vd_vu[i] =   (Vs2_vu[i] >> (Vs1_vu[i] & (sew - 1)))
+                                   | (Vs2_vu[i] <<
+                                        ((sew - Vs1_vu[i]) & (sew - 1)));
+                    }}, OPIVV, SimdShiftOp);
+                    0x15: vrol_vv({{
+                        Vd_vu[i] =   (Vs2_vu[i] << (Vs1_vu[i] & (sew - 1)))
+                                   | (Vs2_vu[i] >>
+                                        ((sew - Vs1_vu[i]) & (sew - 1)));
+                    }}, OPIVV, SimdShiftOp);
                     0x17: decode VM {
                         0x0: vmerge_vvm({{
                             Vd_vu[i] = elem_mask(v0, ei)
@@ -3949,6 +3962,12 @@ decode QUADRANT default Unknown::unknown() {
 
                         Vd_vi[i + offset] = (vi)res;
                     }}, OPIVV, SimdCvtOp);
+                }
+                format VectorIntWideningFormat {
+                    0x35: vwsll_vv({{
+                        Vd_vwu[i] = vwu(Vs2_vu[i + offset]) <<
+                            (vwu(Vs1_vu[i + offset]) & ((vwu(sew) << 1) - 1));
+                    }}, OPIVV, SimdShiftOp);
                 }
             }
             // OPFVV
@@ -4798,6 +4817,12 @@ decode QUADRANT default Unknown::unknown() {
                         }}, OPIVI, SimdAddOp);
                         // the unmasked versions (vm=1) are reserved
                     }
+                    0x14, 0x15: vror_vi({{
+                        uint64_t shamt = SIMM5 | (BIT26 << 5);
+                        Vd_vu[i] =   (Vs2_vu[i] >> (shamt & (sew - 1)))
+                                   | (Vs2_vu[i] <<
+                                        ((sew - shamt) & (sew - 1)));
+                    }}, OPIVI, SimdShiftOp);
                     0x17: decode VM {
                         0x0: vmerge_vim({{
                             Vd_vi[i] = elem_mask(v0, ei)
@@ -4948,6 +4973,12 @@ decode QUADRANT default Unknown::unknown() {
                         Vd_vi[i + offset] = (vi)res;
                     }}, OPIVI, SimdCvtOp);
                 }
+                format VectorIntWideningFormat {
+                    0x35: vwsll_vi({{
+                        Vd_vwu[i] = vwu(Vs2_vu[i + offset]) <<
+                            (vwu(SIMM5) & ((vwu(sew) << 1) - 1));
+                    }}, OPIVI, SimdShiftOp);
+                }
             }
             // OPIVX
             0x4: decode VFUNCT6 {
@@ -4955,6 +4986,9 @@ decode QUADRANT default Unknown::unknown() {
                     0x0: vadd_vx({{
                         Vd_vu[i] = Vs2_vu[i] + Rs1_vu;
                     }}, OPIVX, SimdAddOp);
+                    0x1: vandn_vx({{
+                        Vd_vu[i] = Vs2_vu[i] & (~Rs1_vu);
+                    }}, OPIVX, SimdAluOp);
                     0x2: vsub_vx({{
                         Vd_vu[i] = Vs2_vu[i] - Rs1_vu;
                     }}, OPIVX, SimdAddOp);
@@ -5107,6 +5141,16 @@ decode QUADRANT default Unknown::unknown() {
                         }}, OPIVX, SimdAddOp);
                         // the unmasked versions (vm=1) are reserved
                     }
+                    0x14: vror_vx({{
+                        Vd_vu[i] =   (Vs2_vu[i] >> (Rs1_vu & (sew - 1)))
+                                   | (Vs2_vu[i] <<
+                                        ((sew - Rs1_vu) & (sew - 1)));
+                    }}, OPIVX, SimdShiftOp);
+                    0x15: vrol_vx({{
+                        Vd_vu[i] =   (Vs2_vu[i] << (Rs1_vu & (sew - 1)))
+                                   | (Vs2_vu[i] >>
+                                        ((sew - Rs1_vu) & (sew - 1)));
+                    }}, OPIVX, SimdShiftOp);
                     0x17: decode VM {
                         0x0: vmerge_vxm({{
                             Vd_vu[i] = elem_mask(v0, ei) ? Rs1_vu : Vs2_vu[i];
@@ -5281,6 +5325,12 @@ decode QUADRANT default Unknown::unknown() {
                         Vd_ub[(i + offset)/8] = ASSIGN_VD_BIT(i + offset,
                             (Vs2_vi[i] > Rs1_vi));
                     }}, OPIVX, SimdCmpOp);
+                }
+                format VectorIntWideningFormat {
+                    0x35: vwsll_vx({{
+                        Vd_vwu[i] = vwu(Vs2_vu[i + offset]) <<
+                            (vwu(Rs1_vu) & ((vwu(sew) << 1) - 1));
+                    }}, OPIVX, SimdShiftOp);
                 }
             }
             // OPFVF
