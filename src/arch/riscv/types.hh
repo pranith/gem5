@@ -181,7 +181,7 @@ BitUnion64(ExtMachInst)
     // vsetvl
     Bitfield<31, 25>    bit31_25;
     // Zvbb
-    Bitfield<26>        bit26;
+    Bitfield<26> bit26;
 
 EndBitUnion(ExtMachInst)
 
