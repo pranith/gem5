@@ -893,8 +893,8 @@ VPinVdMicroInst::VPinVdMicroInst(ExtMachInst _machInst, uint32_t _microIdx,
                                  uint32_t _numVdPins, uint32_t _elen,
                                  uint32_t _vlen, bool _hasVdOffset)
     : VectorArithMicroInst("vpinvd_v_micro", _machInst, SimdMiscOp, 0,
-                           _microIdx, _elen, _vlen)
-    , hasVdOffset(_hasVdOffset)
+                           _microIdx, _elen, _vlen),
+      hasVdOffset(_hasVdOffset)
 {
     setRegIdxArrays(
         reinterpret_cast<RegIdArrayPtr>(
