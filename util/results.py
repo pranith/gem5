@@ -2,9 +2,9 @@
 
 import argparse
 import json
-import os, sys
+import os
 import re
-
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -126,7 +126,12 @@ def create_stats_dataframe(base_dir):
                     )
                     continue
 
-                stats["IPC"] = stats["board.processor.cores.core.ipc"]
+                try:
+                    stats["IPC"] = stats["board.processor.cores.core.ipc"]
+                except:
+                    print(f"Error reading IPC from {stats_file}")
+                    # sys.exit(-1)
+
                 if weights and index in weights:
                     stats["weight"] = weights[index]
                     stats["weighted_IPC"] = stats["IPC"] * stats["weight"]
@@ -146,18 +151,25 @@ def create_stats_dataframe(base_dir):
             f"Error: No stats.txt files found in subdirectories of '{base_dir}'."
         )
         return None
+
     df = pd.DataFrame(data, index=labels)
 
     # Calculate per-benchmark IPC
     benchmark_ipc = {}
     for benchmark_number, benchmark_name in benchmark_mapping.items():
-        benchmark_entries = df[df.index.str.contains(f"chkpt_{benchmark_name}_")]
+        benchmark_entries = df[
+            df.index.str.contains(f"chkpt_{benchmark_name}_")
+        ]
         if not benchmark_entries.empty:
-            weighted_ipcs = benchmark_entries[benchmark_entries['weighted_IPC'] != "N/A"]['weighted_IPC'].astype(float)
+            weighted_ipcs = benchmark_entries[
+                benchmark_entries["weighted_IPC"] != "N/A"
+            ]["weighted_IPC"].astype(float)
             if not weighted_ipcs.empty:
                 benchmark_ipc[benchmark_name] = weighted_ipcs.sum()
             else:
-                print(f"Warning: No valid weighted IPCs found for {benchmark_name}")
+                print(
+                    f"Warning: No valid weighted IPCs found for {benchmark_name}"
+                )
                 benchmark_ipc[benchmark_name] = "N/A"
         else:
             print(f"Warning: No entries found for benchmark {benchmark_name}")
@@ -165,14 +177,31 @@ def create_stats_dataframe(base_dir):
             benchmark_ipc[benchmark_name] = "N/A"
 
     return df, benchmark_ipc  # Return both DataFrame and benchmark IPCs
-    
+
+
+def rename_to_last_two_parts(col_name):
+    """
+    Renames a column to its last two dot-separated substrings.
+    Returns the original name if it has fewer than two parts.
+    """
+    parts = col_name.split(".")
+    if len(parts) >= 2:
+        # Join the last two elements with a dot
+        return ".".join(parts[-2:])
+    else:
+        # Return original name if fewer than 2 parts (e.g., 'IPC', 'ShortName')
+        return col_name
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Process stats.txt files in subdirectories."
     )
     parser.add_argument(
-        "base_dirs", nargs="+", help="The directories containing the results."
+        "--dirs",
+        required=True,
+        nargs="+",
+        help="The directories containing the results.",
     )
     parser.add_argument(
         "-o",
@@ -180,24 +209,45 @@ if __name__ == "__main__":
         help="Output JSON file name (default: stats_summary.json)",
         default="stats_summary.json",
     )
+    parser.add_argument(
+        "--stats",
+        required=True,
+        nargs="+",
+        help="Regex pattern for extracting stats.",
+    )
+    parser.add_argument(
+        "--exact",
+        action="store_true",
+        help="Match exact stat.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        help="Get stats for the checkpoint.",
+    )
 
     args = parser.parse_args()
-    base_dirs = args.base_dirs
+    base_dirs = args.dirs
+    extract_stats = args.stats
     output_file = args.output
+    exact_stat = args.exact
 
     all_stats = {}
-    all_ipc   = []
+    all_ipc = []
     all_ipc_df = pd.DataFrame()
     for base_directory in base_dirs:
         try:
             if not os.path.isdir(base_directory):
-                raise FileNotFoundError(f"Directory '{base_directory}' not found.")
+                raise FileNotFoundError(
+                    f"Directory '{base_directory}' not found."
+                )
 
             base_dir = str(Path(base_directory))
 
             df_stats, benchmark_ipc = create_stats_dataframe(base_dir)
             all_stats[base_dir] = df_stats
-            benchmark_ipc_df = pd.DataFrame.from_dict(benchmark_ipc, orient='index', columns=[base_dir])
+            benchmark_ipc_df = pd.DataFrame.from_dict(
+                benchmark_ipc, orient="index", columns=[base_dir]
+            )
             all_ipc_df = pd.concat([all_ipc_df, benchmark_ipc_df], axis=1)
 
         except FileNotFoundError as e:
@@ -208,26 +258,74 @@ if __name__ == "__main__":
     if all_stats is not None:
         # Convert DataFrame to dictionary for JSON output
         with open(output_file, "w") as f:
-            json_strings = {base_dir: df.to_json(orient="index", indent=4) for base_dir, df in all_stats.items()}
-            json_objects = {base_dir: json.loads(json_string) for base_dir, json_string in json_strings.items()}
+            json_strings = {
+                base_dir: df.to_json(orient="index", indent=4)
+                for base_dir, df in all_stats.items()
+            }
+            json_objects = {
+                base_dir: json.loads(json_string)
+                for base_dir, json_string in json_strings.items()
+            }
             json.dump(json_objects, f, indent=4)
 
         print(f"Stats summary saved to {output_file} in JSON format")
 
+        matching_stats = []
+        if extract_stats is not None:
+            bench_list = []
+            stat_df_bench = pd.DataFrame()
+            for bench_run, df in all_stats.items():
+                bench_list.append(bench_run)
+                for stat in extract_stats:
+                    print(f"Extracting stat {stat} in bench {bench_run}")
+                    # print(df)
+                    if exact_stat:
+                        stat_df = df.filter(items=[stat])
+                    else:
+                        stat_df = df.filter(regex=rf"{stat}")
+
+                    # print(stat_df)
+                    if not stat_df.empty:
+                        # save the stat names for calculating %
+                        matching_stats.extend([col for col in stat_df.columns])
+                        stat_df_bench = stat_df_bench.join(
+                            stat_df, how="outer", rsuffix=f"_{bench_run}"
+                        )
+                        # stat_df_bench = stat_df_bench.set_axis(stat_df.index)
+                        # print(stat_df_bench)
+
+            # Calculate %diff for all stats
+            for stat in matching_stats:
+                base_bench = bench_list[0]
+                for bench in bench_list[1:]:
+                    stat_bench = stat + f"_{bench}"
+                    percent_stat = stat + f"_{bench}" + "%"
+                    stat_df_bench[percent_stat] = (
+                        (stat_df_bench[stat_bench] / stat_df_bench[stat]) - 1
+                    ) * 100.0
+
+            stat_df_bench = stat_df_bench.rename(
+                columns=rename_to_last_two_parts
+            )
+            if not args.checkpoint:
+                print(stat_df_bench)
+            else:
+                print(stat_df_bench.filter(like=f"{args.checkpoint}", axis=0))
 
     new_columns = []
     base_col = all_ipc_df.columns[0]
     for i, col in enumerate(all_ipc_df.columns):
         new_columns.append(col)
         if i > 0:  # Start from the second column (index 1)
-            new_col_name = f'{col}_%'
-            all_ipc_df[new_col_name] = ((all_ipc_df[col] - all_ipc_df[base_col]) / all_ipc_df[base_col]) * 100
-            #Handle division by zero error
+            new_col_name = f"% {col}"
+            all_ipc_df[new_col_name] = (
+                (all_ipc_df[col] - all_ipc_df[base_col]) / all_ipc_df[base_col]
+            ) * 100
+            # Handle division by zero error
             # all_ipc_df.loc[all_ipc_df[base_col] == 0, new_col_name] = all_ipc_df.loc[all_ipc_df[base_col] == 0].apply(lambda x: float('inf') if x[col]!=0 else 0, axis=1)
             new_columns.append(new_col_name)
-            
 
-    all_ipc_df = all_ipc_df[new_columns] 
-    pd.options.display.float_format = '{:.2f}'.format
+    all_ipc_df = all_ipc_df[new_columns]
+    pd.options.display.float_format = "{:.2f}".format
     print(all_ipc_df.to_string())
     # print(all_ipc_df)
