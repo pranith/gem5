@@ -1688,20 +1688,19 @@ class Rancho_BTB(SimpleBTB):
     tagBits = 18
     btbReplPolicy = NRURP()
     btbIndexingPolicy = BTBSetAssociative(
-        size="512B", entry_size=4, assoc=associativity, tag_bits=tagBits
+        assoc=associativity, tag_bits=tagBits
     )
 
 
-class Rancho_BP(TournamentBP):
+class Rancho_BP(BranchPredictor):
+    conditionalBranchPred = BiModeBP(
+        globalPredictorSize=4096,
+        globalCtrBits=2,
+        choicePredictorSize=1024,
+        choiceCtrBits=3,
+    )
     btb = Rancho_BTB()
     ras = ReturnAddrStack(numEntries=8)
-    localPredictorSize = 64
-    localCtrBits = 2
-    localHistoryTableSize = 64
-    globalPredictorSize = 1024
-    globalCtrBits = 2
-    choicePredictorSize = 1024
-    choiceCtrBits = 2
     instShiftAmt = 2
 
 
@@ -1787,8 +1786,8 @@ class Rancho(ArmO3CPU):
     LSQCheckLoads = True
     store_set_clear_period = 250000
     LFSTSize = 1024
-    SSITSize = 1024
-    SSITAssoc = SSITSize
+    SSITSize = "1024"
+    SSITAssoc = 1024
     SSITReplPolicy = LRURP()
     SSITIndexingPolicy = SetAssociative(
         size="4kB", entry_size=4, assoc=SSITAssoc

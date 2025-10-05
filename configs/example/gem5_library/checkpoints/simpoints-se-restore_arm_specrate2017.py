@@ -75,11 +75,9 @@ from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_h
     PrivateL1PrivateL2WalkCacheHierarchy,
 )
 from gem5.components.memory import DualChannelDDR4_2400
-from gem5.components.processors.cpu_types import CPUTypes
-
 from gem5.components.processors.base_cpu_core import BaseCPUCore
 from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
-
+from gem5.components.processors.cpu_types import CPUTypes
 from gem5.isas import ISA
 from gem5.resources.resource import (
     BinaryResource,
@@ -96,7 +94,7 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(48)
+multisim.set_num_processes(22)
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64/{x_workload}"
 
@@ -154,27 +152,15 @@ class Rancho_BTB(SimpleBTB):
     )
 
 
-#class Rancho_BP(TournamentBP):
-#    btb = Rancho_BTB()
-#    ras = ReturnAddrStack(numEntries=8)
-#    localPredictorSize = 64
-#    localCtrBits = 2
-#    localHistoryTableSize = 64
-#    globalPredictorSize = 1024
-#    globalCtrBits = 2
-#    choicePredictorSize = 1024
-#    choiceCtrBits = 2
-#    instShiftAmt = 2
-
-class Rancho_BP(TAGE):
-    btb = Rancho_BTB()
-    ras = ReturnAddrStack(numEntries=8)
+# class Rancho_BP(TAGE):
+#     btb = Rancho_BTB()
+#     ras = ReturnAddrStack(numEntries=32)
 
 class CustomCore(BaseCPUCore):
     def __init__(self):
         super().__init__(ArmO3CPU(), ISA.ARM)
 
-        self.core.branchPred = Rancho_BP()
+        # self.core.branchPred = Rancho_BP()
 
 
 class CustomProcessor(BaseCPUProcessor):
@@ -277,8 +263,6 @@ for workload in spec_rate_workloads:
     weights_file = f"{workload_dir}/{workload}.weights"
     weights_list = [float(e) for e in parse_simpoint_file(weights_file)]
 
-    import m5
-
     shutil.copy(weights_file, m5.options.outdir)
 
     chkpt_dirs = get_checkpoint_list(workload_dir)
@@ -319,7 +303,7 @@ for workload in spec_rate_workloads:
             arguments=argv[1:],
             simpoint=SimpointResource(
                 simpoint_interval=200000000,
-                # simpoint_interval=20000,
+                # simpoint_interval=2000000,
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
                 warmup_interval=50000000,
@@ -328,9 +312,10 @@ for workload in spec_rate_workloads:
             checkpoint=CheckpointResource(local_path=chkpt),
         )
 
+        chkpt_id = f"chkpt_{workload_name}_{chkpt_idx}"
         simulator = Simulator(
             board=board,
-            id=f"chkpt_{workload_name}_{chkpt_idx}",
+            id=chkpt_id,
         )
 
         chkpt_run = CheckpointRun(chkpt, simulator, board)
