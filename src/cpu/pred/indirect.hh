@@ -117,7 +117,7 @@ class IndirectPredictor : public SimObject
      * @param mispredict Was this indirect branch mispredicted?
      * @param i_history The pointer to the history object.
      */
-    virtual void commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history) = 0;
+    virtual void commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history, const Addr corr_target) = 0;
 };
 
 } // namespace branch_prediction

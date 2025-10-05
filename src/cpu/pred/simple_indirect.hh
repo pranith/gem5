@@ -67,7 +67,7 @@ class SimpleIndirectPredictor : public IndirectPredictor
                 BranchType br_type, void * &iHistory) override;
     void squash(ThreadID tid, InstSeqNum sn, void * &iHistory) override;
     void commit(ThreadID tid, InstSeqNum sn, bool mispredict,
-                void * &iHistory) override;
+                void * &iHistory, const Addr corr_target) override;
 
 
 

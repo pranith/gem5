@@ -386,7 +386,7 @@ BPredUnit::predict(const StaticInstPtr &inst, const InstSeqNum &seqNum,
 
     if (iPred) {
         // Update the indirect predictor with the direction prediction
-        iPred->update(tid, seqNum, hist->pc, false, hist->predTaken,
+        iPred->update(tid, seqNum, hist->pc, false /* squash */, hist->predTaken,
                       *hist->target, brType, hist->indirectHistory);
     }
 
@@ -477,7 +477,7 @@ BPredUnit::commitBranch(ThreadID tid, PredictorHistory* &hist)
     // Commit also Indirect predictor and RAS
     if (iPred) {
         iPred->commit(tid, hist->seqNum, hist->mispredict,
-                      hist->indirectHistory);
+                      hist->indirectHistory, hist->target->instAddr());
     }
 
     if (ras) {
@@ -632,7 +632,7 @@ BPredUnit::squash(const InstSeqNum &squashed_sn,
         // Correct Indirect predictor -------------------
         if (iPred) {
             iPred->update(tid, squashed_sn, hist->pc,
-                          true, actually_taken, corr_target,
+                          true /* squash  */, actually_taken, corr_target,
                           hist->type, hist->indirectHistory);
         }
 

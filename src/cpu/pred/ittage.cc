@@ -51,22 +51,24 @@ ITTAGE::ITTAGE(const ITTAGEParams &params)
     : IndirectPredictor(params),
       numPredTables(params.numPredTables),
       predTableEntries(params.predTableEntries),
-      predTableTagBits(params.predTableTagBits),
-      predTableAssociativity(params.predTableAssociativity),
+      //predTableTagBits(params.predTableTagBits),
+      //predTableAssociativity(params.predTableAssociativity),
       predTableHistLengths(params.predTableHistLengths),
       pathLength(params.indirectPathLength),
       speculativePathLength(params.speculativePathLength),
       instShift(params.instShiftAmt),
       replPolicy(params.tableReplPolicy),
+      useAltOnNA(4, 0),
       hashGHR(params.indirectHashGHR),
       hashTargets(params.indirectHashTargets),
       numSets(params.indirectSets),
-      numWays(params.indirectWays),
+      //numWays(params.indirectWays),
       tagBits(params.indirectTagSize),
       ghrNumBits(params.indirectGHRBits),
       ghrMask(mask(params.indirectGHRBits)),
       tableCtrBits(params.tableCtrBits),
       tableCtrInit(params.tableCtrInit),
+      tableUsefulBits(params.tableUsefulBits),
       stats(this)
 {
     if (!isPowerOf2(numSets)) {
@@ -78,11 +80,6 @@ ITTAGE::ITTAGE(const ITTAGEParams &params)
     indexingPolicy = params.tableIndexingPolicy->clone();
     threadInfo.resize(params.numThreads);
 
-    targetCache.resize(numSets);
-    for (unsigned i = 0; i < numSets; i++) {
-        targetCache[i].resize(numWays);
-    }
-
     std::string table_name_prefix(".table_");
 
     for (unsigned i = 0; i < numPredTables; i++) {
@@ -93,7 +90,8 @@ ITTAGE::ITTAGE(const ITTAGEParams &params)
                 predTableEntries, replPolicy,
                 indexingPolicy->clone(),
                 NewIPredEntry(genTagExtractor(indexingPolicy),
-                              tableCtrBits,tableCtrInit));
+                              tableCtrBits, tableCtrInit,
+                              tableUsefulBits));
 
         predTable->setDebugFlag(::gem5::debug::ITTAGE);
         predTables.push_back(predTable);
@@ -113,12 +111,6 @@ ITTAGE::reset()
     for (auto& ti : threadInfo) {
         ti.ghr = 0;
         ti.pathHist.clear();
-    }
-
-    for (unsigned i = 0; i < numSets; i++) {
-        for (unsigned j = 0; j < numWays; j++) {
-            targetCache[i][j].tag = 0;
-        }
     }
 
     for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
@@ -177,60 +169,64 @@ ITTAGE::lookup(ThreadID tid, Addr br_addr,
 	       IndirectHistory * &history)
 {
     history->hit = false;
+    NewIPredEntry *pred_entry = nullptr;
+    NewIPredEntry *alt_pred_entry = nullptr;
 
     for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
         uint64_t table_tag = getTableTag(br_addr, history->ghr, table_idx);
+
         DPRINTF(Indirect, "ITTAGE: Looking up tag: %#x in table %d\n", table_tag, table_idx);
+
         auto entry = predTables[table_idx]->findEntry(table_tag);
         if (entry && entry->ctr) {
-            history->entry_table_idx = table_idx;
-            history->table_tag = table_tag;
             history->hit = true;
             stats.tableHits[table_idx]++;
-            DPRINTF(Indirect, "ITTAGE: Hit PC:%#x found in table %d entry ctr %d\n", br_addr, table_idx, (int)entry->ctr);
-            set(target, entry->target);
-            break;
+            if (pred_entry == nullptr) {
+                pred_entry = entry;
+                history->targetAddr = entry->target->instAddr();
+                history->entry_table_idx = table_idx;
+                history->table_tag = table_tag;
+                DPRINTF(Indirect, "ITTAGE: Hit PC:%#x found in main table %d entry ctr %d\n", br_addr, table_idx, (int)entry->ctr);
+            } else {
+                alt_pred_entry = entry;
+                history->altTargetAddr = entry->target->instAddr();
+                history->alt_entry_table_idx = table_idx;
+                history->alt_table_tag = table_tag;
+                DPRINTF(Indirect, "ITTAGE: Hit PC:%#x found in alt table %d entry ctr %d\n", br_addr, table_idx, (int)entry->ctr);
+                break;
+            }
         }
     }
 
-    history->set_index = getSetIndex(br_addr, tid);
-    history->tag = getTag(br_addr);
-    assert(history->set_index < numSets);
     stats.lookups++;
 
-    DPRINTF(Indirect, "ITTAGE: Looking up PC:%#x, (set:%d, tag:%#x), "
+    DPRINTF(Indirect, "ITTAGE: Looking up PC:%#x, "
                     "ghr:%#x, pathHist sz:%d\n",
-                    history->pcAddr, history->set_index, history->tag,
+                    history->pcAddr,
                     history->ghr, threadInfo[tid].pathHist.size());
 
-    if (!history->hit) {
-        stats.tableMisses++;
-        // Try the base predictor
-        DPRINTF(Indirect, "ITTAGE: Lookup PC %#x in base predictor tag %#x\n", br_addr, history->tag);
+    auto entry = pred_entry;
 
-        const auto &iset = targetCache[history->set_index];
-        for (auto way = iset.begin(); way != iset.end(); ++way) {
-            // tag may be 0 and match the default in way->tag, so we also have to
-            // check that way->target has been initialized.
-            if (way->tag == history->tag && way->target) {
-                DPRINTF(Indirect, "ITTAGE: Hit base predictor PC:%#x (target:%s)\n", br_addr, *way->target);
-                set(target, *way->target);
-                history->hit = true;
-		history->using_base_pred = true;
-                stats.hits++;
-                return history->hit;
-            }
-        }
-        DPRINTF(Indirect, "ITTAGE: Miss ITTAGE and base predictor %#x\n", br_addr);
-        history->hit = false;
-        stats.misses++;
+    if (alt_pred_entry && !pred_entry->useful) {
+        entry = alt_pred_entry;
+        history->using_alt_pred = true;
+        DPRINTF(Indirect, "ITTAGE: Alt entry is useful while main entry is not\n");
+    } else if (useAltOnNA && alt_pred_entry) {
+        entry = alt_pred_entry;
+        history->using_alt_pred = true;
+        DPRINTF(Indirect, "ITTAGE: Forcing alt entry due to USE_ALT_ON_NA\n");
+    }
+
+    if (entry) {
+        set(target, entry->target);
     }
 
     return history->hit;
 }
 
 void
-ITTAGE::commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history)
+ITTAGE::commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history,
+               const Addr target_addr)
 {
     if (i_history == nullptr) return;
     // we do not need to recover the GHR, so delete the information
@@ -238,20 +234,79 @@ ITTAGE::commit(ThreadID tid, InstSeqNum sn, bool mispredict, void * &i_history)
 
     DPRINTF(Indirect, "ITTAGE: Committing [sn:%lu], PC:%#x, ghr:%#x, pathHist sz:%lu base_pred:%s\n",
 	    sn, history->pcAddr, history->ghr,
-	    threadInfo[tid].pathHist.size(), history->using_base_pred ? "true" : "false");
+	    threadInfo[tid].pathHist.size(), history->using_alt_pred ? "true" : "false");
 
-    if (history->was_indirect && history->hit && !history->using_base_pred && !mispredict) {
+    if (history->was_indirect && history->hit) {
+        // update confidence of the entry in the highest table for this PC
+        auto table_idx = history->entry_table_idx;
+        auto alt_table_idx = history->alt_entry_table_idx;
+        assert(table_idx < numPredTables);
+        assert(alt_table_idx < numPredTables);
 
-        // prediction was correct, increase confidence
-        auto entry = predTables[history->entry_table_idx]->findEntry(history->table_tag);
+        auto entry = predTables[table_idx]->findEntry(history->table_tag);
+        auto alt_entry = predTables[alt_table_idx]->findEntry(history->alt_table_tag);
+
         if (entry) {
-            entry->ctr++;
+            if (!mispredict) {
+                // correct prediction, increase confidence
+                DPRINTF(Indirect, "ITTAGE: CORR prediction Branch PC:%#x predicted target:%#x actual target:%#x\n",
+                        history->pcAddr, history->targetAddr, target_addr);
+                if (history->using_alt_pred) {
+                    alt_entry->ctr++;
+                    DPRINTF(Indirect, "ITTAGE: Incrementing ALT entry confidence PC: %#x ctr: %d table:%d\n",
+                            history->pcAddr, (int)alt_entry->ctr, alt_table_idx);
+                    alt_entry->useful = true;
+                } else {
+                    entry->ctr++;
+                    DPRINTF(Indirect, "ITTAGE: Incrementing MAIN entry confidence PC: %#x ctr: %d table:%d\n",
+                            history->pcAddr, (int)entry->ctr, table_idx);
+                    entry->useful = true;
+                }
+            } else {
+                // wrong prediction, decrease confidence
+                DPRINTF(Indirect, "ITTAGE: MISPRED Branch PC:%#x predicted target:%#x actual target:%#x\n",
+                        history->pcAddr, history->targetAddr, target_addr);
+                if (history->using_alt_pred && alt_entry->target->instAddr() != target_addr) {
+                    alt_entry->ctr--;
+                    DPRINTF(Indirect, "ITTAGE: Decrementing ALT entry confidence PC: %#x ctr: %d table:%d\n",
+                            history->pcAddr, (int)alt_entry->ctr, alt_table_idx);
+                } else if (entry->target->instAddr() != target_addr){
+                    entry->ctr--;
+                    DPRINTF(Indirect, "ITTAGE: Decrementing MAIN entry confidence PC: %#x ctr: %d table:%d\n",
+                            history->pcAddr, (int)entry->ctr, table_idx);
+                }
 
-            DPRINTF(Indirect,
-                    "ITTAGE: Correct prediction, increasing confidence %d table:%d\n",
-                    (int)entry->ctr, history->entry_table_idx);
+                if (history->using_alt_pred && alt_entry->target->instAddr() == target_addr) {
+                    // if the main prediction mispredicted but alternate prediction is correct
+                    // then mark the main entry as not useful 
+                    DPRINTF(Indirect, "ITTAGE: Marking MAIN entry as not useful PC: %#x ctr: %d table:%d\n",
+                            history->pcAddr, (int)entry->ctr, table_idx);
+                    entry->useful = false;
+                }
+            }
+
+
+            if (entry->ctr == 0) {
+                // invalidate the older entry
+                if (!entry->target) {
+                    delete entry->target;
+                }
+                predTables[table_idx]->invalidate(entry);
+                DPRINTF(Indirect, "ITTAGE: Invalidating entry PC: %#x ctr: %d table:%d\n",
+                        history->pcAddr, (int)entry->ctr, table_idx);
+            }
+            if (alt_entry && alt_entry->ctr == 0) {
+                // invalidate the older entry
+                if (!alt_entry->target) {
+                    delete alt_entry->target;
+                }
+                predTables[table_idx]->invalidate(alt_entry);
+                DPRINTF(Indirect, "ITTAGE: Invalidating entry PC: %#x ctr: %d table:%d\n",
+                        history->pcAddr, (int)alt_entry->ctr, table_idx);
+            }
         }
     }
+
 
     delete history;
     i_history = nullptr;
@@ -273,6 +328,7 @@ ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr pc,
     if (i_history==nullptr) {
         genIndirectInfo(tid, i_history);
     }
+
     IndirectHistory *history = static_cast<IndirectHistory*>(i_history);
     assert(history!=nullptr);
 
@@ -296,27 +352,9 @@ ITTAGE::update(ThreadID tid, InstSeqNum sn, Addr pc,
                 threadInfo[tid].pathHist.pop_back();
             }
 
-            /*
-             * Why are we doing this?
-            for (int table_idx = numPredTables - 1; table_idx >= 0; table_idx--) {
-                auto entry = predTables[table_idx]->findEntry(tag);
-                if (entry) {
-                    history->entry_table_idx = table_idx;
-                    DPRINTF(Indirect, "ITTAGE: PC:%#x, BR:%#x\n",
-                            history->pcAddr, entry->tag);
-                    break;
-                }
-            }
-            */
-
-            auto tag = getTag(history->pcAddr);
-            history->set_index = getSetIndex(history->pcAddr, tid);
-            history->tag = tag;
-
             DPRINTF(Indirect, "ITTAGE: Record Target [sn:%lu], PC:%#x, TGT:%#x, "
-                        "ghr:%#x, (set:%x, tag:%x)\n",
-                        sn, history->pcAddr, target, history->ghr,
-                        history->set_index, history->tag);
+                        "ghr:%#x\n",
+                    sn, history->pcAddr, target, history->ghr);
         }
     }
 
@@ -396,49 +434,26 @@ ITTAGE::recordTarget(ThreadID tid, InstSeqNum sn,
     }
 
     DPRINTF(Indirect, "ITTAGE: Record Target [sn:%lu], PC:%#x, TGT:%#x, "
-                      "ghr:%#x, (set:%x, tag:%x)\n",
-                sn, history->pcAddr, target.instAddr(), history->ghr,
-                history->set_index, history->tag);
+                      "ghr:%#x\n",
+            sn, history->pcAddr, target.instAddr(), history->ghr);
 
-    assert(history->set_index < numSets);
     stats.targetRecords++;
 
     // update the tables
     // if entry already exists, decrement the counter
     auto table_idx = history->entry_table_idx;
+    // auto alt_table_idx = history->alt_entry_table_idx;
     auto nxt_table_idx = 0;
     bool alloc = true;
-    if (history->hit && !history->using_base_pred) {
+    if (history->hit) {
         // get the next table that we need to alloc into
         nxt_table_idx = (table_idx < (numPredTables - 1)) ? table_idx + 1 : table_idx;
         if (nxt_table_idx == table_idx) {
+            // entry already exists in the highest table
+            // we wait until confidence decrements to 0 at commit and invalidation
             alloc = false;
         }
-        // update confidence of the entry in the highest table for this PC
-        auto entry = predTables[table_idx]->findEntry(history->table_tag);
-        if (entry) {
-            assert(entry->tag == history->table_tag);
-            assert(table_idx < numPredTables);
 
-            if (!entry->target->equals(target)) {
-                // check confidence and reduce it
-                entry->ctr--;
-                DPRINTF(Indirect, "ITTAGE: Decrementing confidence PC: %#x ctr: %d table:%d\n",
-                        history->pcAddr, (int)entry->ctr, table_idx);
-            }
-            if (entry->ctr == 0) {
-                // invalidate the older entry
-                if (!entry->target) {
-                    delete entry->target;
-                }
-                predTables[table_idx]->invalidate(entry);
-                DPRINTF(Indirect, "ITTAGE: Invalidating entry PC: %#x ctr: %d table:%d\n",
-                        history->pcAddr, (int)entry->ctr, table_idx);
-
-                // allocate an entry as old one is invalidated
-                alloc = true;
-            }
-        }
     }
 
     if (alloc) {
@@ -446,35 +461,19 @@ ITTAGE::recordTarget(ThreadID tid, InstSeqNum sn,
         auto victim = predTables[nxt_table_idx]->findVictim(table_tag);
 
         DPRINTF(Indirect,
-                "ITTAGE: Inserting Target ([sn:%lu] PC:%#x set:%d target:%s tag:%#x) in table %d\n",
-                sn, history->pcAddr, history->set_index, target, table_tag, nxt_table_idx);
+                "ITTAGE: Inserting Target ([sn:%lu] PC:%#x target:%#x tag:%#x) in table %d\n",
+                sn, history->pcAddr, target.instAddr(), table_tag, nxt_table_idx);
 
         victim->tag = table_tag;
+        victim->useful = true;
         victim->resetCtr();
         set(victim->target, target);
-        predTables[nxt_table_idx]->insertEntry({history->table_tag}, victim);
+        predTables[nxt_table_idx]->insertEntry({table_tag}, victim);
 
         // does this get used at commit?
         history->table_tag = table_tag;
         history->entry_table_idx = nxt_table_idx;
     }
-
-    // Update the target cache
-    auto &iset = targetCache[history->set_index];
-    for (auto way = iset.begin(); way != iset.end(); ++way) {
-        if (way->tag == history->tag) {
-            DPRINTF(Indirect,
-                    "ITTAGE: Updating target cache ([sn:%lu] br:%#x set:%d target:%s tag:%#x)\n",
-                    sn, history->pcAddr, history->set_index, target, history->tag);
-            set(way->target, target);
-            return;
-        }
-    }
-
-    // Did not find entry, random replacement
-    auto &way = iset[rand() % numWays];
-    way.tag = history->tag;
-    set(way.target, target);
 }
 
 inline Addr

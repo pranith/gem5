@@ -212,6 +212,9 @@ class ITTAGE(IndirectPredictor):
     tableCtrInit = Param.Unsigned(
         8, "Initial value of the table entry counter"
     )
+    tableUsefulBits = Param.Unsigned(
+        2, "Number of bits in the table entry useful field"
+    )
 
     indirectHashGHR = Param.Bool(True, "Hash branch predictor GHR")
     indirectHashTargets = Param.Bool(True, "Hash path history targets")

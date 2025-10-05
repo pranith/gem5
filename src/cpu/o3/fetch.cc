@@ -968,8 +968,9 @@ Fetch::checkSignalsAndUpdate(ThreadID tid)
         if (fromCommit->commitInfo[tid].mispredictInst &&
             fromCommit->commitInfo[tid].mispredictInst->isControl()) {
             branchPred->squash(fromCommit->commitInfo[tid].doneSeqNum,
-                    *fromCommit->commitInfo[tid].pc,
-                    fromCommit->commitInfo[tid].branchTaken, tid);
+                               *fromCommit->commitInfo[tid].pc,
+                               fromCommit->commitInfo[tid].branchTaken,
+                               tid, true /* from_commit */);
         } else {
             branchPred->squash(fromCommit->commitInfo[tid].doneSeqNum,
                               tid);
@@ -990,8 +991,9 @@ Fetch::checkSignalsAndUpdate(ThreadID tid)
         // Update the branch predictor.
         if (fromDecode->decodeInfo[tid].branchMispredict) {
             branchPred->squash(fromDecode->decodeInfo[tid].doneSeqNum,
-                    *fromDecode->decodeInfo[tid].nextPC,
-                    fromDecode->decodeInfo[tid].branchTaken, tid);
+                               *fromDecode->decodeInfo[tid].nextPC,
+                               fromDecode->decodeInfo[tid].branchTaken,
+                               tid, false /* from_commit */);
         } else {
             branchPred->squash(fromDecode->decodeInfo[tid].doneSeqNum,
                               tid);

@@ -109,6 +109,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+spec_path = "/home/pranith/work/spec2017_chkpts_r_arm64"
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64/{x_workload}"
 
 spec_rate_workloads = [
@@ -138,7 +139,7 @@ spec_rate_binary = {
 }
 
 spec_rate_args = {
-    "500.perlbench_r": "-I/home/pranith/work/spec2017_chkpts_r_arm64/500.perlbench_r/lib checkspam.pl 2500 5 25 11 150 1 1 1 1",
+    "500.perlbench_r": f"-I{spec_path}/500.perlbench_r/lib checkspam.pl 2500 5 25 11 150 1 1 1 1",
     "502.gcc_r": "gcc-pp.c -O3 -finline-limit=0 -fif-conversion -fif-conversion2 -o gcc-pp.opts-O3_-finline-limit_0_-fif-conversion_-fif-conversion2.s",
     "505.mcf_r": "inp.in",
     "520.omnetpp_r": "-c General -r 0",

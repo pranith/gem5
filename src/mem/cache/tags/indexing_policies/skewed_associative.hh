@@ -180,7 +180,7 @@ class SkewedAssociative : public BaseIndexingPolicy
                         const ReplaceableEntry* entry) const override;
 
     SkewedAssociative*
-    clone() const
+    clone() const override
     {
         return new SkewedAssociative(*this);
     }

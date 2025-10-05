@@ -93,10 +93,10 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(24)
+multisim.set_num_processes(28)
 
-spec_path = "/home/pranith/workspace/spec2017_chkpts_r_arm64"
-spec_dir = "/home/pranith/workspace/spec2017_chkpts_r_arm64/{x_workload}"
+spec_path = "/home/pranith/work/spec2017_chkpts_r_arm64"
+spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64/{x_workload}"
 
 spec_rate_workloads = [
     "500.perlbench_r",

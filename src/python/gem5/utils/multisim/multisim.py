@@ -50,6 +50,7 @@ This script is then passed to the child processes to load.
 """
 
 import importlib
+import sys
 import multiprocessing
 from pathlib import Path
 from typing import (
@@ -96,6 +97,7 @@ def _get_simulator_ids_child_process(id_list, module_path: Path) -> None:
 
     _load_module(module_path)
     global _multi_sim
+    # print(id_list)
     if len(id_list) != 0:
         id_list *= 0
     id_list.extend([sim.get_id() for sim in _multi_sim])
@@ -164,6 +166,15 @@ def _run(module_path: Path, id: str) -> None:
     global _multi_sim
     sim_list = [sim for sim in _multi_sim if sim.get_id() == id]
 
+    if len(sim_list) > 1:
+        print("Duplicate ids found")
+        for sim in sim_list:
+            print(sim.get_id())
+
+        print("All the ids:")
+        for sim in _multi_sim:
+            print(sim.get_id())
+
     assert len(sim_list) != 0, f"No simulator with id '{id}' found."
     assert len(sim_list) == 1, f"Multiple simulators with id '{id}' found."
     import m5
@@ -173,7 +184,11 @@ def _run(module_path: Path, id: str) -> None:
     # This doesn't do anything if none of the redirect options are passed
     override_re_outdir(subdir)
 
+    print(f"Launching simulation for {sim_list[0].get_id()}")
+
     sim_list[0].run()
+
+    print(f"Done simulation for {sim_list[0].get_id()}")
 
 
 def run(module_path: Path, processes: Optional[int] = None) -> None:
@@ -255,7 +270,14 @@ def add_simulator(simulator: "Simulator") -> None:
         # simulators. This is used to ensure that the simulator has a unique
         # id.
         simulator.set_id(f"sim_{len(_multi_sim)}")
-    _multi_sim.add(simulator)
+
+    print(f"Adding simulator with id {simulator.get_id()}")
+
+    sim_list = [sim for sim in _multi_sim if sim.get_id() == simulator.get_id()]
+    if len(sim_list) != 0:
+        print(f"Simulator id already exists {sim.get_id()}")
+    else:
+        _multi_sim.add(simulator)
 
     # The following code is used to enable a user to run a single simulation
     # from the config script, based on an ID, in the case the config script is

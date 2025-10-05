@@ -35,8 +35,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_PRED_INDIRECT_HH__
-#define __CPU_PRED_INDIRECT_HH__
+#ifndef __CPU_PRED_ITTAGE_HH__
+#define __CPU_PRED_ITTAGE_HH__
 
 #include <deque>
 
@@ -75,7 +75,8 @@ class ITTAGE : public IndirectPredictor
                 BranchType br_type, void * &iHistory) override;
     void squash(ThreadID tid, InstSeqNum sn, void * &iHistory) override;
     void commit(ThreadID tid, InstSeqNum sn,
-                bool mispredict, void * &iHistory) override;
+                bool mispredict, void * &iHistory,
+                const Addr target) override;
 
 
 
@@ -86,32 +87,34 @@ class ITTAGE : public IndirectPredictor
   private:
     const unsigned numPredTables;
     const unsigned predTableEntries;
-    const unsigned predTableTagBits;
-    const unsigned predTableAssociativity;
+    // const unsigned predTableTagBits;
+    // const unsigned predTableAssociativity;
     const std::vector<unsigned> predTableHistLengths;
     const unsigned pathLength;
     const unsigned speculativePathLength;
     const unsigned instShift;
+
     replacement_policy::Base *replPolicy;
     BaseIndexingPolicy *indexingPolicy;
+
+    SatCounter8 useAltOnNA;
 
     const bool hashGHR;
     const bool hashTargets;
     const unsigned numSets;
-    const unsigned numWays;
+    // const unsigned numWays;
     const unsigned tagBits;
     const unsigned ghrNumBits;
     const unsigned ghrMask;
     const unsigned tableCtrBits;
     const unsigned tableCtrInit;
+    const unsigned tableUsefulBits;
 
     struct IPredEntry
     {
         Addr tag = 0;
         std::unique_ptr<PCStateBase> target;
     };
-
-    std::vector<std::vector<IPredEntry>> targetCache;
 
     class NewIPredEntry : public CacheEntry
     {
@@ -122,11 +125,14 @@ class ITTAGE : public IndirectPredictor
         PCStateBase* target;
 
         SatCounter8 ctr;
+        bool useful;
 
-        NewIPredEntry(TagExtractor ext, unsigned ctr_bits, unsigned ctr_init)
+        NewIPredEntry(TagExtractor ext, unsigned ctr_bits, unsigned ctr_init,
+                      unsigned useful_bits)
             : CacheEntry(ext),
               tag(0), target(nullptr),
-              ctr(ctr_bits, ctr_init) {}
+              ctr(ctr_bits, ctr_init),
+              useful(false){}
 
         void resetCtr(void) { ctr.reset(); }
     };
@@ -140,6 +146,7 @@ class ITTAGE : public IndirectPredictor
         HistoryEntry() : pcAddr(0), targetAddr(0), seqNum(0) { }
         Addr pcAddr;
         Addr targetAddr;
+
         InstSeqNum seqNum;
     };
 
@@ -151,27 +158,31 @@ class ITTAGE : public IndirectPredictor
         /* data */
         Addr pcAddr;
         Addr targetAddr;
+        Addr altTargetAddr;
         InstSeqNum seqNum;
 
-        // NewIPredEntry *entry;
-        unsigned int entry_table_idx;
+        uint32_t entry_table_idx;
+        uint32_t alt_entry_table_idx;
 
-        Addr set_index;
-        Addr tag;
-        Addr table_tag;
         bool hit;
+        Addr table_tag;
+        Addr alt_table_tag;
+
         uint64_t ghr;
         uint64_t pathHist;
 
         bool was_indirect;
-        bool using_base_pred;
+        bool using_alt_pred;
 
         IndirectHistory()
             : pcAddr(MaxAddr),
 	      targetAddr(MaxAddr),
-	      // entry(nullptr),
+	      altTargetAddr(MaxAddr),
 	      entry_table_idx(0),
-              was_indirect(false)
+	      alt_entry_table_idx(0),
+              hit(false),
+              was_indirect(false),
+              using_alt_pred(false)
         {}
     };
 
@@ -232,4 +243,4 @@ class ITTAGE : public IndirectPredictor
 } // namespace branch_prediction
 } // namespace gem5
 
-#endif // __CPU_PRED_INDIRECT_HH__
+#endif // __CPU_PRED_ITTAGE_HH__

@@ -307,7 +307,6 @@ class Simulator:
         self.set_max_ticks(max_ticks)
 
         if id:
-            print(id)
             self.set_id(id)
 
         # We specify a dictionary here outlining the default behavior for each
@@ -436,8 +435,6 @@ class Simulator:
 
         :param id: The ID of the simulator.
         """
-        print(f"Id is {id}\n")
-
         if not id:
             raise ValueError("ID cannot be an empty string.")
 
