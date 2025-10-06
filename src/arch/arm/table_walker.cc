@@ -1911,6 +1911,7 @@ TableWalker::doLongDescriptor()
             switch (L) {
               case LookupLevel::L1:
                 assert(currState->aarch64);
+                [[fallthrough]];
               case LookupLevel::L2:
               case LookupLevel::L3:
                 event = LongDescEventByLevel[L];
