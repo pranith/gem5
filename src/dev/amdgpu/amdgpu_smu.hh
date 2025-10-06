@@ -39,7 +39,7 @@ namespace gem5
 
 class AMDGPUDevice;
 
-#define MI200_SMUIO_MCM_CONFIG                                         0x0024
+#define MI200_SMUIO_MCM_CONFIG 0x0024
 
 /**
  * Handle MMIO reads/writes to register with "SMU" prefix.

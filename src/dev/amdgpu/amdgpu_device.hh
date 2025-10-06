@@ -237,8 +237,16 @@ class AMDGPUDevice : public PciEndpoint
 
     /* Device information */
     GfxVersion getGfxVersion() const { return gfx_version; }
-    int getGpuId() const { return gpuId; }
-    Addr getVRAMSize() const { return vramSize; }
+    int
+    getGpuId() const
+    {
+        return gpuId;
+    }
+    Addr
+    getVRAMSize() const
+    {
+        return vramSize;
+    }
 };
 
 } // namespace gem5

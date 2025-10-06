@@ -44,13 +44,13 @@ AMDGPUSmu::readMMIO(PacketPtr pkt, Addr offset)
     uint32_t regval = 0;
 
     switch (offset) {
-      case MI200_SMUIO_MCM_CONFIG:
-        regval = (gpuDevice->getGpuId() << 4);
-        break;
-      default:
-        DPRINTF(AMDGPUDevice, "SMU read of unknown MMIO offset %x (%x)\n",
-                offset, pkt->getAddr());
-        break;
+        case MI200_SMUIO_MCM_CONFIG:
+            regval = (gpuDevice->getGpuId() << 4);
+            break;
+        default:
+            DPRINTF(AMDGPUDevice, "SMU read of unknown MMIO offset %x (%x)\n",
+                    offset, pkt->getAddr());
+            break;
     }
 
     pkt->setLE<uint32_t>(regval);
@@ -63,9 +63,9 @@ void
 AMDGPUSmu::writeMMIO(PacketPtr pkt, Addr offset)
 {
     switch (offset) {
-      default:
-        DPRINTF(AMDGPUDevice, "SMU write of unknown MMIO offset %x (%x)\n",
-                offset, pkt->getAddr());
+        default:
+            DPRINTF(AMDGPUDevice, "SMU write of unknown MMIO offset %x (%x)\n",
+                    offset, pkt->getAddr());
     }
 }
 

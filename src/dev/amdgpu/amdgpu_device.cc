@@ -53,11 +53,16 @@ namespace gem5
 {
 
 AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
-    : PciEndpoint(p), gpuMemMgr(p.memory_manager), deviceIH(p.device_ih),
-      cp(p.cp), checkpoint_before_mmios(p.checkpoint_before_mmios),
-      init_interrupt_count(0), _lastVMID(0),
+    : PciEndpoint(p),
+      gpuMemMgr(p.memory_manager),
+      deviceIH(p.device_ih),
+      cp(p.cp),
+      checkpoint_before_mmios(p.checkpoint_before_mmios),
+      init_interrupt_count(0),
+      _lastVMID(0),
       deviceMem(name() + ".deviceMem", p.memories, false, "", false),
-      system(p.system), gpuId(p.gpu_id)
+      system(p.system),
+      gpuId(p.gpu_id)
 {
     uint64_t vram_size = 0;
 
@@ -194,7 +199,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     } else {
         gpuvm.setMMIOAperture(MMHUB_MMIO_RANGE,  AddrRange(0x68000, 0x6A120));
     }
-    gpuvm.setMMIOAperture(SMU_MMIO_RANGE,  AddrRange(0x5A000, 0x5ACE4));
+    gpuvm.setMMIOAperture(SMU_MMIO_RANGE, AddrRange(0x5A000, 0x5ACE4));
 
     // These are hardcoded register values to return what the driver expects
     setRegVal(AMDGPU_MP0_SMN_C2PMSG_33, 0x80000000);
@@ -426,7 +431,6 @@ AMDGPUDevice::writeConfig(PacketPtr pkt)
             return PciEndpoint::writeConfig(pkt);
         }
     }
-
 
     if (offset >= PXCAP_BASE && offset < (PXCAP_BASE + sizeof(PXCAP))) {
         uint8_t *pxcap_data = &(pxcap.data[0]);

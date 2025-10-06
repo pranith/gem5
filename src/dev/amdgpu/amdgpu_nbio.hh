@@ -62,7 +62,7 @@ class AMDGPUDevice;
 #define AMDGPU_PCIE_DATA                                  0x00034
 #define AMDGPU_PCIE_DATA2                                 0x0003c
 
-#define MI200_BIOS_SCRATCH_7                               0x014c
+#define MI200_BIOS_SCRATCH_7 0x014c
 
 // Message bus related to psp
 #define AMDGPU_MP0_SMN_C2PMSG_33                          0x58184
