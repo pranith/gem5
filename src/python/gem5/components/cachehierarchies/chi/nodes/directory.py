@@ -72,7 +72,7 @@ class BaseDirectory(AbstractNode):
         dir_idx: int,
         mem_ranges: List[AddrRange],
         cache_line_size,
-    ):
+    ) -> List[AddrRange]:
         block_size_bits = int(math.log(cache_line_size, 2))
         llc_bits = int(math.log(num_directories, 2))
         numa_bit = block_size_bits + llc_bits - 1
