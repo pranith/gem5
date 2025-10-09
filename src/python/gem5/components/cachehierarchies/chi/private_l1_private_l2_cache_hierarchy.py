@@ -46,6 +46,7 @@ from m5.objects import (
     RubySystem,
 )
 from m5.objects.SubSystem import SubSystem
+from m5.params import AllMemory
 
 from gem5.coherence_protocol import CoherenceProtocol
 from gem5.utils.requires import requires
@@ -139,6 +140,7 @@ class PrivateL1PrivateL2CacheHierarchy(
             self.ruby_system.network,
             cache_line_size=board.get_cache_line_size(),
             clk_domain=board.get_clock_domain(),
+            addr_ranges=[AllMemory],
         )
         self.directory.ruby_system = self.ruby_system
 
