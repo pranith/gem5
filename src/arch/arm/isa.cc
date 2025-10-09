@@ -1034,6 +1034,7 @@ ISA::setMiscReg(RegIndex idx, RegVal val)
                 miscRegs[sctlr_idx] = (RegVal)new_sctlr;
                 getMMUPtr(tc)->invalidateMiscReg();
             }
+                [[fallthrough]];
           case MISCREG_MIDR:
           case MISCREG_ID_PFR0:
           case MISCREG_ID_PFR1:

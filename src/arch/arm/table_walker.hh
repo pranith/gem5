@@ -75,6 +75,7 @@ class TableWalker : public ClockedObject
     {
       public:
         DescriptorBase() : lookupLevel(LookupLevel::L0) {}
+        virtual ~DescriptorBase() = default;
 
         /** Current lookup level for this descriptor */
         LookupLevel lookupLevel;
@@ -123,6 +124,7 @@ class TableWalker : public ClockedObject
         {
             lookupLevel = LookupLevel::L1;
         }
+        virtual ~L1Descriptor() = default;
 
         uint8_t*
         getRawPtr() override
@@ -298,6 +300,8 @@ class TableWalker : public ClockedObject
         {
             lookupLevel = LookupLevel::L2;
         }
+
+        virtual ~L2Descriptor() = default;
 
         uint8_t*
         getRawPtr() override
