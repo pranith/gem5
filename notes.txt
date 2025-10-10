@@ -1,0 +1,1 @@
+gdb --args ./build/ARM/gem5.debug --debug-flags=Heartbeat -d output_debug configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
