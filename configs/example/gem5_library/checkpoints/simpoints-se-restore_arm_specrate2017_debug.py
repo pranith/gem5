@@ -166,14 +166,6 @@ class Rancho_BTB(SimpleBTB):
     )
 
 
-class Rancho_ITTAGE(ITTAGE):
-    tableCtrBits = 4
-    tableCtrInit = 8
-    indirectHashGHR = False
-    indirectHashTargets = False
-    predTableEntries = "1024"
-
-
 # class Rancho_BP(TournamentBP):
 #    btb = Rancho_BTB()
 #    ras = ReturnAddrStack(numEntries=8)
@@ -187,17 +179,17 @@ class Rancho_ITTAGE(ITTAGE):
 #    instShiftAmt = 2
 
 
-class Rancho_BP(TAGE):
-    btb = Rancho_BTB()
-    ras = ReturnAddrStack(numEntries=8)
-    indirectBranchPred = Rancho_ITTAGE()
+# class Rancho_BP(TAGE):
+#     btb = Rancho_BTB()
+#     ras = ReturnAddrStack(numEntries=8)
+#     indirectBranchPred = Rancho_ITTAGE()
 
 
 class CustomCore(BaseCPUCore):
     def __init__(self):
         super().__init__(ArmO3CPU(), ISA.ARM)
 
-        self.core.branchPred = Rancho_BP()
+        # self.core.branchPred = Rancho_BP()
 
 
 class CustomProcessor(BaseCPUProcessor):
