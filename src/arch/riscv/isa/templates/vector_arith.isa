@@ -1714,7 +1714,14 @@ template<typename ElemType>
         micro_vl = std::min(tmp_vl -= micro_vlmax, micro_vlmax);
     }
 
-    microop = new VPinVdMicroInst(machInst, 0, num_microops, elen, vlen);
+    int k;
+    tmp_vl = this->vl;
+    micro_vl = std::min(tmp_vl, micro_vlmax);
+    for (k = 0; k < num_microops && micro_vl > 0; ++k) {
+        micro_vl = std::min(tmp_vl -= micro_vlmax, micro_vlmax);
+    }
+
+    microop = new VPinVdMicroInst(machInst, 0, k, elen, vlen);
     microop->setFlag(IsDelayedCommit);
     this->microops.push_back(microop);
 
