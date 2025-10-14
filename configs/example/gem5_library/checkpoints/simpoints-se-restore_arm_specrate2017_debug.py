@@ -207,27 +207,6 @@ def parse_simpoint_file(filename):
         return [line.split()[0] for line in file.readlines()]
 
 
-def max_inst():
-    warmed_up = False
-    if warmed_up:
-        print("end of SimPoint interval")
-        dump()
-        return True
-    else:
-        print("end of warmup, starting to simulate SimPoint")
-        warmed_up = True
-        # Schedule a MAX_INSTS exit event during the simulation
-        if args.maxinsts:
-            max_instructions = args.maxinsts
-        else:
-            max_instructions = board.get_simpoint().get_simpoint_interval()
-        print(max_instructions)
-        simulator.schedule_max_insts(max_instructions)
-        # dump()
-        reset()
-        return False
-
-
 def get_checkpoint_list(x_path):
     dir_entries = os.listdir(x_path)
     cpt_dirs = [
@@ -369,8 +348,13 @@ for workload in spec_rate_workloads:
             )
         }
 
+        max_insts = board.get_simpoint().get_warmup_list()[0]
+
+        if args.maxinsts and args.maxinsts < max_insts:
+            max_insts = args.maxinsts
+
         simulator.set_on_exit_event(on_exit_event)
-        simulator.schedule_max_insts(board.get_simpoint().get_warmup_list()[0])
+        simulator.schedule_max_insts(max_insts)
         simulator.run()
         # break
 
