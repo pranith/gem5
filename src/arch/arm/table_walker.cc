@@ -53,6 +53,7 @@
 #include "debug/PageTableWalker.hh"
 #include "debug/TLB.hh"
 #include "debug/TLBVerbose.hh"
+#include "params/ArmTableWalker.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -1910,6 +1911,7 @@ TableWalker::doLongDescriptor()
             switch (L) {
               case LookupLevel::L1:
                 assert(currState->aarch64);
+                [[fallthrough]];
               case LookupLevel::L2:
               case LookupLevel::L3:
                 event = LongDescEventByLevel[L];

@@ -42,6 +42,7 @@ from m5.objects.ArmTLB import (
 )
 from m5.objects.BaseMMU import BaseMMU
 from m5.objects.ClockedObject import ClockedObject
+from m5.objects.System import System
 from m5.params import *
 from m5.proxy import *
 
