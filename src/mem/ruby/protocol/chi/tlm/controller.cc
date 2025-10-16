@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 ARM Limited
+ * Copyright (c) 2023,2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -50,8 +50,30 @@ namespace tlm::chi {
 using namespace ruby::CHI;
 
 CacheController::CacheController(const Params &p)
-  : CHIGenericController(p)
+    : CHIGenericController(p),
+      inPort(name() + ".in_port", 0, this),
+      outPort(name() + ".out_port", 0, this)
 {
+    inPort.onChange([this](const TlmData &new_val) {
+        this->sendMsg(*new_val.first, *new_val.second);
+    });
+
+    bw = [this](ARM::CHI::Payload *payload, ARM::CHI::Phase *phase) {
+        auto tlm_data = TlmData(payload, phase);
+        outPort.set(tlm_data);
+    };
+}
+
+Port &
+CacheController::getPort(const std::string &if_name, PortID idx)
+{
+    if (if_name == "in_port") {
+        return inPort;
+    } else if (if_name == "out_port") {
+        return outPort;
+    } else {
+        return CHIGenericController::getPort(if_name, idx);
+    }
 }
 
 bool

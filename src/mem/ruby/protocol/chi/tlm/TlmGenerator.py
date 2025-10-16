@@ -1,5 +1,5 @@
 # -*- mode:python -*-
-# Copyright (c) 2024 Arm Limited
+# Copyright (c) 2024-2025 Arm Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -36,6 +36,10 @@
 
 
 from m5.objects.TlmController import TlmController
+from m5.objects.TlmPort import (
+    TlmSinkPort,
+    TlmSourcePort,
+)
 from m5.params import *
 from m5.SimObject import (
     PyBindMethod,
@@ -66,4 +70,5 @@ class TlmGenerator(SimObject):
             self.getCCObject().scheduleTransaction(when, tr)
 
     cpu_id = Param.Int("TlmGenerator CPU identifier")
-    chi_controller = Param.TlmController("TLM-to-Ruby CacheController")
+    in_port = TlmSinkPort("CHI TLM input/response port")
+    out_port = TlmSourcePort("CHI TLM output/request port")

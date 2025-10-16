@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Arm Limited
+ * Copyright (c) 2024-2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -141,12 +141,16 @@ TlmGenerator::TransactionEvent::process()
 }
 
 TlmGenerator::TlmGenerator(const Params &p)
-  : SimObject(p), cpuId(p.cpu_id), controller(p.chi_controller)
+    : SimObject(p),
+      cpuId(p.cpu_id),
+      outPort(name() + ".out_port", 0, this),
+      inPort(name() + ".in_port", 0, this)
 {
-    controller->bw = [this] (ARM::CHI::Payload *payload, ARM::CHI::Phase *phase)
-    {
+    inPort.onChange([this](const TlmData &data) {
+        auto payload = data.first;
+        auto phase = data.second;
         this->recv(payload, phase);
-    };
+    });
 
     registerExitCallback([this](){ passFailCheck(); });
 }
@@ -174,7 +178,8 @@ TlmGenerator::inject(Transaction *transaction)
 
     DPRINTF(TLM, "[c%d] send %s\n", cpuId, transactionToString(*payload, phase));
 
-    controller->sendMsg(*payload, phase);
+    auto tlm_data = TlmData(payload, &phase);
+    outPort.send(tlm_data);
 }
 
 void
@@ -211,6 +216,18 @@ TlmGenerator::passFailCheck()
         }
     }
     inform(" Suite Success ");
+}
+
+Port &
+TlmGenerator::getPort(const std::string &if_name, PortID idx)
+{
+    if (if_name == "out_port") {
+        return outPort;
+    } else if (if_name == "in_port") {
+        return inPort;
+    } else {
+        return SimObject::getPort(if_name, idx);
+    }
 }
 
 } // namespace tlm::chi

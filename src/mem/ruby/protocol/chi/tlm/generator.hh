@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Arm Limited
+ * Copyright (c) 2024-2025 Arm Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -43,6 +43,7 @@
 
 #include <ARM/TLM/arm_chi.h>
 
+#include "mem/ruby/protocol/chi/tlm/port.hh"
 #include "mem/ruby/protocol/chi/tlm/utils.hh"
 #include "params/TlmGenerator.hh"
 #include "sim/eventq.hh"
@@ -244,6 +245,8 @@ class TlmGenerator : public SimObject
 
     void scheduleTransaction(Tick when, Transaction *tr);
 
+    Port &getPort(const std::string &if_name, PortID idx) override;
+
   protected:
     struct TransactionEvent : public Event
     {
@@ -293,8 +296,11 @@ class TlmGenerator : public SimObject
     /** Map of pending (injected) transactions indexed by the txn_id */
     std::unordered_map<uint16_t, Transaction*> pendingTransactions;
 
-    /** Pointer to the CHI-tlm controller */
-    CacheController *controller;
+    /** request output port */
+    SourcePort<TlmGenerator> outPort;
+
+    /** response input port */
+    SinkPort<TlmGenerator> inPort;
 };
 
 } // namespace tlm::chi
