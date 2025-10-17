@@ -1076,6 +1076,8 @@ InstructionQueue::addReadyMemInst(const DynInstPtr &ready_inst)
 {
     OpClass op_class = ready_inst->opClass();
 
+    assert(op_class < Num_OpClasses);
+
     readyInsts[op_class].push(ready_inst);
 
     // Will need to reorder the list if either a queue is not on the list,
@@ -1446,6 +1448,8 @@ InstructionQueue::addIfReady(const DynInstPtr &inst)
         }
 
         OpClass op_class = inst->opClass();
+
+        assert(op_class < Num_OpClasses);
 
         DPRINTF(IQ, "Instruction is ready to issue, putting it onto "
                 "the ready list, PC %s opclass:%i [sn:%llu].\n",
