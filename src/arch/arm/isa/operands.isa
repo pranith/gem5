@@ -457,6 +457,7 @@ def operands {{
     'POp1': VecPredReg('op1'),
     'POp2': VecPredReg('op2'),
     'PDest': VecPredReg('dest'),
+    'PDest2': VecPredReg('dest2'),
     'PDestMerge': VecPredReg('dest'),
     'Ffr': VecPredReg('PREDREG_FFR'),
     'FfrAux': VecPredReg('PREDREG_FFR'),

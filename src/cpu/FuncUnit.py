@@ -119,9 +119,12 @@ class OpClass(Enum):
         "SimdExt",
         "SimdFloatExt",
         "SimdConfig",
+        "SimdBf16Add",
+        "SimdBf16Cmp",
         "SimdBf16Cvt",
         "SimdBf16DotProd",
         "SimdBf16MatMultAcc",
+        "SimdBf16Mult",
         "SimdBf16MultAcc",
         "Bf16Cvt",
     ]

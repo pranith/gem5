@@ -118,8 +118,14 @@ class ArmExtension(ScopedEnum):
         "FEAT_SCTLR2",
         "FEAT_TCR2",
         "FEAT_S1PIE",
+        # Armv9.0
+        "FEAT_SVE2",
+        "FEAT_SVE_BitPerm",
         # Armv9.2
         "FEAT_SME",  # Optional in Armv9.2
+        # Armv9.4
+        "FEAT_SVE2p1",
+        "FEAT_SVE_B16B16",
         # Others
         "SECURITY",
         "LPAE",
@@ -223,8 +229,12 @@ class ArmDefaultRelease(Armv8):
         # Armv8.7
         "FEAT_HCX",
         "FEAT_XS",
+        # Armv9.0
+        "FEAT_SVE2",
         # Armv9.2
-        "FEAT_SME",
+        "FEAT_SME",  # Optional in Armv9.2
+        # Armv9.4
+        "FEAT_SVE2p1",
     ]
 
 

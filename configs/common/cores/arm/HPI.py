@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2017, 2020 ARM Limited
+# Copyright (c) 2014-2017, 2020, 2025 ARM Limited
 # All rights reserved.
 #
 # The license below extends only to copyright in the software and shall
@@ -1436,9 +1436,12 @@ class HPI_FloatSimdFU(MinorFU):
             "SimdFloatMultAcc",
             "SimdFloatMatMultAcc",
             "SimdFloatSqrt",
+            "SimdBf16Add",
+            "SimdBf16Cmp",
             "SimdBf16Cvt",
             "SimdBf16DotProd",
             "SimdBf16MatMultAcc",
+            "SimdBf16Mult",
             "SimdBf16MultAcc",
         ]
     )

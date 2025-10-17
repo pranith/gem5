@@ -118,9 +118,12 @@ class SIMD_Unit(FUDesc):
         OpDesc(opClass="SimdSha256Hash2"),
         OpDesc(opClass="SimdShaSigma2"),
         OpDesc(opClass="SimdShaSigma3"),
+        OpDesc(opClass="SimdBf16Add"),
+        OpDesc(opClass="SimdBf16Cmp"),
         OpDesc(opClass="SimdBf16Cvt"),
         OpDesc(opClass="SimdBf16DotProd"),
         OpDesc(opClass="SimdBf16MatMultAcc"),
+        OpDesc(opClass="SimdBf16Mult"),
         OpDesc(opClass="SimdBf16MultAcc"),
     ]
     count = 4
