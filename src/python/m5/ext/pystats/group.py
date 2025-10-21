@@ -1,3 +1,15 @@
+# Copyright (c) 2025 Arm Limited
+# All rights reserved.
+#
+# The license below extends only to copyright in the software and shall
+# not be construed as granting a license to any other intellectual
+# property including but not limited to intellectual property relating
+# to a hardware implementation of the functionality of the software
+# licensed hereunder.  You may use the software subject to the license
+# terms below provided that you ensure that this notice is replicated
+# unmodified and in its entirety in all distributions of the software,
+# modified or unmodified, in source code or in binary form.
+#
 # Copyright (c) 2021 The Regents of The University of California
 # All rights reserved.
 #
@@ -46,6 +58,9 @@ class Group(AbstractStat):
 
     type: Optional[str]
     time_conversion: Optional[TimeConversion]
+    values: Dict[
+        str, Union["Group", Statistic, List["Group"], List["Statistic"]]
+    ]
 
     def __init__(
         self,
@@ -59,9 +74,7 @@ class Group(AbstractStat):
             self.type = type
 
         self.time_conversion = time_conversion
-
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+        self.values = kwargs
 
     def children(
         self,
@@ -69,10 +82,9 @@ class Group(AbstractStat):
         recursive: bool = False,
     ) -> List["AbstractStat"]:
         to_return = []
-        for attr in self.__dict__:
-            obj = getattr(self, attr)
+        for key, obj in self.values:
             if isinstance(obj, AbstractStat):
-                if (predicate and predicate(attr)) or not predicate:
+                if (predicate and predicate(obj)) or not predicate:
                     to_return.append(obj)
                 if recursive:
                     to_return = to_return + obj.children(
@@ -93,9 +105,10 @@ class SimObjectVectorGroup(Group):
     from something like `system.cpu = [DerivO3CPU(), TimingSimpleCPU()]`.
     """
 
-    def __init__(self, value: List[AbstractStat], **kwargs: Dict[str, Any]):
-        assert isinstance(value, list), "Value must be a list"
-        super().__init__(type="SimObjectVector", value=value, **kwargs)
+    def __init__(self, children: List[AbstractStat], **kwargs: Dict[str, Any]):
+        assert isinstance(children, list), "Value must be a list"
+        kwargs["value"] = children
+        super().__init__(type="SimObjectVector", **kwargs)
 
     def __getitem__(self, index: Union[int, str, float]) -> AbstractStat:
         if not isinstance(index, int):
@@ -103,16 +116,16 @@ class SimObjectVectorGroup(Group):
                 f"Index {index} not found in int. Cannot index Array with "
                 "non-int"
             )
-        return self.value[index]
+        return self.values["value"][index]
 
     def __iter__(self):
-        return iter(self.value)
+        return iter(self.values["value"])
 
     def __len__(self):
-        return len(self.value)
+        return len(self.values["value"])
 
     def __getitem__(self, item: int):
-        return self.value[item]
+        return self.values["value"][item]
 
     def __contains__(self, item):
         if isinstance(item, int):
@@ -124,7 +137,7 @@ class SimObjectVectorGroup(Group):
         recursive: bool = False,
     ) -> List["AbstractStat"]:
         to_return = []
-        for child in self.value:
+        for child in self.values["value"]:
             to_return = to_return + child.children(
                 predicate=predicate, recursive=recursive
             )

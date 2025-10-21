@@ -372,7 +372,7 @@ def _process_simobject_stats(
         stats_list = []
         for obj in simobject:
             stats_list.append(_process_simobject_stats(obj))
-        return SimObjectVectorGroup(value=stats_list)
+        return SimObjectVectorGroup(children=stats_list)
 
     if isinstance(simobject, _m5_stats.Group):
         return _process_group(simobject)
