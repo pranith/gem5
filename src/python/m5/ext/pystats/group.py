@@ -96,6 +96,9 @@ class Group(AbstractStat):
                     )
         return to_return
 
+    def accept(self, visitor):
+        return visitor.visit_group(self)
+
 
 class SimObjectGroup(Group):
     """A group of statistics encapulated within a SimObject."""
@@ -106,6 +109,9 @@ class SimObjectGroup(Group):
         **kwargs: Dict[str, Union[Group, Statistic]],
     ):
         super().__init__(type="SimObject", name=name, **kwargs)
+
+    def accept(self, visitor):
+        return visitor.visit_simobject_group(self)
 
 
 class SimObjectVectorGroup(Group):
@@ -151,3 +157,6 @@ class SimObjectVectorGroup(Group):
             )
 
         return to_return
+
+    def accept(self, visitor):
+        return visitor.visit_simobject_vector_group(self)
