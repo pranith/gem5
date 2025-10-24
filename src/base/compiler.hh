@@ -61,7 +61,7 @@
 #define GEM5_NO_INLINE [[gnu::noinline]]
 
 // Set the visibility of a symbol.
-#define GEM5_PUBLIC [[gnu:visibility("default")]]
+#define GEM5_PUBLIC [[gnu::visibility("default")]]
 #define GEM5_LOCAL [[gnu::visibility("hidden")]]
 #define GEM5_WEAK [[gnu::weak]]
 
