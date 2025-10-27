@@ -41,6 +41,7 @@ This serves as the bridge between the gem5 statistics exposed via PyBind11 and
 the Python Stats model.
 """
 
+import csv
 import json
 import re
 from abc import (
@@ -120,6 +121,151 @@ class Visitor(ABC):
             return True
         print(type(element))
         return False
+
+
+class CsvOutputVisitor(Visitor):
+    """
+    This is a helper vistor class used to include a CSV output via the stats
+    API (``src/python/m5/stats/__init__.py``).
+    """
+
+    file: str
+
+    def __init__(self, file: str):
+        """
+        :param file: The output file location in which the CSV file will be dumped.
+
+        """
+
+        self.file = file
+
+    def visit_scalar(self, element: Scalar):
+        return {
+            "value": element.value,
+        }
+
+    def visit_distribution(self, element: Distribution):
+        return {
+            "value": {
+                key: self.visit_scalar(value)
+                for key, value in element.value.items()
+            },
+            "min": element.min,
+            "max": element.max,
+            "num_bins": element.num_bins,
+            "bin_size": element.bin_size,
+            "sum": element.sum,
+            "underflow": element.underflow,
+            "overflow": element.overflow,
+            "logs": element.logs,
+            "sum_squared": element.sum_squared,
+        }
+
+    def visit_vector(self, element: Vector):
+        return {
+            "value": {
+                key: self.visit_scalar(value)
+                for key, value in element.value.items()
+            },
+        }
+
+    def visit_vector2d(self, element: Vector2d):
+        return {
+            "value": {
+                key: self.visit_vector(value)
+                for key, value in element.value.items()
+            },
+        }
+
+    def visit_sparse_hist(self, element: SparseHist):
+        return {
+            "value": {
+                key: self.visit_scalar(value)
+                for key, value in element.value.items()
+            },
+        }
+
+    def visit_group(self, element: Group):
+        values = {}
+        for key, value in element.values.items():
+            assert self._acceptable_type(value), "Unexpected value type"
+            values[key] = value.accept(self)
+        return values
+
+    def visit_simobject_group(self, element: SimObjectGroup):
+        values = {}
+        for key, value in element.values.items():
+            assert self._acceptable_type(value), "Unexpected value type"
+            values[key] = value.accept(self)
+        return values
+
+    def visit_simobject_vector_group(self, element: SimObjectVectorGroup):
+        values = {}
+        for key, value in element.values.items():
+            vlist = []
+            for v in value:
+                assert self._acceptable_type(v), "Unexpected value type"
+                vlist.append(v.accept(self))
+            values[key] = vlist
+        return values
+
+    def visit_simstat(self, element: SimStat):
+        values = {
+            "time_conversion": element.time_conversion,
+            "creation_time": element.creation_time.isoformat(
+                timespec="seconds"
+            ),
+            "simulated_begin_time": element.simulated_begin_time,
+            "simulated_end_time": element.simulated_end_time,
+        }
+
+        for key, value in element.values["values"].items():
+            assert self._acceptable_type(value), "Unexpected value type"
+            values[key] = value.accept(self)
+
+        return values
+
+    def flatten_dict(self, d, parent_key="", sep="."):
+        items = {}
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+
+            if isinstance(v, dict):
+                # Recursively flatten nested dicts
+                items.update(self.flatten_dict(v, new_key, sep=sep))
+            elif isinstance(v, (list, tuple)):
+                # Flatten arrays by indexing elements
+                for i, item in enumerate(v):
+                    if isinstance(item, dict):
+                        # Recurse if element is a dict
+                        items.update(
+                            self.flatten_dict(item, f"{new_key}{i}", sep=sep)
+                        )
+                    else:
+                        items[f"{new_key}{i}"] = item
+            else:
+                # Primitive value
+                items[new_key] = v
+
+        return items
+
+    def dump(self, roots: Union[List[SimObject], Root], **kwargs) -> None:
+        """
+        Dumps the stats of a simulation root (or list of roots) to the output
+        CSV file specified in the constructor.
+
+
+        :param roots: The Root, or List of roots, whose stats are are to be dumped JSON.
+        """
+
+        with open(self.file, "w") as fp:
+            simstat = get_simstat(root=roots, prepare_stats=False)
+            vals = self.visit_simstat(simstat)
+            flat_dict = self.flatten_dict(vals)
+
+            writer = csv.writer(fp)
+            writer.writerow(flat_dict.keys())
+            writer.writerow(flat_dict.values())
 
 
 class JsonOutputVistor(Visitor):
