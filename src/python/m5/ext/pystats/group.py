@@ -61,10 +61,12 @@ class Group(AbstractStat):
     values: Dict[
         str, Union["Group", Statistic, List["Group"], List["Statistic"]]
     ]
+    name: Optional[str]
 
     def __init__(
         self,
         type: Optional[str] = None,
+        name: Optional[str] = None,
         time_conversion: Optional[TimeConversion] = None,
         **kwargs: Dict[
             str, Union["Group", Statistic, List["Group"], List["Statistic"]]
@@ -75,6 +77,8 @@ class Group(AbstractStat):
 
         self.time_conversion = time_conversion
         self.values = kwargs
+
+        self.name = name
 
     def children(
         self,
@@ -96,8 +100,12 @@ class Group(AbstractStat):
 class SimObjectGroup(Group):
     """A group of statistics encapulated within a SimObject."""
 
-    def __init__(self, **kwargs: Dict[str, Union[Group, Statistic]]):
-        super().__init__(type="SimObject", **kwargs)
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        **kwargs: Dict[str, Union[Group, Statistic]],
+    ):
+        super().__init__(type="SimObject", name=name, **kwargs)
 
 
 class SimObjectVectorGroup(Group):

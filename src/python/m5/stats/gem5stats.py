@@ -334,7 +334,7 @@ def _process_simobject_object(simobject: SimObject) -> SimObjectGroup:
                 type="Group", **_process_simobject_stats(child)
             )
 
-    return SimObjectGroup(**stats)
+    return SimObjectGroup(name=simobject.get_name(), **stats)
 
 
 def _process_group(group: _m5_stats.Group) -> dict:
