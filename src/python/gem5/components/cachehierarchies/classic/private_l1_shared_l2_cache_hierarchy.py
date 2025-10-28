@@ -136,16 +136,8 @@ class PrivateL1SharedL2CacheHierarchy(
         ]
         self.l2bus = L2XBar()
         self.l2cache = L2Cache(size=self._l2_size, assoc=self._l2_assoc)
-        # ITLB Page walk caches
-        self.iptw_caches = [
-            MMUCache(size="8KiB", writeback_clean=False)
-            for _ in range(board.get_processor().get_num_cores())
-        ]
-        # DTLB Page walk caches
-        self.dptw_caches = [
-            MMUCache(size="8KiB", writeback_clean=False)
-            for _ in range(board.get_processor().get_num_cores())
-        ]
+        iptw_caches = []
+        dptw_caches = []
 
         if board.has_coherent_io():
             self._setup_io_cache(board)
@@ -156,12 +148,26 @@ class PrivateL1SharedL2CacheHierarchy(
 
             self.l1icaches[i].mem_side = self.l2bus.cpu_side_ports
             self.l1dcaches[i].mem_side = self.l2bus.cpu_side_ports
-            self.iptw_caches[i].mem_side = self.l2bus.cpu_side_ports
-            self.dptw_caches[i].mem_side = self.l2bus.cpu_side_ports
+            walker_ports = cpu.get_mmu().walkerPorts()
+            if len(walker_ports) == 0:
+                continue
 
-            cpu.connect_walker_ports(
-                self.iptw_caches[i].cpu_side, self.dptw_caches[i].cpu_side
-            )
+            dptw_cache = MMUCache(size="8KiB", writeback_clean=False)
+            dptw_cache.mem_side = self.l2bus.cpu_side_ports
+
+            if len(walker_ports) > 1:
+                iptw_cache = MMUCache(size="8KiB", writeback_clean=False)
+                iptw_cache.mem_side = self.l2bus.cpu_side_ports
+                cpu.connect_walker_ports(
+                    iptw_cache.cpu_side, dptw_cache.cpu_side
+                )
+                iptw_caches.append(iptw_cache)
+            else:
+                cpu.connect_walker_ports(
+                    dptw_cache.cpu_side, dptw_cache.cpu_side
+                )
+
+            dptw_caches.append(dptw_cache)
 
             if board.get_processor().get_isa() == ISA.X86:
                 int_req_port = self.membus.mem_side_ports
@@ -172,6 +178,10 @@ class PrivateL1SharedL2CacheHierarchy(
 
         self.l2bus.mem_side_ports = self.l2cache.cpu_side
         self.membus.cpu_side_ports = self.l2cache.mem_side
+
+        if iptw_caches:
+            self.iptw_caches = iptw_caches
+        self.dptw_caches = dptw_caches
 
     def _setup_io_cache(self, board: AbstractBoard) -> None:
         """Create a cache for coherent I/O connections"""
