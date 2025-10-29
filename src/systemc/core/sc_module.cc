@@ -832,7 +832,7 @@ sc_gen_unique_name(const char *seed)
     if (p)
         return p->uniqueName(seed);
 
-    return ::sc_gem5::globalNameGen.gen(seed);
+    return ::sc_gem5::globalNameGen().gen(seed);
 }
 
 bool

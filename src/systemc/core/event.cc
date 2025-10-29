@@ -96,7 +96,7 @@ Event::Event(sc_core::sc_event *_sc_event, const char *_basename_cstr,
     parent = internal ? nullptr : pickParentObj();
 
     if (internal) {
-        _basename = globalNameGen.gen(_basename);
+        _basename = globalNameGen().gen(_basename);
         _name = _basename;
     } else {
         std::string original_name = _basename;
