@@ -1864,6 +1864,15 @@ namespace ArmISA
     // Decodes 64-bit CP15 registers accessible through MCRR/MRRC instructions
     MiscRegIndex decodeCP15Reg64(unsigned crm, unsigned opc1);
 
+    // Decodes the register index to access based on the fields used in a MSR
+    // or MRS instruction
+    bool decodeMrsMsrBankedReg(uint8_t sysM, bool r, bool &isIntReg,
+                               int &regIdx, CPSR cpsr, SCR scr, NSACR nsacr,
+                               bool checkSecurity = true);
+
+    // This wrapper function is used to turn the register index into a source
+    // parameter for the instruction. See Operands.isa
+    int decodeMrsMsrBankedIntRegIndex(uint8_t sysM, bool r);
 
     const char * const miscRegName[] = {
         "cpsr",
@@ -3090,6 +3099,62 @@ namespace ArmISA
     // Checks access permissions to AArch64 system registers
     Fault checkFaultAccessAArch64SysReg(MiscRegIndex reg, CPSR cpsr,
             ThreadContext *tc, const MiscRegOp64 &inst);
+
+    Fault mcrMrc15Trap(const MiscRegIndex miscReg, ExtMachInst machInst,
+                       ThreadContext *tc, uint32_t imm);
+    bool mcrMrc15TrapToHyp(const MiscRegIndex miscReg, ThreadContext *tc,
+                           uint32_t iss, ExceptionClass *ec = nullptr);
+
+    bool mcrMrc14TrapToHyp(const MiscRegIndex miscReg, ThreadContext *tc,
+                           uint32_t iss);
+
+    Fault mcrrMrrc15Trap(const MiscRegIndex miscReg, ExtMachInst machInst,
+                         ThreadContext *tc, uint32_t imm);
+    bool mcrrMrrc15TrapToHyp(const MiscRegIndex miscReg, ThreadContext *tc,
+                             uint32_t iss, ExceptionClass *ec = nullptr);
+
+    Fault AArch64AArch32SystemAccessTrap(const MiscRegIndex miscReg,
+                                         ExtMachInst machInst,
+                                         ThreadContext *tc, uint32_t imm,
+                                         ExceptionClass ec);
+    bool isAArch64AArch32SystemAccessTrapEL1(const MiscRegIndex miscReg,
+                                             ThreadContext *tc);
+    bool isAArch64AArch32SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                             ThreadContext *tc);
+    bool isGenericTimerHypTrap(const MiscRegIndex miscReg, ThreadContext *tc,
+                               ExceptionClass *ec);
+    bool condGenericTimerPhysHypTrap(const MiscRegIndex miscReg,
+                                     ThreadContext *tc);
+    bool isGenericTimerCommonEL0HypTrap(const MiscRegIndex miscReg,
+                                        ThreadContext *tc, ExceptionClass *ec);
+    bool isGenericTimerPhysHypTrap(const MiscRegIndex miscReg,
+                                   ThreadContext *tc, ExceptionClass *ec);
+    bool condGenericTimerPhysHypTrap(const MiscRegIndex miscReg,
+                                     ThreadContext *tc);
+    bool isGenericTimerSystemAccessTrapEL1(const MiscRegIndex miscReg,
+                                           ThreadContext *tc);
+    bool condGenericTimerSystemAccessTrapEL1(const MiscRegIndex miscReg,
+                                             ThreadContext *tc);
+    bool isGenericTimerSystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                           ThreadContext *tc);
+    bool isGenericTimerCommonEL0SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                    ThreadContext *tc);
+    bool isGenericTimerPhysEL0SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                  ThreadContext *tc);
+    bool isGenericTimerPhysEL1SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                  ThreadContext *tc);
+    bool isGenericTimerVirtSystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                               ThreadContext *tc);
+    bool
+    condGenericTimerCommonEL0SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                 ThreadContext *tc);
+    bool
+    condGenericTimerCommonEL1SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                 ThreadContext *tc);
+    bool condGenericTimerPhysEL1SystemAccessTrapEL2(const MiscRegIndex miscReg,
+                                                    ThreadContext *tc);
+    bool isGenericTimerSystemAccessTrapEL3(const MiscRegIndex miscReg,
+                                           ThreadContext *tc);
 
     // Uses just the scr.ns bit to pre flatten the misc regs. This is useful
     // for MCR/MRC instructions

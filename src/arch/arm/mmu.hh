@@ -42,8 +42,10 @@
 #define __ARCH_ARM_MMU_HH__
 
 #include "arch/arm/page_size.hh"
-#include "arch/arm/utility.hh"
+#include "arch/arm/regs/misc_types.hh"
+#include "arch/arm/types.hh"
 #include "arch/generic/mmu.hh"
+#include "base/addr_range.hh"
 #include "base/memoizer.hh"
 #include "base/statistics.hh"
 #include "enums/ArmLookupLevel.hh"

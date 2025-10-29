@@ -43,6 +43,7 @@
 #include <sys/syscall.h>
 
 #include "arch/arm/linux/process.hh"
+#include "arch/arm/regs/misc.hh"
 #include "base/loader/object_file.hh"
 #include "base/trace.hh"
 #include "cpu/thread_context.hh"

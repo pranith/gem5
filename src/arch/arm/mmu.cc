@@ -40,13 +40,14 @@
 
 #include "arch/arm/mmu.hh"
 
-#include "arch/arm/isa.hh"
 #include "arch/arm/mpam.hh"
 #include "arch/arm/reg_abi.hh"
+#include "arch/arm/self_debug.hh"
 #include "arch/arm/stage2_lookup.hh"
 #include "arch/arm/table_walker.hh"
 #include "arch/arm/tlb.hh"
 #include "arch/arm/tlbi_op.hh"
+#include "arch/arm/types.hh"
 #include "debug/MMU.hh"
 #include "mem/packet_access.hh"
 #include "params/ArmMMU.hh"
