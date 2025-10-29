@@ -142,7 +142,7 @@ Event::~Event()
     popEvent(&allEvents, _name);
 
     if (delayedNotify.scheduled())
-        scheduler.deschedule(&delayedNotify);
+        scheduler().deschedule(&delayedNotify);
 }
 
 const std::string &
@@ -193,14 +193,15 @@ Event::notify(DynamicSensitivities &senses)
 void
 Event::notify()
 {
-    if (scheduler.inUpdate())
+    if (scheduler().inUpdate()) {
         SC_REPORT_ERROR(sc_core::SC_ID_IMMEDIATE_NOTIFICATION_, "");
+    }
 
     // An immediate notification overrides any pending delayed notification.
     if (delayedNotify.scheduled())
-        scheduler.deschedule(&delayedNotify);
+        scheduler().deschedule(&delayedNotify);
 
-    _triggeredStamp = scheduler.changeStamp();
+    _triggeredStamp = scheduler().changeStamp();
     notify(staticSenseMethod);
     notify(dynamicSenseMethod);
     notify(staticSenseThread);
@@ -211,12 +212,13 @@ void
 Event::notify(const sc_core::sc_time &t)
 {
     if (delayedNotify.scheduled()) {
-        if (scheduler.delayed(t) >= delayedNotify.when())
+        if (scheduler().delayed(t) >= delayedNotify.when()) {
             return;
+        }
 
-        scheduler.deschedule(&delayedNotify);
+        scheduler().deschedule(&delayedNotify);
     }
-    scheduler.schedule(&delayedNotify, t);
+    scheduler().schedule(&delayedNotify, t);
 }
 
 void
@@ -231,13 +233,13 @@ void
 Event::cancel()
 {
     if (delayedNotify.scheduled())
-        scheduler.deschedule(&delayedNotify);
+        scheduler().deschedule(&delayedNotify);
 }
 
 bool
 Event::triggered() const
 {
-    return _triggeredStamp == scheduler.changeStamp();
+    return _triggeredStamp == scheduler().changeStamp();
 }
 
 void

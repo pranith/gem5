@@ -320,7 +320,7 @@ pickParentObj()
     if (!objParentStack.empty())
         return objParentStack.top();
 
-    Process *p = scheduler.current();
+    Process *p = scheduler().current();
     if (p)
         return p;
 
