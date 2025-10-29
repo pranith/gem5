@@ -45,6 +45,7 @@
 #include "arch/arm/pmu.hh"
 #include "arch/arm/regs/misc.hh"
 #include "arch/arm/regs/misc_accessors.hh"
+#include "arch/arm/regs/misc_info.hh"
 #include "arch/arm/self_debug.hh"
 #include "arch/arm/system.hh"
 #include "arch/arm/utility.hh"

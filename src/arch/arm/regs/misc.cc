@@ -41,6 +41,7 @@
 
 #include "arch/arm/insts/misc64.hh"
 #include "arch/arm/isa.hh"
+#include "arch/arm/regs/misc_info.hh"
 #include "base/bitfield.hh"
 #include "base/logging.hh"
 #include "cpu/thread_context.hh"
@@ -1522,8 +1523,6 @@ isGenericTimerSystemAccessTrapEL3(const MiscRegIndex misc_reg,
     }
     return false;
 }
-
-std::vector<struct MiscRegLUTEntry> lookUpMiscReg(NUM_MISCREGS);
 
 namespace {
 // The map is translating a MiscRegIndex into AArch64 system register
@@ -3764,26 +3763,6 @@ encodeAArch64SysReg(MiscRegIndex misc_reg)
     }
 }
 
-Fault
-MiscRegLUTEntry::checkFault(ThreadContext *tc,
-                            const MiscRegOp64 &inst, ExceptionLevel el)
-{
-    return !inst.miscRead() ? faultWrite[el](*this, tc, inst) :
-                              faultRead[el](*this, tc, inst);
-}
-
-template <MiscRegInfo Sec, MiscRegInfo NonSec>
-Fault
-MiscRegLUTEntry::defaultFault(const MiscRegLUTEntry &entry,
-    ThreadContext *tc, const MiscRegOp64 &inst)
-{
-    if (isSecureBelowEL3(tc) ? entry.info[Sec] : entry.info[NonSec]) {
-        return NoFault;
-    } else {
-        return inst.undefined();
-    }
-}
-
 static Fault
 defaultFaultE2H_EL2(const MiscRegLUTEntry &entry,
     ThreadContext *tc, const MiscRegOp64 &inst)
@@ -3807,18 +3786,6 @@ defaultFaultE2H_EL3(const MiscRegLUTEntry &entry,
     } else {
         return inst.undefined();
     }
-}
-
-MiscRegLUTEntryInitializer::chain
-MiscRegLUTEntryInitializer::highest(ArmSystem *const sys) const
-{
-    switch (FullSystem ? sys->highestEL() : EL1) {
-      case EL0:
-      case EL1: priv(); break;
-      case EL2: hyp(); break;
-      case EL3: mon(); break;
-    }
-    return *this;
 }
 
 static CPSR

@@ -115,12 +115,6 @@ class ISA : public BaseISA
 
     Random::RandomPtr rng = Random::genRandom();
 
-    const MiscRegLUTEntryInitializer
-    InitReg(uint32_t reg)
-    {
-        return MiscRegLUTEntryInitializer(lookUpMiscReg[reg]);
-    }
-
     void initializeMiscRegMetadata();
 
     BaseISADevice &getGenericTimer();
