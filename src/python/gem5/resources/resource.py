@@ -1283,13 +1283,19 @@ def _get_workload(
                         gem5_version=gem5_version,
                     )
                 )
-        else:
+        elif isinstance(resource_param, dict):
             db_query.append(
                 ClientQuery(
                     resource_id=resource_param["id"],
                     resource_version=resource_param["resource_version"],
                     gem5_version=gem5_version,
                 )
+            )
+        else:
+            raise Exception(
+                f"The resources field in the workload {workload['id']} with version {workload['resource_version']} is invalid.\n"
+                f"The current value of the resources field is {workload['resources']}.\n"
+                f"Each value in the resources field must be a list or a dict containing resources information."
             )
     # Fetching resources as a list of dicts
     resource_details_list = get_multiple_resource_json_obj(db_query, clients)
