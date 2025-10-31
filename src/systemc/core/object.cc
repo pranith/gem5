@@ -293,8 +293,9 @@ pickUniqueName(::sc_core::sc_object *parent, std::string base)
         return Object::getFromScObject(parent)->pickUniqueName(base);
 
     std::string seed = base;
-    while (!nameIsUnique(&topLevelObjects, &topLevelEvents, base))
+    while (!nameIsUnique(&topLevelObjects, &topLevelEvents(), base)) {
         base = ::sc_core::sc_gen_unique_name(seed.c_str());
+    }
 
     return base;
 }
