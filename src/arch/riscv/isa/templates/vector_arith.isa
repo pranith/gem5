@@ -1704,8 +1704,15 @@ template<typename ElemType>
         this->microops.push_back(microop);
     }
 
+    if (machInst.vd != machInst.vs1 && (machInst.vd == 0 && !machInst.vm)) {
+        microop = new VCpyVsMicroInst(machInst, 0, 0, elen, vlen);
+        microop->setFlag(IsDelayedCommit);
+        this->microops.push_back(microop);
+    }
+
     for (int i = 0; i < num_microops && micro_vl > 0; ++i) {
-        if (machInst.vd == (machInst.vs2 + i) && machInst.vd != machInst.vs1) {
+        if (machInst.vd == (machInst.vs2 + i) && machInst.vd != machInst.vs1 &&
+            !(machInst.vd == 0 && !machInst.vm)) {
             microop = new VCpyVsMicroInst(machInst, i, machInst.vs2, elen,
                                           vlen);
             microop->setFlag(IsDelayedCommit);
@@ -1714,7 +1721,14 @@ template<typename ElemType>
         micro_vl = std::min(tmp_vl -= micro_vlmax, micro_vlmax);
     }
 
-    microop = new VPinVdMicroInst(machInst, 0, num_microops, elen, vlen);
+    int k;
+    tmp_vl = this->vl;
+    micro_vl = std::min(tmp_vl, micro_vlmax);
+    for (k = 0; k < num_microops && micro_vl > 0; ++k) {
+        micro_vl = std::min(tmp_vl -= micro_vlmax, micro_vlmax);
+    }
+
+    microop = new VPinVdMicroInst(machInst, 0, k, elen, vlen);
     microop->setFlag(IsDelayedCommit);
     this->microops.push_back(microop);
 

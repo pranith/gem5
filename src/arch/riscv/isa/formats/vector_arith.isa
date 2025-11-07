@@ -44,6 +44,12 @@ let {{
     def setSrcVm():
         return "if (!this->vm)\n" + \
                "    setSrcRegIdx(_numSrcRegs++, vecRegClass[0]);"
+    def setSrcVmOrTmp0():
+        return "if (!this->vm){\n" + \
+               "(_machInst.vd == 0) ? " + \
+               "setSrcRegIdx(_numSrcRegs++,vecRegClass[VecMemInternalReg0]):"+\
+               "setSrcRegIdx(_numSrcRegs++,vecRegClass[0]);\n" + \
+               "}\n"
     def vmDeclAndReadData():
         return '''
             [[maybe_unused]] RiscvISA::vreg_t tmp_v0;
@@ -1294,7 +1300,7 @@ def format VectorReduceIntFormat(code, category, *flags) {{
     set_dest_reg_idx = setDestWrapper(dest_reg_id)
     set_src_reg_idx = setSrcWrapper(src1_reg_id)
     set_src_reg_idx += setSrcWrapper(src2_reg_id)
-    set_src_reg_idx += setSrcVm()
+    set_src_reg_idx += setSrcVmOrTmp0()
     vm_decl_rd = vmDeclAndReadData()
     set_vlenb = setVlenb()
 
@@ -1343,7 +1349,7 @@ def format VectorReduceFloatFormat(code, category, *flags) {{
     set_dest_reg_idx = setDestWrapper(dest_reg_id)
     set_src_reg_idx = setSrcWrapper(src1_reg_id)
     set_src_reg_idx += setSrcWrapper(src2_reg_id)
-    set_src_reg_idx += setSrcVm()
+    set_src_reg_idx += setSrcVmOrTmp0()
     vm_decl_rd = vmDeclAndReadData()
     set_vlenb = setVlenb()
 
@@ -1397,7 +1403,7 @@ def format VectorReduceFloatWideningFormat(code, category, *flags) {{
     set_dest_reg_idx = setDestWrapper(dest_reg_id)
     set_src_reg_idx = setSrcWrapper(src1_reg_id)
     set_src_reg_idx += setSrcWrapper(src2_reg_id)
-    set_src_reg_idx += setSrcVm()
+    set_src_reg_idx += setSrcVmOrTmp0()
     vm_decl_rd = vmDeclAndReadData()
     set_vlenb = setVlenb()
     type_def = '''
@@ -1510,7 +1516,7 @@ def format VectorReduceIntWideningFormat(code, category, *flags) {{
     set_dest_reg_idx = setDestWrapper(dest_reg_id)
     set_src_reg_idx = setSrcWrapper(src1_reg_id)
     set_src_reg_idx += setSrcWrapper(src2_reg_id)
-    set_src_reg_idx += setSrcVm()
+    set_src_reg_idx += setSrcVmOrTmp0()
     vm_decl_rd = vmDeclAndReadData()
     set_vlenb = setVlenb()
 
