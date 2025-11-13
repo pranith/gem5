@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024 Daniel R. Carvalho
+ * Copyright (c) 2025 Daniel R. Carvalho
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -237,21 +237,37 @@ typedef MRURPTestF MRURPFDeathTest;
 
 TEST_F(MRURPFDeathTest, InvalidateNull)
 {
+#ifdef NDEBUG
+    GTEST_SKIP() << "Skipping as assertions are "
+                    "stripped out of fast builds";
+#endif
     ASSERT_DEATH(rp->invalidate(nullptr), "");
 }
 
 TEST_F(MRURPFDeathTest, ResetNull)
 {
+#ifdef NDEBUG
+    GTEST_SKIP() << "Skipping as assertions are "
+                    "stripped out of fast builds";
+#endif
     ASSERT_DEATH(rp->reset(nullptr), "");
 }
 
 TEST_F(MRURPFDeathTest, TouchNull)
 {
+#ifdef NDEBUG
+    GTEST_SKIP() << "Skipping as assertions are "
+                    "stripped out of fast builds";
+#endif
     ASSERT_DEATH(rp->touch(nullptr), "");
 }
 
 TEST_F(MRURPFDeathTest, NoCandidates)
 {
+#ifdef NDEBUG
+    GTEST_SKIP() << "Skipping as assertions are "
+                    "stripped out of fast builds";
+#endif
     gem5::ReplacementCandidates candidates;
     ASSERT_DEATH(rp->getVictim(candidates), "");
 }
