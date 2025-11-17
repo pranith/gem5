@@ -45,7 +45,7 @@ import sys
 import m5
 from m5.defines import buildEnv
 from m5.objects import *
-from m5.tlm_chi import *
+from m5.tlm_chi.utils import *
 from m5.util import addToPath
 
 m5.util.addToPath(os.path.join(m5.util.repoPath(), "configs"))

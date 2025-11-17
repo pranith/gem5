@@ -36,14 +36,14 @@
 
 
 from m5.objects.TlmController import TlmController
-from m5.objects.TlmPort import (
-    TlmSinkPort,
-    TlmSourcePort,
-)
 from m5.params import *
 from m5.SimObject import (
     PyBindMethod,
     SimObject,
+)
+from m5.tlm_chi.port import (
+    TlmSinkPort,
+    TlmSourcePort,
 )
 
 
@@ -59,7 +59,7 @@ class TlmGenerator(SimObject):
     _transactions = []
 
     def injectAt(self, when, payload, phase):
-        from m5.tlm_chi import Transaction
+        from m5.tlm_chi.utils import Transaction
 
         transaction = Transaction(payload, phase)
         self._transactions.append((when, transaction))

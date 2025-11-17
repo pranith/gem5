@@ -34,11 +34,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from m5.objects.CHIGeneric import CHIGenericController
-from m5.objects.TlmPort import (
+from m5.tlm_chi.port import (
     TlmSinkPort,
     TlmSourcePort,
 )
-from m5.params import *
 
 
 class TlmController(CHIGenericController):
