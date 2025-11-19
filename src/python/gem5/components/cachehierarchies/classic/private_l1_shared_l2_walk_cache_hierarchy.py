@@ -11,9 +11,6 @@
 # unmodified and in its entirety in all distributions of the software,
 # modified or unmodified, in source code or in binary form.
 #
-# Copyright (c) 2021 The Regents of the University of California
-# All rights reserved.
-#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met: redistributions of source code must retain the above copyright
@@ -42,26 +39,24 @@ from m5.objects import BaseCPU
 from ....utils.override import *
 from ...boards.abstract_board import AbstractBoard
 from .caches.mmu_cache import MMUCache
-from .private_l1_private_l2_cache_hierarchy import (
-    PrivateL1PrivateL2CacheHierarchy,
+from .private_l1_shared_l2_cache_hierarchy import (
+    PrivateL1SharedL2CacheHierarchy,
 )
 
 
-class PrivateL1PrivateL2WalkCacheHierarchy(PrivateL1PrivateL2CacheHierarchy):
-    """
-    A cache setup where each core has a private L1 Data and Instruction Cache,
-    and a private L2 cache and a Walk Cache for the Table Walker
-    """
+class PrivateL1SharedL2WalkCacheHierarchy(PrivateL1SharedL2CacheHierarchy):
+    """Shared L2 hierarchy variant that places MMU caches on walker ports."""
 
     def __init__(self, *args, **kwargs) -> None:
-        PrivateL1PrivateL2CacheHierarchy.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-    @overrides(PrivateL1PrivateL2CacheHierarchy)
+    @overrides(PrivateL1SharedL2CacheHierarchy)
     def incorporate_cache(self, board: AbstractBoard) -> None:
         self._tmp_iptw_caches = []
         self._tmp_dptw_caches = []
         super().incorporate_cache(board)
-        self.iptw_caches = self._tmp_iptw_caches
+        if self._tmp_iptw_caches:
+            self.iptw_caches = self._tmp_iptw_caches
         self.dptw_caches = self._tmp_dptw_caches
 
     def _connect_table_walker(self, cpu_id: int, cpu: BaseCPU) -> None:
@@ -76,12 +71,12 @@ class PrivateL1PrivateL2WalkCacheHierarchy(PrivateL1PrivateL2CacheHierarchy):
         if len(walker_ports) == 0:
             return
 
-        dptw_cache = MMUCache(size="8KiB")
-        dptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
+        dptw_cache = MMUCache(size="8KiB", writeback_clean=False)
+        dptw_cache.mem_side = self.l2bus.cpu_side_ports
 
         if len(walker_ports) == 2:
-            iptw_cache = MMUCache(size="8KiB")
-            iptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
+            iptw_cache = MMUCache(size="8KiB", writeback_clean=False)
+            iptw_cache.mem_side = self.l2bus.cpu_side_ports
             cpu.connect_walker_ports(iptw_cache.cpu_side, dptw_cache.cpu_side)
             self._tmp_iptw_caches.append(iptw_cache)
         else:
