@@ -62,23 +62,31 @@ class PrivateL1PrivateL2WalkCacheHierarchy(PrivateL1PrivateL2CacheHierarchy):
         super().incorporate_cache(board)
         self.iptw_caches = self._tmp_iptw_caches
         self.dptw_caches = self._tmp_dptw_caches
-        del self._tmp_iptw_caches
-        del self._tmp_dptw_caches
 
     def _connect_table_walker(self, cpu_id: int, cpu: BaseCPU) -> None:
         walker_ports = cpu.get_mmu().walkerPorts()
+        if len(walker_ports) > 2:
+            raise RuntimeError(
+                "Unexpected number of walker ports "
+                f"from CPU {cpu_id}: {len(walker_ports)}.\n"
+                "Expected 0, 1, or 2"
+            )
+
         if len(walker_ports) == 0:
             return
 
         dptw_cache = MMUCache(size="8KiB")
         dptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
 
-        if len(walker_ports) > 1:
+        if len(walker_ports) == 2:
             iptw_cache = MMUCache(size="8KiB")
             iptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
             cpu.connect_walker_ports(iptw_cache.cpu_side, dptw_cache.cpu_side)
             self._tmp_iptw_caches.append(iptw_cache)
         else:
+            assert (
+                len(walker_ports) == 1
+            ), f"This branch expects 1 walker_port, got {len(walker_ports)}."
             cpu.connect_walker_ports(dptw_cache.cpu_side, dptw_cache.cpu_side)
 
         self._tmp_dptw_caches.append(dptw_cache)

@@ -122,13 +122,19 @@ class PrivateL1CacheHierarchy(AbstractClassicCacheHierarchy):
             self.l1dcaches[i].mem_side = self.membus.cpu_side_ports
 
             walker_ports = cpu.get_mmu().walkerPorts()
+            if len(walker_ports) > 2:
+                raise RuntimeError(
+                    "Unexpected number of walker ports "
+                    f"from CPU {i}: {len(walker_ports)}.\n"
+                    "Expected 0, 1, or 2"
+                )
             if len(walker_ports) == 0:
                 continue
 
             dptw_cache = MMUCache(size="8KiB")
             dptw_cache.mem_side = self.membus.cpu_side_ports
 
-            if len(walker_ports) > 1:
+            if len(walker_ports) == 2:
                 iptw_cache = MMUCache(size="8KiB")
                 iptw_cache.mem_side = self.membus.cpu_side_ports
                 cpu.connect_walker_ports(
@@ -136,6 +142,10 @@ class PrivateL1CacheHierarchy(AbstractClassicCacheHierarchy):
                 )
                 iptw_caches.append(iptw_cache)
             else:
+                assert len(walker_ports) == 1, (
+                    f"This branch expects 1 walker_port, got "
+                    f"{len(walker_ports)}."
+                )
                 cpu.connect_walker_ports(
                     dptw_cache.cpu_side, dptw_cache.cpu_side
                 )
