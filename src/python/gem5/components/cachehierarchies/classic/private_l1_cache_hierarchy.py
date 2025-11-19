@@ -130,7 +130,7 @@ class PrivateL1CacheHierarchy(AbstractClassicCacheHierarchy):
                 cpu.connect_interrupt()
 
     def _connect_table_walker(self, cpu_id: int, cpu: BaseCPU) -> None:
-        walker_ports = cpu.get_mmu().walkerPorts()
+        walker_ports = cpu.get_mmu().walkerPorts() if cpu.has_mmu() else []
         if len(walker_ports) > 2:
             raise RuntimeError(
                 "Unexpected number of walker ports "
