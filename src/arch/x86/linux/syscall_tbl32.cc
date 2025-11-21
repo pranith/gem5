@@ -241,7 +241,7 @@ SyscallDescTable<EmuLinux::SyscallABI32> EmuLinux::syscallDescs32 = {
     {184, "capget"},
     {185, "capset"},
     {186, "sigaltstack"},
-    {187, "sendfile"},
+    {187, "sendfile", sendfileFunc<X86Linux32>},
     {188, "getpmsg"},
     {189, "putpmsg"},
     {190, "vfork"},

@@ -90,7 +90,7 @@ SyscallDescTable<EmuLinux::SyscallABI64> EmuLinux::syscallDescs64 = {
     {37, "alarm"},
     {38, "setitimer"},
     {39, "getpid", getpidFunc},
-    {40, "sendfile"},
+    {40, "sendfile", sendfileFunc<X86Linux64>},
     {41, "socket", socketFunc<X86Linux64>},
     {42, "connect", connectFunc},
     {43, "accept", acceptFunc<X86Linux64>},

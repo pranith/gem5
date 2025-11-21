@@ -136,7 +136,7 @@ SyscallDescTable<SEWorkload::SyscallABI32> EmuLinux::syscall32Descs = {
     {36, "sync"},
     {37, "kill"}, // 32 bit
     {38, "stat"},
-    {39, "sendfile"}, // 32 bit
+    {39, "sendfile", sendfileFunc<Sparc32Linux>}, // 32 bit
     {40, "lstat"},
     {41, "dup"},
     {42, "pipe", pipePseudoFunc},
@@ -438,7 +438,7 @@ SyscallDescTable<SEWorkload::SyscallABI64> EmuLinux::syscallDescs = {
     {36, "sync"},
     {37, "kill"},
     {38, "stat"},
-    {39, "sendfile"},
+    {39, "sendfile", sendfileFunc<SparcLinux>},
     {40, "lstat"},
     {41, "dup"},
     {42, "pipe", pipePseudoFunc},

@@ -60,6 +60,7 @@
 #include <linux/kdev_t.h>
 #include <sched.h>
 #include <sys/eventfd.h>
+#include <sys/sendfile.h>
 #include <sys/statfs.h>
 
 #else
@@ -3246,6 +3247,37 @@ sigreturnFunc(SyscallDesc *desc, ThreadContext *tc)
 {
     OS::archSigreturn(tc);
     return SyscallReturn(); // There is no return value for sigreturn.
+}
+
+template <typename OS>
+SyscallReturn
+sendfileFunc(SyscallDesc *desc, ThreadContext *tc, int tgt_out_fd,
+             int tgt_in_fd, VPtr<typename OS::off_t> tgt_offset,
+             typename OS::size_t count)
+{
+#if defined(__linux__)
+    auto p = tc->getProcessPtr();
+    auto out_fdp = std::dynamic_pointer_cast<HBFDEntry>((*p->fds)[tgt_out_fd]);
+    auto in_fdp = std::dynamic_pointer_cast<HBFDEntry>((*p->fds)[tgt_in_fd]);
+    panic_if(!out_fdp || !in_fdp, "sendfile: unhandled non-host-backed FDs\n");
+    const int sim_out_fd = out_fdp->getSimFD();
+    const int sim_in_fd = in_fdp->getSimFD();
+
+    off_t sim_offset;
+    if (tgt_offset) {
+        sim_offset = *tgt_offset;
+    }
+    ssize_t result = sendfile(sim_out_fd, sim_in_fd,
+                              tgt_offset ? &sim_offset : nullptr, count);
+    if (tgt_offset) {
+        *tgt_offset = sim_offset;
+    }
+
+    return result;
+#else
+    warnUnsupportedOS("sendfile");
+    return -ENOSYS;
+#endif
 }
 
 } // namespace gem5

@@ -376,7 +376,7 @@ SyscallDescTable<MipsISA::SEWorkload::SyscallABI> EmuLinux::syscallDescs = {
     {4204, "capget"},
     {4205, "capset"},
     {4206, "sigalstack"},
-    {4207, "sendfile"},
+    {4207, "sendfile", sendfileFunc<MipsLinux>},
     {4208, "getpmsg"},
     {4209, "putpmsg"},
     {4210, "mmap2"},

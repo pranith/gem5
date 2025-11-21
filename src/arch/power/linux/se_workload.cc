@@ -305,7 +305,7 @@ SyscallDescTable<PowerISA::SEWorkload::SyscallABI> EmuLinux::syscallDescs = {
     {184, "capget"},
     {185, "capset"},
     {186, "sigaltstack"},
-    {187, "sendfile"},
+    {187, "sendfile", sendfileFunc<PowerLinux>},
     {188, "getpmsg"},
     {189, "putpmsg"},
     {190, "ugetrlimit", ignoreFunc},
