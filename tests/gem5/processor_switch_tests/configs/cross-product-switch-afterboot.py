@@ -246,7 +246,7 @@ elif args.isa == "arm":
             "arm-ubuntu-24.04-npb-img", resource_version="4.0.0"
         ),
         bootloader=obtain_resource(
-            "arm64-bootloader-foundation", resource_version="1.0.0"
+            "arm64-bootloader-foundation", resource_version="2.0.0"
         ),
         readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
         checkpoint=obtain_resource(

@@ -118,17 +118,8 @@ board = ArmBoard(
     platform=platform,
 )
 
-board.set_kernel_disk_workload(
-    kernel=obtain_resource(
-        "arm64-linux-kernel-6.8.12", resource_version="1.0.0"
-    ),
-    disk_image=obtain_resource(
-        "arm-ubuntu-24.04-npb-img", resource_version="4.0.0"
-    ),
-    bootloader=obtain_resource(
-        "arm64-bootloader-foundation", resource_version="1.0.0"
-    ),
-    readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
+board.set_workload(
+    obtain_resource("arm-ubuntu-24.04-npb-cg-s", resource_version="2.0.0")
 )
 
 simulator = Simulator(board=board)

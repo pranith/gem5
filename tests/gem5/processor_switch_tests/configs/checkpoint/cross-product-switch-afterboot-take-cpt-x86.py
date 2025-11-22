@@ -95,20 +95,8 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
 )
 
-board.set_kernel_disk_workload(
-    kernel=obtain_resource(
-        "x86-linux-kernel-6.8.0-52-generic", resource_version="1.0.0"
-    ),
-    disk_image=obtain_resource(
-        "x86-ubuntu-24.04-npb-img", resource_version="5.0.0"
-    ),
-    kernel_args=[
-        "earlyprintk=ttyS0",
-        "console=ttyS0",
-        "lpj=7999923",
-        "root=/dev/sda2",
-    ],
-    readfile_contents=f"/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
+board.set_workload(
+    obtain_resource("x86-ubuntu-24.04-npb-cg-s", resource_version="3.0.0")
 )
 
 simulator = Simulator(board=board)

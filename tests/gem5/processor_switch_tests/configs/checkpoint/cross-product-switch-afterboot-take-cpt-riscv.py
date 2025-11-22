@@ -98,17 +98,8 @@ board = RiscvBoard(
     cache_hierarchy=cache_hierarchy,
 )
 
-board.set_kernel_disk_workload(
-    kernel=obtain_resource(
-        "riscv-linux-6.8.12-kernel", resource_version="1.0.0"
-    ),
-    disk_image=obtain_resource(
-        "riscv-ubuntu-24.04-npb-img", resource_version="1.0.0"
-    ),
-    bootloader=obtain_resource(
-        "riscv-bootloader-opensbi-1.3.1", resource_version="1.0.0"
-    ),
-    readfile_contents="/home/gem5/NPB3.4-OMP/bin/cg.S.x; sleep 5;",
+board.set_workload(
+    obtain_resource("riscv-ubuntu-24.04-npb-cg-s", resource_version="1.0.0")
 )
 
 
