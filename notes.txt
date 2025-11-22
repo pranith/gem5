@@ -1,1 +1,13 @@
+./build/ARM/gem5.opt --outdir=spec2017 -m gem5.utils.multisim configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017.py
+
+./build/ARM/gem5.opt --debug-flags=Heartbeat -d output_ittage configs_ittage/example/arm/rancho_o3.py bench --cpu rancho --mem-size 8GB --maxinsts 10000000
+python3 util/results.py --dirs spec2017 spec2017_ittage/ --stats IPC
+./build/ARM/gem5.opt --debug-flags=Heartbeat  -d output_ittage configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_cpuxalan_r_0
+./build/ARM/gem5.opt --debug-flags=Heartbeat --outdir=spec2017_test -re -m gem5.utils.multisim configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_ittage.py
+
+time ./build/ARM/gem5.opt --debug-flags=Heartbeat --outdir=spec2017_ittage -re -m gem5.utils.multisim configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_ittage.py
+
+debug:
+
+./build/ARM/gem5.debug --debug-flags=Heartbeat,Branch,ITTAGE,Indirect --debug-file=trace.txt -d output_ittage_onlybase configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
 gdb --args ./build/ARM/gem5.debug --debug-flags=Heartbeat -d output_debug configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
