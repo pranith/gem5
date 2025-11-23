@@ -41,6 +41,10 @@ from m5.SimObject import (
     PyBindMethod,
     SimObject,
 )
+from m5.tlm_chi.port import (
+    TlmSinkPort,
+    TlmSourcePort,
+)
 
 
 class TlmGenerator(SimObject):
@@ -55,7 +59,7 @@ class TlmGenerator(SimObject):
     _transactions = []
 
     def injectAt(self, when, payload, phase):
-        from m5.tlm_chi import Transaction
+        from m5.tlm_chi.utils import Transaction
 
         transaction = Transaction(payload, phase, when)
         self._transactions.append((when, transaction))
@@ -66,4 +70,5 @@ class TlmGenerator(SimObject):
             self.getCCObject().scheduleTransaction(when, tr)
 
     cpu_id = Param.Int("TlmGenerator CPU identifier")
-    chi_controller = Param.TlmController("TLM-to-Ruby CacheController")
+    in_port = TlmSinkPort("CHI TLM input/response port")
+    out_port = TlmSourcePort("CHI TLM output/request port")
