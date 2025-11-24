@@ -5042,6 +5042,62 @@ let {{
             destElem = srcElem1 + srcElem2 * mult;
     '''
     sveAdrInst('adr', 'Adr', 'SimdAddOp', ('uint32_t', 'uint64_t'), adrCode)
+    # AESD (vectors)
+    cryptoBinCode = '''
+        uint32_t eltspersegment = 16 / sizeof(Element);
+
+        Crypto crypto;
+        Element tempElem1[eltspersegment];
+        Element tempElem2[eltspersegment];
+        Element destElem[eltspersegment];
+        for (auto s = 0; s < eCount / eltspersegment; s ++) {
+            for (auto i = 0; i < eltspersegment; i ++) {
+                tempElem1[i] = AA64FpOp1_x[s * eltspersegment + i];
+                tempElem2[i] = AA64FpOp2_x[s * eltspersegment + i];
+            }
+            %(op)s
+            for (auto i = 0; i < eltspersegment; i ++) {
+                AA64FpDest_x[s * eltspersegment + i] = destElem[i];
+            }
+        }
+    '''
+    aesdCode = '''
+            crypto.aesDecrypt(destElem, tempElem1, tempElem2);'''
+    sveBinInst('aesd', 'Aesd', 'SimdAesOp', ('uint8_t',), '', PredType.NONE,
+            True, customIterCode=cryptoBinCode % {'op': aesdCode})
+    # AESE (vectors)
+    aeseCode = '''
+            crypto.aesEncrypt(destElem, tempElem1, tempElem2);'''
+    sveBinInst('aese', 'Aese', 'SimdAesOp', ('uint8_t',), '', PredType.NONE,
+            True, customIterCode=cryptoBinCode % {'op': aeseCode})
+    # AESIMC
+    cryptoUnaryCode = '''
+        uint32_t eltspersegment = 16 / sizeof(Element);
+
+        Crypto crypto;
+        Element tempElem1[eltspersegment];
+        Element destElem[eltspersegment];
+        for (auto s = 0; s < eCount / eltspersegment; s ++) {
+            for (auto i = 0; i < eltspersegment; i ++) {
+                tempElem1[i] = AA64FpOp1_x[s * eltspersegment + i];
+            }
+            %(op)s
+            for (auto i = 0; i < eltspersegment; i ++) {
+                AA64FpDest_x[s * eltspersegment + i] = destElem[i];
+            }
+        }
+    '''
+    aesimcCode = '''
+            crypto.aesInvMixColumns(destElem, tempElem1);'''
+    sveBinInst('aesimc', 'Aesimc', 'SimdAesMixOp', ('uint8_t',), '',
+            PredType.NONE, True,
+            customIterCode=cryptoUnaryCode % {'op': aesimcCode})
+    # AESMC (vectors)
+    aesmcCode = '''
+            crypto.aesMixColumns(destElem, tempElem1);'''
+    sveBinInst('aesmc', 'Aesmc', 'SimdAesMixOp', ('uint8_t',), '',
+            PredType.NONE, True,
+            customIterCode=cryptoUnaryCode % {'op': aesmcCode})
     # AND (immediate)
     andCode = 'destElem = srcElem1 & srcElem2;'
     sveWideImmInst('and', 'AndImm', 'SimdAluOp', ('uint64_t',), andCode)
@@ -6754,6 +6810,17 @@ let {{
                             (destElem & mask(srcElem3));
     '''
     sveTerImmInst('sli', 'Sli', 'SimdShiftOp', unsignedTypes, sliCode)
+    # SM4E
+    sm4eCode = '''
+            crypto.sm4e(destElem, tempElem1, tempElem2);'''
+    sveBinInst('sm4e', 'Sm4e', 'SimdSm4eOp', ('uint32_t',), '', PredType.NONE,
+            True, customIterCode=cryptoBinCode % {'op': sm4eCode})
+    # SM4EKEY
+    sm4ekeyCode = '''
+            crypto.sm4ekey(destElem, tempElem1, tempElem2);'''
+    sveBinInst('sm4ekey', 'Sm4ekey', 'SimdSm4eOp', ('uint32_t',), '',
+            PredType.NONE,
+            True, customIterCode=cryptoBinCode % {'op': sm4ekeyCode})
     # SMAX (immediate)
     maxCode = 'destElem = (srcElem1 > srcElem2) ? srcElem1 : srcElem2;'
     sveWideImmInst('smax', 'SmaxImm', 'SimdCmpOp', signedTypes, maxCode)
