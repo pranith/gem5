@@ -46,8 +46,8 @@
 #include "mem/ruby/protocol/chi/tlm/port.hh"
 #include "mem/ruby/protocol/chi/tlm/utils.hh"
 #include "params/TlmGenerator.hh"
+#include "sim/clocked_object.hh"
 #include "sim/eventq.hh"
-#include "sim/sim_object.hh"
 
 namespace gem5 {
 
@@ -79,14 +79,22 @@ class CacheController;
  * simulation, the following TlmGenerator method should be
  * used:
  *
- * def injectAt(self, when, payload, phase):
+ * def inject(self, payload, phase, when=None):
  *
  * This will return a Transaction object and from that point that will be the
  * handle for managing the transaction: either adding transaction expectations
  * upon response (e.g, what will be the cacheline state), or by adding action
  * callbacks (execute some logic)
+ *
+ * By default the last kw argument (when) is set to None.
+ * This means the new transaction will be added to a pending queue and will
+ * only be scheduled in a FCFS policy. The generator will try to schedule
+ * a configurable number of new transactions every clock cycle.
+ *
+ * If the when argument is instead provided, the transaction will be scheduled
+ * to happen at a specific point in time, regardless of the existing backlog
  */
-class TlmGenerator : public SimObject
+class TlmGenerator : public ClockedObject
 {
   public:
     PARAMS(TlmGenerator);
@@ -254,7 +262,10 @@ class TlmGenerator : public SimObject
         Tick _start;
     };
 
+    void tick();
+
     void scheduleTransaction(Tick when, Transaction *tr);
+    void enqueueTransaction(Transaction *tr);
 
     Port &getPort(const std::string &if_name, PortID idx) override;
 
@@ -297,12 +308,21 @@ class TlmGenerator : public SimObject
     /** cpuId to mimic the behaviour of a CPU */
     uint8_t cpuId;
 
+    /** Max number of transactions to be issued every cycle */
+    const unsigned transPerCycle;
+
+    /** tick event used to schedule unscheduled transactions */
+    EventFunctionWrapper tickEvent;
+
     using SchedulingQueue = std::priority_queue<TransactionEvent*,
         std::vector<TransactionEvent*>,
         TransactionEvent::Compare>;
 
-    /** PQ of transactions whose injection needs to be scheduled */
+    /** PQ of transactions whose injection has been scheduled */
     SchedulingQueue scheduledTransactions;
+
+    /** List of transactions whose injection needs to be scheduled */
+    std::list<Transaction *> unscheduledTransactions;
 
     /** Map of pending (injected) transactions indexed by the txn_id */
     std::unordered_map<uint16_t, Transaction*> pendingTransactions;

@@ -142,8 +142,11 @@ TlmGenerator::TransactionEvent::process()
 }
 
 TlmGenerator::TlmGenerator(const Params &p)
-    : SimObject(p),
+    : ClockedObject(p),
       cpuId(p.cpu_id),
+      transPerCycle(p.tran_per_cycle),
+      tickEvent([this] { tick(); }, "TlmGenerator tick", false,
+                Event::CPU_Tick_Pri),
       outPort(name() + ".out_port", 0, this),
       inPort(name() + ".in_port", 0, this)
 {
@@ -157,6 +160,21 @@ TlmGenerator::TlmGenerator(const Params &p)
 }
 
 void
+TlmGenerator::tick()
+{
+    auto slots = transPerCycle;
+    while (!unscheduledTransactions.empty() && slots > 0) {
+        auto tran = unscheduledTransactions.front();
+        scheduleTransaction(curTick(), tran);
+        unscheduledTransactions.pop_front();
+        slots--;
+    }
+    if (!unscheduledTransactions.empty()) {
+        schedule(tickEvent, nextCycle());
+    }
+}
+
+void
 TlmGenerator::scheduleTransaction(Tick when, Transaction *transaction)
 {
     transaction->setGenerator(this);
@@ -167,6 +185,16 @@ TlmGenerator::scheduleTransaction(Tick when, Transaction *transaction)
     scheduledTransactions.push(event);
 
     schedule(event, when);
+}
+
+void
+TlmGenerator::enqueueTransaction(Transaction *transaction)
+{
+    unscheduledTransactions.push_back(transaction);
+
+    if (!tickEvent.scheduled()) {
+        schedule(tickEvent, nextCycle());
+    }
 }
 
 void
