@@ -167,7 +167,7 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
     // Address aperture for device memory. We tell this to the driver and
     // could possibly be anything, but these are the values used by hardware.
     uint64_t mmhubBase = 0x8000ULL << 24;
-    uint64_t mmhubTop = 0x83ffULL << 24;
+    uint64_t mmhubTop = mmhubBase + vram_size;
     uint64_t mmio_mem_size = vram_size / 0x100000;
 
     // The driver adds + 1 to MMIO value to reduce the number of bits required
