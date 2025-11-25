@@ -97,6 +97,12 @@ TlmGenerator::Transaction::inject()
     parent->inject(this);
 }
 
+void
+TlmGenerator::Transaction::send()
+{
+    parent->send(this);
+}
+
 bool
 TlmGenerator::Transaction::hasCallbacks() const
 {
@@ -133,6 +139,12 @@ TlmGenerator::Transaction::runCallbacks()
             break;
         }
     }
+
+    // Once we have run out of callback we consider this
+    // as terminated and we can remove it
+    if (it == actions.end()) {
+        parent->terminate(this);
+    }
 }
 
 void
@@ -145,10 +157,13 @@ TlmGenerator::TlmGenerator(const Params &p)
     : ClockedObject(p),
       cpuId(p.cpu_id),
       transPerCycle(p.tran_per_cycle),
+      maxPendingTrans(
+          p.max_pending_tran.value_or(std::numeric_limits<uint16_t>::max())),
       tickEvent([this] { tick(); }, "TlmGenerator tick", false,
                 Event::CPU_Tick_Pri),
       outPort(name() + ".out_port", 0, this),
-      inPort(name() + ".in_port", 0, this)
+      inPort(name() + ".in_port", 0, this),
+      suiteFailure(false)
 {
     inPort.onChange([this](const TlmData &data) {
         auto payload = data.first;
@@ -162,7 +177,8 @@ TlmGenerator::TlmGenerator(const Params &p)
 void
 TlmGenerator::tick()
 {
-    auto slots = transPerCycle;
+    unsigned pending_size = pendingTransactions.size();
+    auto slots = std::min(transPerCycle, maxPendingTrans - pending_size);
     while (!unscheduledTransactions.empty() && slots > 0) {
         auto tran = unscheduledTransactions.front();
         scheduleTransaction(curTick(), tran);
@@ -200,16 +216,39 @@ TlmGenerator::enqueueTransaction(Transaction *transaction)
 void
 TlmGenerator::inject(Transaction *transaction)
 {
-    auto payload = transaction->payload();
     ARM::CHI::Phase &phase = transaction->phase();
 
-    if (transaction->hasCallbacks())
-        pendingTransactions.insert({phase.txn_id, transaction});
+    pendingTransactions.insert({phase.txn_id, transaction});
+
+    send(transaction);
+}
+
+void
+TlmGenerator::send(Transaction *transaction)
+{
+    auto payload = transaction->payload();
+    ARM::CHI::Phase &phase = transaction->phase();
 
     DPRINTF(TLM, "[c%d] send %s\n", cpuId, transactionToString(*payload, phase));
 
     auto tlm_data = TlmData(payload, &phase);
     outPort.send(tlm_data);
+}
+
+void
+TlmGenerator::terminate(Transaction *transaction)
+{
+    ARM::CHI::Phase &phase = transaction->phase();
+    if (auto it = pendingTransactions.find(phase.txn_id);
+        it != pendingTransactions.end()) {
+
+        pendingTransactions.erase(it);
+
+        // If the transaction has failed, mark the suite as failure
+        suiteFailure = suiteFailure || transaction->failed();
+    } else {
+        panic("Can't find transaction id: %u\n", phase.txn_id);
+    }
 }
 
 void
@@ -233,19 +272,15 @@ TlmGenerator::recv(ARM::CHI::Payload *payload, ARM::CHI::Phase *phase)
 void
 TlmGenerator::passFailCheck()
 {
-    for (auto [txn_id, transaction] : pendingTransactions) {
-        // We are failing either if a condition hasn't been met,
-        // or if there are pending actions when simulation exits
-        if (transaction->failed()) {
-            inform(" Suite Fail: failed transaction ");
-            return;
-        }
-        if (transaction->hasCallbacks()) {
-            inform(" Suite Fail: non-empty action queue ");
-            return;
-        }
+    // We are failing either if a condition hasn't been met,
+    // or if there are pending actions when simulation exits
+    if (suiteFailure) {
+        inform(" Suite Fail: failed transaction ");
+    } else if (!pendingTransactions.empty()) {
+        inform(" Suite Fail: non-empty transaction queue ");
+    } else {
+        inform(" Suite Success ");
     }
-    inform(" Suite Success ");
 }
 
 Port &

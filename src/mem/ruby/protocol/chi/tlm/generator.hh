@@ -213,7 +213,18 @@ class TlmGenerator : public ClockedObject
 
         std::string str() const;
 
+        /**
+         * Inject a transaction by registering it the TlmGenerator
+         * and by sending it downstream.
+         */
         void inject();
+
+        /**
+         * Send a transaction. It assumes the transaction is already
+         * registered in the TlmGenerator. This is the case for a
+         * completion acknowledgement as an example
+         */
+        void send();
 
         /**
          * Returns true if the transaction has failed, false
@@ -301,6 +312,8 @@ class TlmGenerator : public ClockedObject
     };
 
     void inject(Transaction *transaction);
+    void send(Transaction *transaction);
+    void terminate(Transaction *transaction);
     void recv(ARM::CHI::Payload *payload, ARM::CHI::Phase *phase);
     void passFailCheck();
 
@@ -310,6 +323,9 @@ class TlmGenerator : public ClockedObject
 
     /** Max number of transactions to be issued every cycle */
     const unsigned transPerCycle;
+
+    /** Max number of pending transactions allowed */
+    const uint16_t maxPendingTrans;
 
     /** tick event used to schedule unscheduled transactions */
     EventFunctionWrapper tickEvent;
@@ -332,6 +348,9 @@ class TlmGenerator : public ClockedObject
 
     /** response input port */
     SinkPort<TlmGenerator> inPort;
+
+    /** Has any transaction of the suite failed? */
+    bool suiteFailure;
 };
 
 } // namespace tlm::chi

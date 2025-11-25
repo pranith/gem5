@@ -82,7 +82,7 @@ def wait_data(transaction):
 def do_comp_ack(transaction):
     transaction.phase.channel = Channel.RSP
     transaction.phase.opcode = RspOpcode.COMP_ACK
-    transaction.inject()
+    transaction.send()
     return False
 
 

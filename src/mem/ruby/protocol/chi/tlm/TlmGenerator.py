@@ -84,5 +84,8 @@ class TlmGenerator(ClockedObject):
         "be injected at a specific tick overriding any clock "
         "based timing)",
     )
+    max_pending_tran = OptionalParam.Unsigned(
+        "Max number of pending transactions issued via the inject API"
+    )
     in_port = TlmSinkPort("CHI TLM input/response port")
     out_port = TlmSourcePort("CHI TLM output/request port")
