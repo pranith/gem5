@@ -68,8 +68,8 @@ TlmGenerator::Transaction::Assertion::run(Transaction *tran)
 }
 
 TlmGenerator::Transaction::Transaction(ARM::CHI::Payload *pa,
-                                       ARM::CHI::Phase &ph, Tick when)
-    : passed(true), parent(nullptr), _payload(pa), _phase(ph), _start(when)
+                                       ARM::CHI::Phase &ph)
+    : passed(true), parent(nullptr), _payload(pa), _phase(ph), _start(0)
 {
     _payload->ref();
 }
@@ -160,6 +160,7 @@ void
 TlmGenerator::scheduleTransaction(Tick when, Transaction *transaction)
 {
     transaction->setGenerator(this);
+    transaction->setStart(when);
 
     auto event = new TransactionEvent(transaction, when);
 

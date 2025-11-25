@@ -193,7 +193,7 @@ class TlmGenerator : public SimObject
         using Actions = std::list<ActionPtr>;
 
         Transaction(const Transaction &rhs) = delete;
-        Transaction(ARM::CHI::Payload *pa, ARM::CHI::Phase &ph, Tick when);
+        Transaction(ARM::CHI::Payload *pa, ARM::CHI::Phase &ph);
         ~Transaction();
 
         /**
@@ -237,6 +237,11 @@ class TlmGenerator : public SimObject
         start() const
         {
             return _start;
+        }
+        void
+        setStart(Tick when)
+        {
+            _start = when;
         }
 
       private:

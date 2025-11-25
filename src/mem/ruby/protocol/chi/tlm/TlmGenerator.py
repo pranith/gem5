@@ -61,7 +61,7 @@ class TlmGenerator(SimObject):
     def injectAt(self, when, payload, phase):
         from m5.tlm_chi.utils import Transaction
 
-        transaction = Transaction(payload, phase, when)
+        transaction = Transaction(payload, phase)
         self._transactions.append((when, transaction))
         return transaction
 

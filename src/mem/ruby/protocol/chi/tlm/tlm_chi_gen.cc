@@ -61,7 +61,7 @@ tlm_chi_generator_pybind(pybind11::module_ &m_tlm_chi)
     using Assertion = tlm::chi::TlmGenerator::Transaction::Assertion;
     using Callback = Action::Callback;
     py::class_<tlm::chi::TlmGenerator::Transaction>(tlm_chi_gen, "Transaction")
-        .def(py::init<Payload *, Phase &, Tick>())
+        .def(py::init<Payload *, Phase &>())
         .def("EXPECT_STR",
              [](tlm::chi::TlmGenerator::Transaction &self, std::string name,
                 Callback cb) {
