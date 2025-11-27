@@ -267,7 +267,16 @@ cxx_file.add_emitter('.proto', protoc_emitter)
 
 def ProtoBuf(source, tags=None):
     '''Add a Protocol Buffer to build'''
-    Source(source, tags, append={'CXXFLAGS': '-Wno-array-bounds'})
+    Source(
+        source,
+        tags,
+        append={
+            'CXXFLAGS': [
+                '-Wno-array-bounds',
+                '-Wno-stringop-overflow',
+            ],
+        },
+    )
 
 env['PROTOC_GRPC'] = which('grpc_cpp_plugin')
 if env['PROTOC_GRPC']:
