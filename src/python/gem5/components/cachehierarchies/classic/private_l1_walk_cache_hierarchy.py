@@ -1,17 +1,4 @@
 # Copyright (c) 2025 The Regents of the University of California
-# Copyright (c) 2024 Arm Limited
-# All rights reserved.
-#
-# The license below extends only to copyright in the software and shall
-# not be construed as granting a license to any other intellectual
-# property including but not limited to intellectual property relating
-# to a hardware implementation of the functionality of the software
-# licensed hereunder.  You may use the software subject to the license
-# terms below provided that you ensure that this notice is replicated
-# unmodified and in its entirety in all distributions of the software,
-# modified or unmodified, in source code or in binary form.
-#
-# Copyright (c) 2021 The Regents of the University of California
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,26 +29,22 @@ from m5.objects import BaseCPU
 from ....utils.override import *
 from ...boards.abstract_board import AbstractBoard
 from .caches.mmu_cache import MMUCache
-from .private_l1_private_l2_cache_hierarchy import (
-    PrivateL1PrivateL2CacheHierarchy,
-)
+from .private_l1_cache_hierarchy import PrivateL1CacheHierarchy
 
 
-class PrivateL1PrivateL2WalkCacheHierarchy(PrivateL1PrivateL2CacheHierarchy):
-    """
-    A cache setup where each core has a private L1 Data and Instruction Cache,
-    and a private L2 cache and a Walk Cache for the Table Walker
-    """
+class PrivateL1WalkCacheHierarchy(PrivateL1CacheHierarchy):
+    """Private L1 hierarchy variant that attaches MMU caches to walker ports."""
 
     def __init__(self, *args, **kwargs) -> None:
-        PrivateL1PrivateL2CacheHierarchy.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-    @overrides(PrivateL1PrivateL2CacheHierarchy)
+    @overrides(PrivateL1CacheHierarchy)
     def incorporate_cache(self, board: AbstractBoard) -> None:
         self._tmp_iptw_caches = []
         self._tmp_dptw_caches = []
         super().incorporate_cache(board)
-        self.iptw_caches = self._tmp_iptw_caches
+        if self._tmp_iptw_caches:
+            self.iptw_caches = self._tmp_iptw_caches
         self.dptw_caches = self._tmp_dptw_caches
 
     def _connect_table_walker(self, cpu_id: int, cpu: BaseCPU) -> None:
@@ -77,17 +60,23 @@ class PrivateL1PrivateL2WalkCacheHierarchy(PrivateL1PrivateL2CacheHierarchy):
             return
 
         dptw_cache = MMUCache(size="8KiB")
-        dptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
+        dptw_cache.mem_side = self.membus.cpu_side_ports
 
         if len(walker_ports) == 2:
             iptw_cache = MMUCache(size="8KiB")
-            iptw_cache.mem_side = self.l2buses[cpu_id].cpu_side_ports
-            cpu.connect_walker_ports(iptw_cache.cpu_side, dptw_cache.cpu_side)
+            iptw_cache.mem_side = self.membus.cpu_side_ports
+            cpu.connect_walker_ports(
+                iptw_cache.cpu_side,
+                dptw_cache.cpu_side,
+            )
             self._tmp_iptw_caches.append(iptw_cache)
         else:
             assert (
                 len(walker_ports) == 1
             ), f"This branch expects 1 walker_port, got {len(walker_ports)}."
-            cpu.connect_walker_ports(dptw_cache.cpu_side, dptw_cache.cpu_side)
+            cpu.connect_walker_ports(
+                dptw_cache.cpu_side,
+                dptw_cache.cpu_side,
+            )
 
         self._tmp_dptw_caches.append(dptw_cache)
