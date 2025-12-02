@@ -35,11 +35,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+from m5.objects.ClockedObject import ClockedObject
 from m5.objects.TlmController import TlmController
 from m5.params import *
 from m5.SimObject import (
     PyBindMethod,
-    SimObject,
 )
 from m5.tlm_chi.port import (
     TlmSinkPort,
@@ -47,22 +47,28 @@ from m5.tlm_chi.port import (
 )
 
 
-class TlmGenerator(SimObject):
+class TlmGenerator(ClockedObject):
     type = "TlmGenerator"
     cxx_header = "mem/ruby/protocol/chi/tlm/generator.hh"
     cxx_class = "gem5::tlm::chi::TlmGenerator"
 
     cxx_exports = [
         PyBindMethod("scheduleTransaction"),
+        PyBindMethod("enqueueTransaction"),
     ]
 
     _transactions = []
 
-    def injectAt(self, when, payload, phase):
+    def inject(self, payload, phase, when=None):
         from m5.tlm_chi.utils import Transaction
 
-        transaction = Transaction(payload, phase, when)
-        self._transactions.append((when, transaction))
+        transaction = Transaction(payload, phase)
+
+        if when:
+            self._transactions.append((when, transaction))
+        else:
+            self.getCCObject().enqueueTransaction(transaction)
+
         return transaction
 
     def init(self):
@@ -70,5 +76,16 @@ class TlmGenerator(SimObject):
             self.getCCObject().scheduleTransaction(when, tr)
 
     cpu_id = Param.Int("TlmGenerator CPU identifier")
+    tran_per_cycle = Param.Unsigned(
+        2,
+        "Number of transaction per cycle to be scheduled "
+        "(For transactions injected with the inject method "
+        "and not with injectAt, which forces a transaction to "
+        "be injected at a specific tick overriding any clock "
+        "based timing)",
+    )
+    max_pending_tran = OptionalParam.Unsigned(
+        "Max number of pending transactions issued via the inject API"
+    )
     in_port = TlmSinkPort("CHI TLM input/response port")
     out_port = TlmSourcePort("CHI TLM output/request port")
