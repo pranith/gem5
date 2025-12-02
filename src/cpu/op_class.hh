@@ -123,9 +123,7 @@ static const OpClass SimdUnitStrideFaultOnlyFirstLoadOp
              = enums::SimdUnitStrideFaultOnlyFirstLoad;
 static const OpClass SimdWholeRegisterLoadOp
              = enums::SimdWholeRegisterLoad;
-static const OpClass SimdWholeRegisterStoreOp
-             = enums::SimdWholeRegisterStore;
-static const OpClass IprAccessOp = enums::IprAccess;
+static const OpClass SimdWholeRegisterStoreOp = enums::SimdWholeRegisterStore;
 static const OpClass InstPrefetchOp = enums::InstPrefetch;
 static const OpClass SimdUnitStrideSegmentedLoadOp = enums::SimdUnitStrideSegmentedLoad;
 static const OpClass SimdUnitStrideSegmentedStoreOp
@@ -147,6 +145,7 @@ static const OpClass SimdBf16MatMultAccOp = enums::SimdBf16MatMultAcc;
 static const OpClass SimdBf16MultOp = enums::SimdBf16Mult;
 static const OpClass SimdBf16MultAccOp = enums::SimdBf16MultAcc;
 static const OpClass Bf16CvtOp = enums::Bf16Cvt;
+static const OpClass SystemOp = enums::System;
 static const OpClass Num_OpClasses = enums::Num_OpClass;
 
 } // namespace gem5

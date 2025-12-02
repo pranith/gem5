@@ -139,6 +139,11 @@ class Matrix_Unit(FUDesc):
     count = 1
 
 
+class System_Unit(FUDesc):
+    opList = [OpDesc(opClass="System")]
+    count = 1
+
+
 class PredALU(FUDesc):
     opList = [OpDesc(opClass="SimdPredAlu")]
     count = 1
@@ -200,8 +205,3 @@ class RdWrPort(FUDesc):
         OpDesc(opClass="SimdStrideSegmentedStore"),
     ]
     count = 4
-
-
-class IprPort(FUDesc):
-    opList = [OpDesc(opClass="IprAccess", opLat=3, pipelined=False)]
-    count = 1

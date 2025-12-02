@@ -42,8 +42,10 @@
 #define __ARCH_ARM_MMU_HH__
 
 #include "arch/arm/page_size.hh"
-#include "arch/arm/utility.hh"
+#include "arch/arm/regs/misc_types.hh"
+#include "arch/arm/types.hh"
 #include "arch/generic/mmu.hh"
+#include "base/addr_range.hh"
 #include "base/memoizer.hh"
 #include "base/statistics.hh"
 #include "enums/ArmLookupLevel.hh"
@@ -125,45 +127,9 @@ class MMU : public BaseMMU
 
     struct CachedState
     {
-        CachedState(MMU *_mmu, bool stage2)
-          : mmu(_mmu), isStage2(stage2),
-            computeAddrTop(ArmISA::computeAddrTop)
-        {}
+        CachedState(MMU *_mmu, bool stage2);
 
-        CachedState&
-        operator=(const CachedState &rhs)
-        {
-            isStage2 = rhs.isStage2;
-            cpsr = rhs.cpsr;
-            aarch64 = rhs.aarch64;
-            exceptionLevel = rhs.exceptionLevel;
-            currRegime = rhs.currRegime;
-            sctlr = rhs.sctlr;
-            scr = rhs.scr;
-            isPriv = rhs.isPriv;
-            securityState = rhs.securityState;
-            ttbcr = rhs.ttbcr;
-            tcr2 = rhs.tcr2;
-            pir = rhs.pir;
-            pire0 = rhs.pire0;
-            pie = rhs.pie;
-            asid = rhs.asid;
-            vmid = rhs.vmid;
-            prrr = rhs.prrr;
-            nmrr = rhs.nmrr;
-            hcr = rhs.hcr;
-            dacr = rhs.dacr;
-            miscRegValid = rhs.miscRegValid;
-            curTranType = rhs.curTranType;
-            stage2Req = rhs.stage2Req;
-            stage2DescReq = rhs.stage2DescReq;
-            directToStage2 = rhs.directToStage2;
-
-            // When we copy we just flush the memoizer cache
-            computeAddrTop.flush();
-
-            return *this;
-        }
+        CachedState &operator=(const CachedState &rhs);
 
         void updateMiscReg(ThreadContext *tc, ArmTranslationType tran_type);
 

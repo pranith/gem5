@@ -45,8 +45,10 @@
 
 #include <map>
 
-#include "arch/arm/utility.hh"
+#include "arch/arm/regs/int.hh"
+#include "arch/arm/regs/misc.hh"
 #include "base/compiler.hh"
+#include "cpu/thread_context.hh"
 #include "kern/linux/flag_tables.hh"
 #include "kern/linux/linux.hh"
 

@@ -43,10 +43,12 @@
 #include "arch/arm/isa.hh"
 #include "arch/arm/mpam.hh"
 #include "arch/arm/reg_abi.hh"
+#include "arch/arm/self_debug.hh"
 #include "arch/arm/stage2_lookup.hh"
 #include "arch/arm/table_walker.hh"
 #include "arch/arm/tlb.hh"
 #include "arch/arm/tlbi_op.hh"
+#include "arch/arm/types.hh"
 #include "debug/MMU.hh"
 #include "mem/packet_access.hh"
 #include "params/ArmMMU.hh"
@@ -1403,6 +1405,45 @@ MMU::updateMiscReg(ThreadContext *tc,
     } else {
         return state;
     }
+}
+
+MMU::CachedState::CachedState(MMU *_mmu, bool stage2)
+    : mmu(_mmu), isStage2(stage2), computeAddrTop(ArmISA::computeAddrTop)
+{}
+
+MMU::CachedState &
+MMU::CachedState::operator=(const CachedState &rhs)
+{
+    isStage2 = rhs.isStage2;
+    cpsr = rhs.cpsr;
+    aarch64 = rhs.aarch64;
+    exceptionLevel = rhs.exceptionLevel;
+    currRegime = rhs.currRegime;
+    sctlr = rhs.sctlr;
+    scr = rhs.scr;
+    isPriv = rhs.isPriv;
+    securityState = rhs.securityState;
+    ttbcr = rhs.ttbcr;
+    tcr2 = rhs.tcr2;
+    pir = rhs.pir;
+    pire0 = rhs.pire0;
+    pie = rhs.pie;
+    asid = rhs.asid;
+    vmid = rhs.vmid;
+    prrr = rhs.prrr;
+    nmrr = rhs.nmrr;
+    hcr = rhs.hcr;
+    dacr = rhs.dacr;
+    miscRegValid = rhs.miscRegValid;
+    curTranType = rhs.curTranType;
+    stage2Req = rhs.stage2Req;
+    stage2DescReq = rhs.stage2DescReq;
+    directToStage2 = rhs.directToStage2;
+
+    // When we copy we just flush the memoizer cache
+    computeAddrTop.flush();
+
+    return *this;
 }
 
 void
