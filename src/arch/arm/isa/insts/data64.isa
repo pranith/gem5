@@ -244,22 +244,22 @@ let {{
     );
     '''
     buildDataXRegInst("crc32b", 2,
-        crcCode % {"sz": 1, "polynom": "0x04C11DB7"})
+        crcCode % {"sz": 1, "polynom": "0x04C11DB7"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32h", 2,
-        crcCode % {"sz": 2, "polynom": "0x04C11DB7"})
+        crcCode % {"sz": 2, "polynom": "0x04C11DB7"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32w", 2,
-        crcCode % {"sz": 4, "polynom": "0x04C11DB7"})
+        crcCode % {"sz": 4, "polynom": "0x04C11DB7"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32x", 2,
-        crcCode % {"sz": 8, "polynom": "0x04C11DB7"})
+        crcCode % {"sz": 8, "polynom": "0x04C11DB7"}, overrideOpClass="SimdCrcOp")
 
     buildDataXRegInst("crc32cb", 2,
-        crcCode % {"sz": 1, "polynom": "0x1EDC6F41"})
+        crcCode % {"sz": 1, "polynom": "0x1EDC6F41"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32ch", 2,
-        crcCode % {"sz": 2, "polynom": "0x1EDC6F41"})
+        crcCode % {"sz": 2, "polynom": "0x1EDC6F41"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32cw", 2,
-        crcCode % {"sz": 4, "polynom": "0x1EDC6F41"})
+        crcCode % {"sz": 4, "polynom": "0x1EDC6F41"}, overrideOpClass="SimdCrcOp")
     buildDataXRegInst("crc32cx", 2,
-        crcCode % {"sz": 8, "polynom": "0x1EDC6F41"})
+        crcCode % {"sz": 8, "polynom": "0x1EDC6F41"}, overrideOpClass="SimdCrcOp")
 
     buildDataXRegInst("sdiv", 2, '''
         int64_t op1 = Op164;
