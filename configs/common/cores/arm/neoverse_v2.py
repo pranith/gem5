@@ -49,7 +49,8 @@ class NeoverseV2_Complex_Int(FUDesc):
     opList = [
         OpDesc(opClass="IntMult", opLat=4, pipelined=True),
         OpDesc(opClass="IntDiv", opLat=11, pipelined=False),
-        OpDesc(opClass="IprAccess", opLat=3, pipelined=True),
+        # Treat system register (IPR) accesses as regular integer ops.
+        OpDesc(opClass="IntAlu", opLat=3, pipelined=True),
     ]
 
 
