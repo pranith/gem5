@@ -81,23 +81,10 @@ jobs:
         runs-on: [self-hosted, linux, x64]
         if: github.event.pull_request.draft == false
         container: ghcr.io/gem5/ubuntu-24.04_all-dependencies:latest
-        needs: [pre-commit, get-date] # only runs if pre-commit passes.
+        needs: [pre-commit] # only runs if pre-commit passes.
         timeout-minutes: 60
         steps:
             - uses: actions/checkout@v4
-
-
-            # Restore the cache if available. As this just builds the unittests
-            # we only obtain the cache and do not provide if if is not
-            # available.
-            - name: Cache build/ALL
-              uses: actions/cache/restore@v4
-              with:
-                  path: build/ALL
-                  key: testlib-build-all-${{ needs.get-date.outputs.date }}
-                  restore-keys: |
-                      testlib-build-all
-
             - name: CI Unittests (${{ matrix.type }})
               working-directory: ${{ github.workspace }}
               run: scons --no-compress-debug build/ALL/unittests.${{ matrix.type }} -j $(nproc)
