@@ -41,4 +41,5 @@ gem5_verify_config(
     valid_isas=(constants.arm_tag,),
     valid_hosts=constants.supported_hosts,
     fixtures=(),
+    length=constants.long_tag,
 )
