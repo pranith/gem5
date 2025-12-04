@@ -465,22 +465,21 @@ PhysicalMemory::unserializeStore(CheckpointIn &cp)
     uint64_t curr_size = 0;
     uint32_t bytes_read;
     uint8_t buffer[chunk_size];
+    uint8_t zeros[chunk_size] = {0};
     while (curr_size < range.size()) {
         bytes_read = gzread(compressed_mem, buffer, chunk_size);
         if (bytes_read == 0)
             break;
 
-        bool all_zero = true;
-        for (uint32_t i = 0; i < bytes_read; i++) {
-            if (buffer[i] != 0) {
-                all_zero = false;
-                break;
-            }
-        }
+        bool all_zero = (memcmp(buffer, zeros, bytes_read) == 0);
 
         if (!all_zero) {
             memcpy(pmem, buffer, bytes_read);
         }
+
+        curr_size += bytes_read;
+        pmem += bytes_read;
+    }
 
     if (gzclose(compressed_mem))
         fatal("Close failed on physical memory checkpoint file '%s'\n",
