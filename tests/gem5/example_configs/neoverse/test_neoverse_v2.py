@@ -38,7 +38,7 @@ gem5_verify_config(
         config.base_dir, "configs", "example", "arm", "fdp_neoverse_v2.py"
     ),
     config_args=[f"--workload=hello"],
-    valid_isas=(constants.arm_tag,),
+    valid_isas=(constants.all_compiled_tag,),
     valid_hosts=constants.supported_hosts,
     fixtures=(),
     length=constants.long_tag,
