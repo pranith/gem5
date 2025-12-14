@@ -21,7 +21,7 @@ jobs:
     macos-compilation:
         # The purpose of this is to cache the macOS compilation.
         # MacOS compilation checks are run as part of the CI tests but as the
-        # MacOS GitHub action runners are quite costly, it's advantagous to
+        # MacOS GitHub action runners are quite costly, it's advantageous to
         # build upon a cache. Putting this in the daily tests means that the
         # cache is refreshed on a daily basis.
         runs-on: macos-26
@@ -81,7 +81,7 @@ jobs:
             - name: Build ALL/gem5.opt
               run: scons --no-compress-debug build/ALL/gem5.opt -j $(nproc)
 
-  # this builds both unittests.fast and unittests.debug
+  # this builds and runs unittests.debug
     unittests-debug:
         strategy:
             matrix:
