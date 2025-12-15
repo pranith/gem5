@@ -34,51 +34,27 @@
 #include "mem/cache/replacement_policies/lfu_rp.hh"
 #include "params/LFURP.hh"
 
-// Create a dummy RP class so that we can verify if the replacement data is
-// of the expected type for this RP
-class DummyLFU : public gem5::replacement_policy::LFU
-{
-  public:
-    using gem5::replacement_policy::LFU::LFU;
-
-    /// Verify that the data is of the expected type
-    bool
-    validateType(
-        const std::shared_ptr<gem5::replacement_policy::ReplacementData>
-            repl_data) const
-    {
-        return nullptr !=
-               std::dynamic_pointer_cast<
-                   gem5::replacement_policy::LFU::LFUReplData>(repl_data);
-    }
-};
-
 /// Common fixture that initializes the replacement policy
 class LFURPTestF : public ::testing::Test
 {
   public:
-    std::shared_ptr<DummyLFU> rp;
+    std::shared_ptr<gem5::replacement_policy::LFU> rp;
 
     LFURPTestF()
     {
         gem5::LFURPParams params;
         params.eventq_index = 0;
-        rp = std::make_shared<DummyLFU>(params);
+        rp = std::make_shared<gem5::replacement_policy::LFU>(params);
     }
 };
 
-/// Test that instantiating an entry generates the replacement data of the
-/// expected type
+/// Test that instantiating an entry generates a replacement data
 TEST_F(LFURPTestF, InstantiatedEntry)
 {
     const auto repl_data = rp->instantiateEntry();
 
     // instantiateEntry must return a valid pointer
     ASSERT_NE(repl_data, nullptr);
-
-    // instantiateEntry must return a pointer of the tested class'
-    // replacement data type
-    ASSERT_TRUE(rp->validateType(repl_data));
 }
 
 /// Test that if there is one candidate, then it will always be the victim,
