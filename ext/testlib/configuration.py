@@ -230,6 +230,7 @@ def define_defaults(defaults):
     defaults.resource_path = os.path.abspath(
         os.path.join(defaults.base_dir, "tests", "gem5", "resources")
     )
+    defaults.gcov = False
 
 
 def define_constants(constants):
@@ -386,6 +387,9 @@ def define_post_processors(config):
             return isa
 
     def default_variant(variant):
+        # If running TestLib for gcov, build gem5.debug
+        if config._lookup_val("gcov")[0]:
+            return [[constants.debug_tag]]
         if not variant[0]:
             # Default variant is only opt. No need to run tests with multiple
             # different compilation targets
@@ -652,7 +656,7 @@ def define_common_args(config):
         Argument(
             "--gcov",
             action="store_true",
-            default=False,
+            default=config._defaults.gcov,
             help="Build gem5 for running with gcov.",
         ),
     ]
