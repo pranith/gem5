@@ -1782,6 +1782,9 @@ class Rancho(ArmO3CPU):
     forwardComSize = 8
     LQEntries = 128
     SQEntries = 128
+    useMergeBuffer = True
+    mergeBufferEntries = 32
+
     LSQDepCheckShift = 4
     LSQCheckLoads = True
     store_set_clear_period = 250000
@@ -1801,7 +1804,7 @@ class Rancho(ArmO3CPU):
     )
     # most ISAs don't use condition-code regs, so default is 0
     numPhysCCRegs = Param.Unsigned(32, "Number of physical cc registers")
-    numIQEntries = Param.Unsigned(96, "Number of instruction queue entries")
+    # numIQEntries = Param.Unsigned(96, "Number of instruction queue entries")
     numROBEntries = Param.Unsigned(75, "Number of reorder buffer entries")
 
     smtCommitPolicy = "RoundRobin"
