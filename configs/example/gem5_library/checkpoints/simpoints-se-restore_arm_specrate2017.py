@@ -71,8 +71,8 @@ from m5.stats import (
 )
 
 from gem5.components.boards.simple_board import SimpleBoard
-from gem5.components.cachehierarchies.classic.private_l1_private_l2_walk_cache_hierarchy import (
-    PrivateL1PrivateL2WalkCacheHierarchy,
+from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierarchy import (
+    PrivateL1PrivateL2CacheHierarchy,
 )
 from gem5.components.memory import DualChannelDDR4_2400
 from gem5.components.processors.base_cpu_core import BaseCPUCore
@@ -272,7 +272,7 @@ for workload in spec_rate_workloads:
 
         # The cache hierarchy can be different from the cache hierarchy used in taking
         # the checkpoints
-        cache_hierarchy = PrivateL1PrivateL2WalkCacheHierarchy(
+        cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
             l1d_size="32KiB",
             l1i_size="32KiB",
             l2_size="256KiB",
