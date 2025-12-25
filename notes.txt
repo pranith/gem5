@@ -11,3 +11,6 @@ debug:
 
 ./build/ARM/gem5.debug --debug-flags=Heartbeat,Branch,ITTAGE,Indirect --debug-file=trace.txt -d output_ittage_onlybase configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
 gdb --args ./build/ARM/gem5.debug --debug-flags=Heartbeat -d output_debug configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
+
+gdb --args ./build/ARM/gem5.debug --debug-flags=Heartbeat,LSQUnit --debug-file=trace.txt -d debug_output configs/example/gem5_library/checkpoints/simpoints-se-restore_arm_specrate2017_debug.py --checkpoint chkpt_perlbench_r_4
+gdb --args ./build/ARM/gem5.debug --debug-flags=Heartbeat -d output_ittage configs/example/arm/rancho_o3.py bench --cpu rancho --mem-size 8GB --maxinsts 10000000
