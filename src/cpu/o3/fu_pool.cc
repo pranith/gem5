@@ -40,6 +40,7 @@
 
 #include "cpu/o3/fu_pool.hh"
 
+#include <initializer_list>
 #include <sstream>
 
 #include "cpu/func_unit.hh"
@@ -49,6 +50,42 @@ namespace gem5
 
 namespace o3
 {
+
+namespace {
+
+inline bool
+hasAny(const std::bitset<Num_OpClasses>& caps,
+       std::initializer_list<OpClass> classes)
+{
+    for (auto cls : classes) {
+        if (caps.test(cls))
+            return true;
+    }
+    return false;
+}
+
+inline bool
+hasLoadCapability(const std::bitset<Num_OpClasses>& caps)
+{
+    static const std::initializer_list<OpClass> loadClasses = {
+        OpClass::MemRead, OpClass::FloatMemRead,
+        OpClass::InstPrefetch
+    };
+
+    return hasAny(caps, loadClasses);
+}
+
+inline bool
+hasStoreCapability(const std::bitset<Num_OpClasses>& caps)
+{
+    static const std::initializer_list<OpClass> storeClasses = {
+        OpClass::MemWrite, OpClass::FloatMemWrite
+    };
+
+    return hasAny(caps, storeClasses);
+}
+
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////
 //
@@ -150,6 +187,21 @@ FUPool::FUPool(const Params &p)
 
     for (int i = 0; i < numFU; i++) {
         unitBusy[i] = false;
+    }
+
+    lsPipeCounts = {};
+    for (const auto& fu : funcUnits) {
+        const auto caps = fu->capabilities();
+        const bool canLoad = hasLoadCapability(caps);
+        const bool canStore = hasStoreCapability(caps);
+
+        if (canLoad && canStore) {
+            ++lsPipeCounts.loadStore;
+        } else if (canLoad) {
+            ++lsPipeCounts.loadOnly;
+        } else if (canStore) {
+            ++lsPipeCounts.storeOnly;
+        }
     }
 }
 

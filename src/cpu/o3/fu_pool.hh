@@ -74,6 +74,14 @@ namespace o3
  */
 class FUPool : public SimObject
 {
+  public:
+    struct LoadStorePipeCounts
+    {
+        unsigned loadOnly = 0;
+        unsigned storeOnly = 0;
+        unsigned loadStore = 0;
+    };
+
   private:
     /** Maximum op execution latencies, per op class. */
     std::array<Cycles, Num_OpClasses> maxOpLatencies;
@@ -127,6 +135,8 @@ class FUPool : public SimObject
 
     /** Number of FUs. */
     int numFU;
+
+    LoadStorePipeCounts lsPipeCounts;
 
     /** Functional units. */
     std::vector<FuncUnit *> funcUnits;
@@ -182,6 +192,9 @@ class FUPool : public SimObject
 
     /** Frees all FUs on the list. */
     void processFreeUnits();
+
+    /** Load/store pipe counts derived from the FU capabilities. */
+    LoadStorePipeCounts loadStorePipeCounts() const { return lsPipeCounts; }
 
     /** Returns the total number of FUs. */
     int size() { return numFU; }
