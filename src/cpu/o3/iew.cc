@@ -87,6 +87,9 @@ IEW::IEW(CPU *_cpu, const BaseO3CPUParams &params)
       wbNumInst(0),
       wbCycle(0),
       wbWidth(params.wbWidth),
+      loadOnlyPipes(0),
+      storeOnlyPipes(0),
+      loadStorePipes(0),
       numThreads(params.numThreads),
       iewStats(cpu)
 {
@@ -115,6 +118,19 @@ IEW::IEW(CPU *_cpu, const BaseO3CPUParams &params)
 
     // Retrieve a list of all available FU pools
     fuPools = instQueue.allFUPools();
+
+    for (auto *pool : fuPools) {
+        auto counts = pool->loadStorePipeCounts();
+        loadOnlyPipes += counts.loadOnly;
+        storeOnlyPipes += counts.storeOnly;
+        loadStorePipes += counts.loadStore;
+    }
+
+    if ((loadOnlyPipes + loadStorePipes) == 0 ||
+        (storeOnlyPipes + loadStorePipes) == 0) {
+        fatal("CPU %s has no load/store execution pipes configured.",
+              cpu->name());
+    }
 
     for (ThreadID tid = 0; tid < MaxThreads; tid++) {
         dispatchStatus[tid] = Running;
@@ -1144,6 +1160,58 @@ IEW::executeInsts()
         fetchRedirect[tid] = false;
     }
 
+    unsigned loadOnlyAvail = loadOnlyPipes;
+    unsigned storeOnlyAvail = storeOnlyPipes;
+    unsigned loadStoreAvail = loadStorePipes;
+
+    enum class MemPipeAlloc
+    {
+        None,
+        LoadOnly,
+        StoreOnly,
+        LoadStore
+    };
+
+    auto tryAllocateMemPipe = [&](bool is_load) -> MemPipeAlloc {
+        if (is_load) {
+            if (loadOnlyAvail) {
+                --loadOnlyAvail;
+                return MemPipeAlloc::LoadOnly;
+            }
+            if (loadStoreAvail) {
+                --loadStoreAvail;
+                return MemPipeAlloc::LoadStore;
+            }
+            return MemPipeAlloc::None;
+        }
+
+        if (storeOnlyAvail) {
+            --storeOnlyAvail;
+            return MemPipeAlloc::StoreOnly;
+        }
+        if (loadStoreAvail) {
+            --loadStoreAvail;
+            return MemPipeAlloc::LoadStore;
+        }
+        return MemPipeAlloc::None;
+    };
+
+    auto releaseMemPipe = [&](MemPipeAlloc alloc) {
+        switch (alloc) {
+          case MemPipeAlloc::LoadOnly:
+            ++loadOnlyAvail;
+            break;
+          case MemPipeAlloc::StoreOnly:
+            ++storeOnlyAvail;
+            break;
+          case MemPipeAlloc::LoadStore:
+            ++loadStoreAvail;
+            break;
+          case MemPipeAlloc::None:
+            break;
+        }
+    };
+
     // Uncomment this if you want to see all available instructions.
     // @todo This doesn't actually work anymore, we should fix it.
 //    printAvailableInsts();
@@ -1185,6 +1253,7 @@ IEW::executeInsts()
         }
 
         Fault fault = NoFault;
+        MemPipeAlloc pipeAlloc = MemPipeAlloc::None;
 
         // Execute instruction.
         // Note that if the instruction faults, it will be handled
@@ -1195,6 +1264,12 @@ IEW::executeInsts()
 
             // Tell the LDSTQ to execute this instruction (if it is a load).
             if (inst->isAtomic()) {
+                pipeAlloc = tryAllocateMemPipe(false);
+                if (pipeAlloc == MemPipeAlloc::None) {
+                    instQueue.deferMemInst(inst);
+                    continue;
+                }
+
                 // AMOs are treated like store requests
                 fault = ldstQueue.executeStore(inst);
 
@@ -1204,10 +1279,18 @@ IEW::executeInsts()
                     // instruction must be deferred.
                     DPRINTF(IEW, "Execute: Delayed translation, deferring "
                             "store.\n");
+                    releaseMemPipe(pipeAlloc);
+                    pipeAlloc = MemPipeAlloc::None;
                     instQueue.deferMemInst(inst);
                     continue;
                 }
             } else if (inst->isLoad()) {
+                pipeAlloc = tryAllocateMemPipe(true);
+                if (pipeAlloc == MemPipeAlloc::None) {
+                    instQueue.deferMemInst(inst);
+                    continue;
+                }
+
                 // Loads will mark themselves as executed, and their writeback
                 // event adds the instruction to the queue to commit
                 fault = ldstQueue.executeLoad(inst);
@@ -1218,6 +1301,8 @@ IEW::executeInsts()
                     // instruction must be deferred.
                     DPRINTF(IEW, "Execute: Delayed translation, deferring "
                             "load.\n");
+                    releaseMemPipe(pipeAlloc);
+                    pipeAlloc = MemPipeAlloc::None;
                     instQueue.deferMemInst(inst);
                     continue;
                 }
@@ -1226,6 +1311,12 @@ IEW::executeInsts()
                     inst->fault = NoFault;
                 }
             } else if (inst->isStore()) {
+                pipeAlloc = tryAllocateMemPipe(false);
+                if (pipeAlloc == MemPipeAlloc::None) {
+                    instQueue.deferMemInst(inst);
+                    continue;
+                }
+
                 fault = ldstQueue.executeStore(inst);
 
                 if (inst->isTranslationDelayed() &&
@@ -1234,6 +1325,8 @@ IEW::executeInsts()
                     // instruction must be deferred.
                     DPRINTF(IEW, "Execute: Delayed translation, deferring "
                             "store.\n");
+                    releaseMemPipe(pipeAlloc);
+                    pipeAlloc = MemPipeAlloc::None;
                     instQueue.deferMemInst(inst);
                     continue;
                 }
