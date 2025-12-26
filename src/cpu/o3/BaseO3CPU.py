@@ -144,6 +144,31 @@ class BaseO3CPU(BaseCPU):
     LSQDepCheckShift = Param.Unsigned(
         4, "Number of places to shift addr before check"
     )
+    useMergeBuffer = Param.Bool(False, "Use merge buffer")
+    mergeBufferEntries = Param.Unsigned(
+        32, "Number of entries in " "the merge buffer"
+    )
+    mergeBufferPrefetch = Param.Bool(
+        False,
+        "Prefetch cache line on merge buffer allocation to speed up drains",
+    )
+    mergeBufferRetireCycles = Param.Cycles(
+        64,
+        "Cycles a merge buffer entry remains in MERGING state before "
+        "retiring and draining",
+    )
+    mergeBufferMaxUnretire = Param.Unsigned(
+        2,
+        "Max times a merge buffer entry can unretire from RETIRED to MERGING",
+    )
+    mergeBufferResetRetireOnMerge = Param.Bool(
+        False,
+        "If true, reset the retire timer when a new store merges "
+        "into an existing merge buffer entry",
+    )
+    mergeBufferRetireResetCycles = Param.Cycles(
+        64, "Retire window used when resetting an entry on merge"
+    )
     LSQCheckLoads = Param.Bool(
         True,
         "Should dependency violations be checked for "

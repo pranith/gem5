@@ -1023,8 +1023,8 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
     DPRINTF(Fetch, "[tid:%i] Instruction PC %s created [sn:%lli].\n",
             tid, this_pc, seq);
 
-    DPRINTF(Fetch, "[tid:%i] Instruction is: %s\n", tid,
-            instruction->staticInst->disassemble(this_pc.instAddr()));
+    DPRINTF(Fetch, "[tid:%i] Instruction is [sn:%lli]: PC:%s %s\n", tid, seq,
+            this_pc, instruction->staticInst->disassemble(this_pc.instAddr()));
 
 #if TRACING_ON
     if (trace) {
