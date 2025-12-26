@@ -1769,7 +1769,21 @@ class Rancho(ArmO3CPU):
     dispatchWidth = 8
     issueWidth = 8
     wbWidth = 8
-    fuPool = DefaultFUPool()
+    fuPool = DefaultFUPool(
+        FUList=[
+            IntALU(),
+            IntMultDiv(),
+            FP_ALU(),
+            FP_MultDiv(),
+            ReadPort(count=2),
+            SIMD_Unit(),
+            Matrix_Unit(),
+            PredALU(),
+            WritePort(),
+            RdWrPort(count=2),
+            IprPort(),
+        ]
+    )
 
     iewToCommitDelay = 1
     renameToROBDelay = 1
