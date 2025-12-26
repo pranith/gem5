@@ -143,6 +143,19 @@ def create(args):
     for cpu, workload in zip(system.cpu_cluster.cpus, processes):
         cpu.workload = workload
 
+    if args.merge_buffer is not None:
+        use_mb = args.merge_buffer == "on"
+        for cpu in system.cpu_cluster.cpus:
+            cpu.useMergeBuffer = use_mb
+
+    if args.merge_buffer_entries is not None:
+        for cpu in system.cpu_cluster.cpus:
+            cpu.mergeBufferEntries = args.merge_buffer_entries
+    if args.merge_buffer_prefetch is not None:
+        use_pf = args.merge_buffer_prefetch == "on"
+        for cpu in system.cpu_cluster.cpus:
+            cpu.mergeBufferPrefetch = use_pf
+
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts
@@ -169,6 +182,24 @@ def main():
     parser.add_argument("--cpu-freq", type=str, default="3GHz")
     parser.add_argument(
         "--num-cores", type=int, default=1, help="Number of CPU cores"
+    )
+    parser.add_argument(
+        "--merge-buffer",
+        choices=["on", "off"],
+        default=None,
+        help="Force enable/disable the O3 merge buffer (default uses CPU template setting)",
+    )
+    parser.add_argument(
+        "--merge-buffer-entries",
+        type=int,
+        default=None,
+        help="Override number of merge buffer entries",
+    )
+    parser.add_argument(
+        "--merge-buffer-prefetch",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable prefetch on merge buffer allocation",
     )
     parser.add_argument(
         "--mem-type",
