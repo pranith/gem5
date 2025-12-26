@@ -409,6 +409,11 @@ class IEW
     /** Writeback width. */
     unsigned wbWidth;
 
+    /** Load/store pipe capacity derived from the FU pool. */
+    unsigned loadOnlyPipes;
+    unsigned storeOnlyPipes;
+    unsigned loadStorePipes;
+
     /** Number of active threads. */
     ThreadID numThreads;
 
