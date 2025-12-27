@@ -251,6 +251,10 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mergeBufferEnabled = params.useMergeBuffer;
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
 
+    storeDeallocateWidth = params.storeDeallocateWidth;
+    storeDeallocsThisCycle = 0;
+    lastStoreDeallocCycle = 0;
+
     if (mergeBufferEnabled) {
         mergeBuffer.init(this, params.mergeBufferEntries, cacheLineSize(),
                          params.mergeBufferRetireCycles,
@@ -882,6 +886,12 @@ LSQUnit::writebackStores()
         }
     }
 
+    // Track store queue deallocations per cycle for head removals.
+    if (lastStoreDeallocCycle != cpu->curCycle()) {
+        storeDeallocsThisCycle = 0;
+        lastStoreDeallocCycle = cpu->curCycle();
+    }
+
     while (storesToWB > 0 && storeWBIt.dereferenceable() &&
            storeWBIt->valid() && storeWBIt->canWB()) {
 
@@ -895,10 +905,17 @@ LSQUnit::writebackStores()
             break;
         }
 
+        if (storeDeallocsThisCycle >= storeDeallocateWidth) {
+            DPRINTF(LSQUnit, "Unable to write back any more stores, store "
+                    " dealloc bandwidth reached!\n");
+            break;
+        }
+
         // Store didn't write any data so no need to write it back to
         // memory.
         if (storeWBIt->size() == 0) {
             completeStore(storeWBIt++);
+            ++storeDeallocsThisCycle;
             continue;
         }
 
@@ -949,6 +966,7 @@ LSQUnit::writebackStores()
                 // Complete and remove this store from the SQ;
                 // merge buffer owns the data from here on.
                 completeStore(storeWBIt);
+                ++storeDeallocsThisCycle;
                 if (!storeQueue.empty())
                     storeWBIt++;
                 else
@@ -998,11 +1016,13 @@ LSQUnit::writebackStores()
                             "Store conditional [sn:%lli] failed.  "
                             "Instantly completing it.\n",
                             inst->seqNum);
+
                     PacketPtr new_pkt = new Packet(*request->packet());
                     WritebackEvent *wb =
                         new WritebackEvent(inst, new_pkt, this);
                     cpu->schedule(wb, curTick() + 1);
                     completeStore(storeWBIt);
+                    ++storeDeallocsThisCycle;
                     if (!storeQueue.empty()) {
                         storeWBIt++;
                     } else {
@@ -1023,6 +1043,7 @@ LSQUnit::writebackStores()
                 delete main_pkt;
                 completeStore(storeWBIt);
                 storeWBIt++;
+                ++storeDeallocsThisCycle;
                 continue;
             }
             /* Send to cache */

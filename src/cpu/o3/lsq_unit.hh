@@ -611,6 +611,11 @@ class LSQUnit
     /** The merge buffer. */
     MergeBuffer mergeBuffer;
 
+    /** Max store queue deallocations per cycle. */
+    unsigned storeDeallocateWidth;
+    unsigned storeDeallocsThisCycle;
+    Cycles lastStoreDeallocCycle;
+
   private:
     /** The number of places to shift addresses in the LSQ before checking
      * for dependency violations

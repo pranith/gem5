@@ -152,6 +152,9 @@ class BaseO3CPU(BaseCPU):
         False,
         "Prefetch cache line on merge buffer allocation to speed up drains",
     )
+    storeDeallocateWidth = Param.Unsigned(
+        2, "Number of stores that can retire from the store queue per cycle"
+    )
     mergeBufferRetireCycles = Param.Cycles(
         64,
         "Cycles a merge buffer entry remains in MERGING state before "
