@@ -217,7 +217,8 @@ class LSQUnit
         {
             MERGING,
             RETIRED,
-            DRAINING
+            DRAINING,
+            FORCE_RETIRED
         };
 
         struct MergeBufferEntry
@@ -277,6 +278,7 @@ class LSQUnit
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
+        void forceRetireAll();
         void
         reset()
         {
@@ -494,6 +496,9 @@ class LSQUnit
     /** Handles doing the retry. */
     void recvRetry();
 
+    /** Forces merge buffer drain. */
+    void forceMBDrain() { mergeBuffer.forceRetireAll(); }
+
     /** Handles merge buffer drain completion. */
     void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
 
@@ -629,6 +634,8 @@ class LSQUnit
     bool mergeBufferEnabled;
     /** Prefetch on merge buffer allocation to accelerate draining. */
     bool mergeBufferPrefetchEnabled;
+    /** Limit outstanding merge buffer prefetches. */
+    unsigned mergeBufferPfInFlight;
 
     /** The number of store instructions in the SQ waiting to writeback. */
     int storesToWB;

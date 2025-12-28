@@ -227,6 +227,9 @@ class IEW
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
 
+    /** Mark the merge buffer entries for drain */
+    void forceMBDrain(ThreadID tid) { return ldstQueue.forceMBDrain(tid); }
+
     /** Check misprediction  */
     void checkMisprediction(const DynInstPtr &inst);
 

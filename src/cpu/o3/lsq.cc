@@ -719,6 +719,12 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    return thread.at(tid).forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
 {

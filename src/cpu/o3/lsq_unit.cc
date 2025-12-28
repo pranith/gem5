@@ -92,6 +92,8 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
 {
     if (auto *pf_state =
             dynamic_cast<MergeBufferPrefetchSenderState*>(pkt->senderState)) {
+        assert(mergeBufferPfInFlight > 0);
+        --mergeBufferPfInFlight;
         delete pf_state;
         delete pkt;
         return true;
@@ -250,10 +252,11 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
 
     mergeBufferEnabled = params.useMergeBuffer;
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
+    mergeBufferPfInFlight = 0;
 
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
-    lastStoreDeallocCycle = 0;
+    lastStoreDeallocCycle = cpu->curCycle();
 
     if (mergeBufferEnabled) {
         mergeBuffer.init(this, params.mergeBufferEntries, cacheLineSize(),
@@ -892,6 +895,8 @@ LSQUnit::writebackStores()
         lastStoreDeallocCycle = cpu->curCycle();
     }
 
+    bool forcedMBRetire = false;
+
     while (storesToWB > 0 && storeWBIt.dereferenceable() &&
            storeWBIt->valid() && storeWBIt->canWB()) {
 
@@ -972,6 +977,16 @@ LSQUnit::writebackStores()
                 else
                     storeWBIt = storeQueue.end();
             } else {
+                // If a barrier/release store is stalled, force retire MB
+                // entries once to unblock serialization.
+                if (!forcedMBRetire &&
+                    (inst->isWriteBarrier() || inst->isSerializeBefore() ||
+                     inst->isSerializeAfter() ||
+                     request->mainReq()->isRelease())) {
+                    mergeBuffer.forceRetireAll();
+                    forcedMBRetire = true;
+                    continue;
+                }
                 // Unable to merge, stop trying
                 break;
             }
@@ -1913,6 +1928,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                                });
 
         if (it != entries.end()) {
+
             if (lsqPtr && lsqPtr->needsTSO && &(*it) != &entries.back()) {
                 DPRINTF(LSQUnit,
                         "Blocking merge for Addr:%#x; matching MB "
@@ -1920,6 +1936,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                         lineAddr);
                 return nullptr;
             }
+
             DPRINTF(LSQUnit,
                     "Found an existing MB entry for Addr:%#x retiring in %lu, "
                     "now:%lu\n",
@@ -1936,7 +1953,8 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             } else if (it->state != EntryState::MERGING) {
                 DPRINTF(LSQUnit, "MB entry for Addr:%#x marked %s\n", lineAddr,
                         (it->state == EntryState::RETIRED) ? "RETIRED"
-                                                           : "DRAINING");
+                        : (it->state == EntryState::DRAINING) ? "DRAINING"
+                        : "FORCE_RETIRED");
                 return nullptr;
             }
 
@@ -1968,10 +1986,11 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             entries.push_back(std::move(newEntry));
             last_entry = &entries.back();
 
-            if (lsqPtr && lsqPtr->mergeBufferPrefetchEnabled) {
+            if (lsqPtr && lsqPtr->mergeBufferPrefetchEnabled &&
+                lsqPtr->mergeBufferPfInFlight == 0) {
                 // Prefetch the cache line to speed up later drains.
                 RequestPtr base = store_it->request()->mainReq();
-                Request::Flags flags = base->getFlags();
+                Request::Flags flags = base->getFlags() | Request::PREFETCH;
                 RequestorID rid = base->requestorId();
                 RequestPtr pf_req =
                     std::make_shared<Request>(lineAddr, lineSize, flags, rid);
@@ -1984,11 +2003,13 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 pf_req->taskId(base->taskId());
 
                 PacketPtr pf_pkt = Packet::createRead(pf_req);
-                uint8_t* buf = new uint8_t[lineSize];
-                pf_pkt->dataDynamic(buf);
+                pf_pkt->cmd = MemCmd::HardPFReq;
+                // No data payload needed for prefetches.
                 pf_pkt->senderState = new MergeBufferPrefetchSenderState(lsqPtr);
 
-                if (!lsqPtr->trySendPacket(false, pf_pkt)) {
+                if (lsqPtr->trySendPacket(false, pf_pkt)) {
+                    ++lsqPtr->mergeBufferPfInFlight;
+                } else {
                     delete static_cast<MergeBufferPrefetchSenderState*>(
                         pf_pkt->senderState);
                     delete pf_pkt;
@@ -2127,6 +2148,21 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
     }
 }
 
+void
+LSQUnit::MergeBuffer::forceRetireAll()
+{
+    for (auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        if (entry.state == EntryState::MERGING ||
+            entry.state == EntryState::RETIRED) {
+            entry.state = EntryState::FORCE_RETIRED;
+            entry.retireCycle = Cycles(0);
+        }
+    }
+}
+
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 {
@@ -2137,12 +2173,15 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     }
 
     if (lsq_ptr->needsTSO) {
-        if (it == entries.end() || it->state != EntryState::RETIRED) {
+        if (it == entries.end() || (it->state != EntryState::RETIRED &&
+                                    it->state != EntryState::FORCE_RETIRED)) {
             return false;
         }
     } else {
         it = std::find_if(it, entries.end(), [](MergeBufferEntry &e) {
-            return e.valid && e.state == EntryState::RETIRED;
+            return e.valid &&
+                   (e.state == EntryState::RETIRED ||
+                    e.state == EntryState::FORCE_RETIRED);
         });
         if (it == entries.end()) {
             return false;
