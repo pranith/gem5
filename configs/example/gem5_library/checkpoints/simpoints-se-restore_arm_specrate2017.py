@@ -65,6 +65,10 @@ from m5.util import addToPath
 
 m5.util.addToPath("../../..")
 
+# Normalize stats file name in case argparse left it as a list.
+if isinstance(m5.options.stats_file, list):
+    m5.options.stats_file = m5.options.stats_file[0]
+
 from m5.stats import (
     dump,
     reset,
