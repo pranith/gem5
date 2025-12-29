@@ -626,7 +626,7 @@ def main():
         _check_tracing()
         e = event.create(trace.enable, event.Event.Debug_Enable_Pri)
         event.mainq.schedule(e, options.debug_start)
-    else:
+    elif not options.debug_start_sn:
         trace.enable()
 
     if options.debug_start_sn:

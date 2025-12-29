@@ -49,6 +49,7 @@
 #include <queue>
 
 #include "arch/generic/tlb.hh"
+#include "base/logging.hh"
 #include "base/types.hh"
 #include "cpu/base.hh"
 #include "cpu/exetrace.hh"
@@ -64,6 +65,7 @@
 #include "params/BaseO3CPU.hh"
 #include "sim/byteswap.hh"
 #include "sim/core.hh"
+#include "sim/debug.hh"
 #include "sim/eventq.hh"
 #include "sim/full_system.hh"
 #include "sim/system.hh"
@@ -1025,6 +1027,13 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
 
     DPRINTF(Fetch, "[tid:%i] Instruction is [sn:%lli]: PC:%s %s\n", tid, seq,
             this_pc, instruction->staticInst->disassemble(this_pc.instAddr()));
+
+    if (gem5::consumeDebugStartSeqNum(seq)) {
+        trace::enable();
+        inform("%s: enabled debug tracing at decode for [tid:%i] [sn:%llu] "
+               "PC %s",
+               cpu->name(), tid, seq, this_pc);
+    }
 
 #if TRACING_ON
     if (trace) {

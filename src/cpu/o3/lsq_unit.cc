@@ -1067,6 +1067,7 @@ LSQUnit::writebackStores()
             /* If successful, do the post send */
             if (request->isSent()) {
                 storePostSend();
+                ++storeDeallocsThisCycle;
             } else {
                 DPRINTF(LSQUnit,
                         "D-Cache became blocked when writing [sn:%lli], "
@@ -1645,6 +1646,12 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 DPRINTF(LSQUnit, "Forwarding from store idx %i to load to "
                         "addr %#x\n", store_it._idx,
                         request->mainReq()->getVaddr());
+
+                std::stringstream ss;
+                for (int i = 0; i < request->mainReq()->getSize(); i++) {
+                    ss << std::hex << load_inst->memData[i];
+                }
+                DPRINTF(LSQUnit, "Forwarding data is %s", ss.str().c_str());
 
                 PacketPtr data_pkt = new Packet(request->mainReq(),
                         MemCmd::ReadReq);

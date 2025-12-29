@@ -48,8 +48,6 @@
 #include "cpu/o3/limits.hh"
 #include "debug/Activity.hh"
 #include "debug/Decode.hh"
-#include "base/logging.hh"
-#include "sim/debug.hh"
 #include "params/BaseO3CPU.hh"
 #include "sim/full_system.hh"
 
@@ -671,13 +669,6 @@ Decode::decodeInsts(ThreadID tid)
 
         DPRINTF(Decode, "[tid:%i] Processing instruction [sn:%lli] with "
                 "PC %s\n", tid, inst->seqNum, inst->pcState());
-
-        if (gem5::consumeDebugStartSeqNum(inst->seqNum)) {
-            trace::enable();
-            inform("%s: enabled debug tracing at decode for [tid:%i] [sn:%llu] "
-                   "PC %s",
-                   cpu->name(), tid, inst->seqNum, inst->pcState());
-        }
 
         if (inst->isSquashed()) {
             DPRINTF(Decode, "[tid:%i] Instruction %i with PC %s is "
