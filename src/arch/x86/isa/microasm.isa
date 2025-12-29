@@ -180,8 +180,7 @@ let {{
 
     for reg in (('sysenter_cs', 'SysenterCs'), ('sysenter_esp', 'SysenterEsp'),
                 ('sysenter_eip', 'SysenterEip'), 'star', 'lstar', 'cstar',
-                ('sf_mask', 'SfMask'), ('kernel_gs_base', 'KernelGsBase'),
-                ('fs_eff_base', 'FsEffBase'), ('gs_eff_base', 'GsEffBase')):
+                ('sf_mask', 'SfMask'), ('kernel_gs_base', 'KernelGsBase')):
         if isinstance(reg, tuple):
             assembler.symbols[reg[0]] = ctrlRegIdx(f"misc_reg::{reg[1]}")
         else:
