@@ -1526,8 +1526,8 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
             load_inst->seqNum, load_inst->pcState());
     }
 
-    DPRINTF(LSQUnit, "Read called, load idx: %i, store idx: %i, "
-            "storeHead: %i addr: %#x%s\n",
+    DPRINTF(LSQUnit, "[sn:%lli] Read called, load idx: %i, store idx: %i, "
+            "storeHead: %i addr: %#x%s\n", load_inst->seqNum,
             load_idx - 1, load_inst->sqIt._idx, storeQueue.head() - 1,
             request->mainReq()->getPaddr(), request->isSplit() ? " split" :
             "");
@@ -1647,12 +1647,6 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                         "addr %#x\n", store_it._idx,
                         request->mainReq()->getVaddr());
 
-                std::stringstream ss;
-                for (int i = 0; i < request->mainReq()->getSize(); i++) {
-                    ss << std::hex << load_inst->memData[i];
-                }
-                DPRINTF(LSQUnit, "Forwarding data is %s", ss.str().c_str());
-
                 PacketPtr data_pkt = new Packet(request->mainReq(),
                         MemCmd::ReadReq);
                 data_pkt->dataStatic(load_inst->memData);
@@ -1750,11 +1744,39 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
         }
     }
 
+    Addr stallBlockAddr = 0;
     // Check merge buffer entries for forwarding.
     if (mergeBufferEnabled) {
-        auto coverage = mergeBuffer.forwardCoverage(
-            request->mainReq()->getPaddr(), request->mainReq()->getSize(),
-            stallingMBAddr);
+        AddrRangeCoverage coverage;
+        if (request->isSplit()) {
+            Addr first_part_addr = request->req(0)->getPaddr();
+            size_t first_access_size = request->req(0)->getSize();
+            Addr second_part_addr = request->req(1)->getPaddr();
+            size_t second_access_size = request->req(1)->getSize();
+
+            coverage = mergeBuffer.forwardCoverage(first_part_addr,
+                                                   first_access_size);
+
+            // TODO: forward from both MB entries if possible
+            if (coverage == AddrRangeCoverage::NoAddrRangeCoverage) {
+                coverage = mergeBuffer.forwardCoverage(second_part_addr,
+                                                       second_access_size);
+                stallBlockAddr = second_part_addr & cacheBlockMask;
+            } else {
+                stallBlockAddr = first_part_addr & cacheBlockMask;
+            }
+
+            // For split requests, even if we can fully forward the data from
+            // the MB replay once the MB is drained
+            if (coverage != AddrRangeCoverage::NoAddrRangeCoverage) {
+                coverage = AddrRangeCoverage::PartialAddrRangeCoverage;
+            }
+            
+        } else {
+            coverage = mergeBuffer.forwardCoverage(request->mainReq()->getPaddr(),
+                                                   request->mainReq()->getSize());
+        }
+
         if (coverage == AddrRangeCoverage::FullAddrRangeCoverage) {
             if (!load_inst->memData) {
                 load_inst->memData =
@@ -1799,6 +1821,11 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                  load_inst->seqNum <
                      loadQueue[stallingLoadIdx].instruction()->seqNum)) {
                 stalled = true;
+                if (!request->isSplit()) {
+                    stallingMBAddr =  request->mainReq()->getPaddr() & cacheBlockMask;
+                } else {
+                    stallingMBAddr = stallBlockAddr;
+                }
                 stallingLoadIdx = load_idx;
             }
 
@@ -1967,6 +1994,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 
             updateEntry(*it, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
+
             if (!it->baseReq) {
                 it->baseReq = std::make_shared<Request>(
                     *(store_it->request()->mainReq()));
@@ -1990,6 +2018,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 std::make_shared<Request>(*(store_it->request()->mainReq()));
             updateEntry(newEntry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
+
             entries.push_back(std::move(newEntry));
             last_entry = &entries.back();
 
@@ -2071,8 +2100,7 @@ LSQUnit::MergeBuffer::canForward(Addr paddr, size_t size) const
 }
 
 LSQUnit::AddrRangeCoverage
-LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size,
-                                      Addr &stallingMBAddr) const
+LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size) const
 {
     Addr end = paddr + size;
     for (const auto &entry : entries) {
@@ -2103,7 +2131,6 @@ LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size,
             return AddrRangeCoverage::FullAddrRangeCoverage;
         }
 
-        stallingMBAddr = entry.blockAddr;
         return AddrRangeCoverage::PartialAddrRangeCoverage;
     }
     return AddrRangeCoverage::NoAddrRangeCoverage;

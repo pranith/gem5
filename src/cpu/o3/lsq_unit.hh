@@ -286,8 +286,7 @@ class LSQUnit
         }
         bool canForward(Addr paddr, size_t size) const;
         bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
-        AddrRangeCoverage forwardCoverage(Addr paddr, size_t size,
-                                          Addr &mbAddr) const;
+        AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
         bool
         isEmpty() const
         {
