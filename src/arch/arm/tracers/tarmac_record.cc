@@ -341,7 +341,7 @@ TarmacTracerRecord::dump()
         tracer,
         thread,
         staticInst->isMicroop()? macroStaticInst : staticInst,
-        *pc
+        *pc, fetch_seq
     );
 
     if (!staticInst->isMicroop()) {

@@ -70,9 +70,9 @@ class TarmacContext
     TarmacContext(const TarmacTracer &_tracer,
                   ThreadContext* _thread,
                   const StaticInstPtr _staticInst,
-                  const PCStateBase &_pc)
+                  const PCStateBase &_pc, uint64_t seq_no = 0)
       : tracer(_tracer), thread(_thread), staticInst(_staticInst),
-        pc(_pc.clone())
+        pc(_pc.clone()), seq(seq_no)
     {}
 
     std::string tarmacCpuName() const;
@@ -82,6 +82,7 @@ class TarmacContext
     ThreadContext* thread;
     const StaticInstPtr staticInst;
     std::unique_ptr<PCStateBase> pc;
+    uint64_t seq;
 };
 
 /**
