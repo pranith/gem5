@@ -315,6 +315,12 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of stores squashed"),
       ADD_STAT(rescheduledLoads, statistics::units::Count::get(),
                "Number of loads that were rescheduled"),
+      ADD_STAT(sqPartialFwdRescheduledLoads, statistics::units::Count::get(),
+               "Number of loads rescheduled due to partial store queue "
+               "forwarding"),
+      ADD_STAT(mbPartialFwdRescheduledLoads, statistics::units::Count::get(),
+               "Number of loads rescheduled due to partial merge buffer "
+               "forwarding"),
       ADD_STAT(blockedByCache, statistics::units::Count::get(),
                "Number of times an access to memory failed due to the cache "
                "being blocked"),
@@ -953,19 +959,55 @@ LSQUnit::writebackStores()
         if (mergeBufferEnabled && !request->mainReq()->isLocalAccess() &&
             !request->mainReq()->isLLSC() && !request->mainReq()->isAtomic()) {
 
-            auto *mb_entry = mergeBuffer.addStore(
-                now, request->mainReq()->getPaddr(),
-                (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
-                storeWBIt->isAllZeros());
+            bool merged_ok = true;
+            MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
+
+            if (request->isSplit()) {
+                // For split stores, make sure both fragments can be merged
+                // before releasing the SQ entry.
+                auto req0 = request->req(0);
+                auto req1 = request->req(1);
+                const size_t size0 = req0->getSize();
+                const size_t size1 = req1->getSize();
+
+                bool can_merge_both =
+                    mergeBuffer.canAcceptStore(req0->getPaddr(), size0) &&
+                    mergeBuffer.canAcceptStore(req1->getPaddr(), size1);
+
+                if (can_merge_both) {
+                    mb_entry = mergeBuffer.addStore(
+                        now, req0->getPaddr(),
+                        reinterpret_cast<uint8_t *>(storeWBIt->data()),
+                        size0, storeWBIt, storeWBIt->isAllZeros());
+
+                    auto *mb_entry2 = mergeBuffer.addStore(
+                        now, req1->getPaddr(),
+                        reinterpret_cast<uint8_t *>(storeWBIt->data()) + size0,
+                        size1, storeWBIt, storeWBIt->isAllZeros());
+
+                    if (!mb_entry || !mb_entry2) {
+                        panic("Only one part of a split store merged!");
+                        merged_ok = false;
+                    }
+                } else {
+                    merged_ok = false;
+                }
+            } else {
+                mb_entry = mergeBuffer.addStore(
+                    now, request->mainReq()->getPaddr(),
+                    (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
+                    storeWBIt->isAllZeros());
+            }
 
             DPRINTF(LSQUnit,
                     "Merge for store idx:%i PC:%s "
                     "to Addr:%#x, data:%#x [sn:%lli] %s\n",
                     storeWBIt.idx(), inst->pcState(),
                     request->mainReq()->getPaddr(), (int)*(storeWBIt->data()),
-                    inst->seqNum, mb_entry ? "accepted" : "blocked");
+                    inst->seqNum, (mb_entry && merged_ok) ?
+                        "accepted" : "blocked");
 
-            if (mb_entry) {
+            if (mb_entry && merged_ok) {
                 // Should never merge the same store twice.
                 assert(!storeWBIt->completed());
                 // Complete and remove this store from the SQ;
@@ -985,10 +1027,9 @@ LSQUnit::writebackStores()
                      request->mainReq()->isRelease())) {
                     mergeBuffer.forceRetireAll();
                     forcedMBRetire = true;
-                    continue;
                 }
-                // Unable to merge, stop trying
-                break;
+                // Unable to merge, continue to next store
+                continue;
             }
         } else if (((!needsTSO) || (!storeInFlight)) &&
                    lsq->cachePortAvailable(false)) {
@@ -1729,6 +1770,7 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 load_inst->clearIssued();
                 load_inst->effAddrValid(false);
                 ++stats.rescheduledLoads;
+                ++stats.sqPartialFwdRescheduledLoads;
 
                 // Do not generate a writeback event as this instruction is not
                 // complete.
@@ -1767,11 +1809,11 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
             }
 
             // For split requests, even if we can fully forward the data from
-            // the MB replay once the MB is drained
+            // the MB, we replay the load only after the MB is drained
             if (coverage != AddrRangeCoverage::NoAddrRangeCoverage) {
                 coverage = AddrRangeCoverage::PartialAddrRangeCoverage;
             }
-            
+
         } else {
             coverage = mergeBuffer.forwardCoverage(request->mainReq()->getPaddr(),
                                                    request->mainReq()->getSize());
@@ -1806,6 +1848,8 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                     load_entry.setRequest(nullptr);
                 }
 
+                ++stats.mbForwards;
+
                 // load_inst->setExecuted();
                 // load_inst->completeAcc(nullptr);
                 // request->packetSent();
@@ -1826,6 +1870,7 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 } else {
                     stallingMBAddr = stallBlockAddr;
                 }
+                stallingStoreIsn = 0;
                 stallingLoadIdx = load_idx;
             }
 
@@ -1835,6 +1880,7 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
             load_inst->clearIssued();
             load_inst->effAddrValid(false);
             ++stats.rescheduledLoads;
+            ++stats.mbPartialFwdRescheduledLoads;
 
             // Do not generate a writeback event as this instruction is not
             // complete.
@@ -2068,6 +2114,32 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
     }
 
     return last_entry;
+}
+
+bool
+LSQUnit::MergeBuffer::canAcceptStore(Addr paddr, size_t size) const
+{
+    Addr end = paddr + size;
+    for (const auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        Addr blk_start = entry.blockAddr;
+        Addr blk_end = entry.blockAddr + lineSize;
+        if (end <= blk_start || paddr >= blk_end) {
+            continue;
+        }
+
+        if (entry.state != EntryState::MERGING ||
+            (entry.state == EntryState::RETIRED && entry.unretireCount >= maxUnretire)) {
+            return false;
+        }
+        if (lsqPtr && lsqPtr->needsTSO && &entry != &entries.back()) {
+            return false;
+        }
+    }
+
+    return entries.size() < numEntries;
 }
 
 bool

@@ -284,6 +284,7 @@ class LSQUnit
         {
             entries.clear();
         }
+        bool canAcceptStore(Addr paddr, size_t size) const;
         bool canForward(Addr paddr, size_t size) const;
         bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
@@ -711,6 +712,12 @@ class LSQUnit
 
         /** Number of loads that were rescheduled. */
         statistics::Scalar rescheduledLoads;
+
+        /** Number of loads rescheduled due to partial store-queue forwarding. */
+        statistics::Scalar sqPartialFwdRescheduledLoads;
+
+        /** Number of loads rescheduled due to partial merge-buffer forwarding. */
+        statistics::Scalar mbPartialFwdRescheduledLoads;
 
         /** Number of times the LSQ is blocked due to the cache. */
         statistics::Scalar blockedByCache;

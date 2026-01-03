@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import numbers
 import re
 import sys
 from pathlib import Path
@@ -193,6 +194,38 @@ def rename_to_last_two_parts(col_name):
         return col_name
 
 
+def print_aligned_table(df):
+    """Pretty-print a DataFrame with fixed-width columns."""
+    if df is None or df.empty:
+        print("No data to display.")
+        return
+
+    df_str = df.copy()
+    # Convert all entries to strings with 3 decimal places where numeric.
+    for col in df_str.columns:
+        df_str[col] = df_str[col].apply(
+            lambda x: f"{x:.3f}" if isinstance(x, numbers.Number) else str(x)
+        )
+
+    columns = ["index"] + list(df_str.columns)
+    widths = [max(len("index"), max(len(str(idx)) for idx in df_str.index))]
+    for col in df_str.columns:
+        col_width = max(len(col), max(len(str(val)) for val in df_str[col]))
+        widths.append(col_width)
+
+    # Header
+    header_cells = [col.ljust(widths[i]) for i, col in enumerate(columns)]
+    print(" | ".join(header_cells))
+    print("-+-".join("-" * w for w in widths))
+
+    # Rows
+    for idx, row in df_str.iterrows():
+        cells = [str(idx).ljust(widths[0])]
+        for i, col in enumerate(df_str.columns, start=1):
+            cells.append(str(row[col]).ljust(widths[i]))
+        print(" | ".join(cells))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Process stats.txt files in subdirectories."
@@ -277,22 +310,17 @@ if __name__ == "__main__":
             for bench_run, df in all_stats.items():
                 bench_list.append(bench_run)
                 for stat in extract_stats:
-                    print(f"Extracting stat {stat} in bench {bench_run}")
-                    # print(df)
-                    if exact_stat:
-                        stat_df = df.filter(items=[stat])
-                    else:
-                        stat_df = df.filter(regex=rf"{stat}")
-
-                    # print(stat_df)
+                    print(f"Extracting stat pattern '{stat}' in bench {bench_run}")
+                    stat_df = (
+                        df.filter(items=[stat])
+                        if exact_stat
+                        else df.filter(regex=rf"{stat}")
+                    )
                     if not stat_df.empty:
-                        # save the stat names for calculating %
                         matching_stats.extend([col for col in stat_df.columns])
                         stat_df_bench = stat_df_bench.join(
                             stat_df, how="outer", rsuffix=f"_{bench_run}"
                         )
-                        # stat_df_bench = stat_df_bench.set_axis(stat_df.index)
-                        # print(stat_df_bench)
 
             # Calculate %diff for all stats
             for stat in matching_stats:
@@ -308,9 +336,11 @@ if __name__ == "__main__":
                 columns=rename_to_last_two_parts
             )
             if not args.checkpoint:
-                print(stat_df_bench)
+                print_aligned_table(stat_df_bench)
             else:
-                print(stat_df_bench.filter(like=f"{args.checkpoint}", axis=0))
+                print_aligned_table(
+                    stat_df_bench.filter(like=f"{args.checkpoint}", axis=0)
+                )
 
     new_columns = []
     base_col = all_ipc_df.columns[0]
@@ -326,6 +356,4 @@ if __name__ == "__main__":
             new_columns.append(new_col_name)
 
     all_ipc_df = all_ipc_df[new_columns]
-    pd.options.display.float_format = "{:.2f}".format
-    print(all_ipc_df.to_string())
-    # print(all_ipc_df)
+    print_aligned_table(all_ipc_df)
