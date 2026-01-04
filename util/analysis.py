@@ -121,6 +121,15 @@ def format_float(value: Optional[float]) -> str:
     return f"{value:.3f}"
 
 
+def geometric_mean(values: List[float]) -> Optional[float]:
+    vals = [v for v in values if v is not None and v > 0]
+    if not vals:
+        return None
+    from math import prod, pow
+
+    return pow(prod(vals), 1.0 / len(vals))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Summarize weighted stats across result dirs.")
     parser.add_argument("--dirs", nargs="+", required=True, help="Result directories to compare.")
@@ -159,7 +168,8 @@ def main() -> None:
     summaries = {str(d): accumulate_stats(d, expanded_stats) for d in base_dirs}
 
     # Print summary table.
-    benches = sorted(BENCHMARK_MAPPING.values())
+    # Keep benchmark order by spec number for readability.
+    benches = [BENCHMARK_MAPPING[k] for k in sorted(BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0]))]
     dir_headers = args.dirs
     pct_headers = [f"% {d}" for d in args.dirs[1:]] if len(args.dirs) > 1 else []
 
@@ -170,6 +180,7 @@ def main() -> None:
 
     for stat in expanded_stats:
         widths[0] = max(widths[0], len(stat))
+        widths[1] = max(widths[1], len("geomean"))
         for bench in benches:
             widths[1] = max(widths[1], len(bench))
             row_vals: List[str] = []
@@ -184,6 +195,21 @@ def main() -> None:
                     row_vals.append(format_float(percent_diff(base_val, val)))
             for i, cell in enumerate(row_vals, start=2):
                 widths[i] = max(widths[i], len(cell))
+
+        # geomean row widths
+        for d in dir_headers:
+            gval = geometric_mean(
+                [summaries[str(Path(d))][stat].get(b) for b in benches]
+            )
+            widths[dir_headers.index(d) + 2] = max(
+                widths[dir_headers.index(d) + 2], len(format_float(gval))
+            )
+        if len(dir_headers) > 1:
+            for d in dir_headers[1:]:
+                widths[dir_headers.index(d) + 2 + len(dir_headers) - 1] = max(
+                    widths[dir_headers.index(d) + 2 + len(dir_headers) - 1],
+                    len(format_float(None)),
+                )
 
     for stat in expanded_stats:
         headers = ["stat", "benchmark"] + dir_headers + pct_headers
@@ -208,6 +234,20 @@ def main() -> None:
                 cell.ljust(widths[i]) for i, cell in enumerate(row_cells)
             )
             print(row)
+        # Geometric mean row
+        g_row: List[str] = [stat, "geomean"]
+        g_values: List[Optional[float]] = []
+        for d in dir_headers:
+            gval = geometric_mean(
+                [summaries[str(Path(d))][stat].get(b) for b in benches]
+            )
+            g_values.append(gval)
+            g_row.append(format_float(gval))
+        if len(dir_headers) > 1:
+            base_val = g_values[0]
+            for val in g_values[1:]:
+                g_row.append(format_float(percent_diff(base_val, val)))
+        print(" | ".join(cell.ljust(widths[i]) for i, cell in enumerate(g_row)))
         print()  # blank line between stats
 
 

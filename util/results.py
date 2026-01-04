@@ -10,6 +10,23 @@ from pathlib import Path
 
 import pandas as pd
 
+BENCHMARK_MAPPING = {
+    "500.perlbench_r": "perlbench_r",
+    "502.gcc_r": "cpugcc_r",
+    "505.mcf_r": "mcf_r",
+    "520.omnetpp_r": "omnetpp_r",
+    "523.xalancbmk_r": "cpuxalan_r",
+    "525.x264_r": "x264_r",
+    "531.deepsjeng_r": "deepsjeng_r",
+    "541.leela_r": "leela_r",
+    "548.exchange2_r": "exchange2_r",
+    "557.xz_r": "xz_r",
+}
+BENCHMARK_ORDER = [
+    BENCHMARK_MAPPING[k]
+    for k in sorted(BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0]))
+]
+
 
 def parse_stats_file(filepath):
     """Parses a stats.txt file and returns a dictionary of key-value pairs."""
@@ -58,19 +75,6 @@ def read_weights_file(weights_file_path):
 
 def create_stats_dataframe(base_dir):
     """Creates DataFrame and adds weights with correct mapping."""
-    benchmark_mapping = {
-        "500.perlbench_r": "perlbench_r",
-        "502.gcc_r": "cpugcc_r",
-        "505.mcf_r": "mcf_r",
-        "520.omnetpp_r": "omnetpp_r",
-        "523.xalancbmk_r": "cpuxalan_r",
-        "525.x264_r": "x264_r",
-        "531.deepsjeng_r": "deepsjeng_r",
-        "541.leela_r": "leela_r",
-        "548.exchange2_r": "exchange2_r",
-        "557.xz_r": "xz_r",
-    }
-
     data = []
     labels = []
     for subdir in os.listdir(base_dir):
@@ -83,11 +87,7 @@ def create_stats_dataframe(base_dir):
                     benchmark_name = match.group(1)
                     index = int(match.group(2))
                     benchmark_number = next(
-                        (
-                            k
-                            for k, v in benchmark_mapping.items()
-                            if v == benchmark_name
-                        ),
+                        (k for k, v in BENCHMARK_MAPPING.items() if v == benchmark_name),
                         None,
                     )
                     if benchmark_number:
@@ -103,7 +103,7 @@ def create_stats_dataframe(base_dir):
                         )
                         continue
 
-                benchmark_name = benchmark_mapping[benchmark_number]
+                benchmark_name = BENCHMARK_MAPPING[benchmark_number]
                 weights_file = os.path.join(
                     base_dir, f"{benchmark_number}.weights"
                 )
@@ -157,10 +157,12 @@ def create_stats_dataframe(base_dir):
 
     # Calculate per-benchmark IPC
     benchmark_ipc = {}
-    for benchmark_number, benchmark_name in benchmark_mapping.items():
-        benchmark_entries = df[
-            df.index.str.contains(f"chkpt_{benchmark_name}_")
-        ]
+    # Iterate benchmarks in numeric order of their SPEC IDs.
+    for benchmark_number in sorted(
+        BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0])
+    ):
+        benchmark_name = BENCHMARK_MAPPING[benchmark_number]
+        benchmark_entries = df[df.index.str.contains(f"chkpt_{benchmark_name}_")]
         if not benchmark_entries.empty:
             weighted_ipcs = benchmark_entries[
                 benchmark_entries["weighted_IPC"] != "N/A"
@@ -226,6 +228,47 @@ def print_aligned_table(df):
         print(" | ".join(cells))
 
 
+def add_geomean_row(df, baseline_col=None):
+    """
+    Adds a geomean row to the DataFrame for numeric columns.
+    If baseline_col is provided, percent columns are assumed to follow
+    immediately after each dir column and are computed based on geomean.
+    """
+    import numpy as np
+
+    if df is None or df.empty:
+        return df
+
+    geomean = lambda s: float(np.exp(np.log(s[s > 0]).mean())) if (s > 0).any() else np.nan
+
+    new_rows = {}
+    for col in df.columns:
+        if baseline_col and col.startswith("%"):
+            continue
+        try:
+            series = pd.to_numeric(df[col], errors="coerce")
+        except Exception:
+            continue
+        new_rows[col] = geomean(series.dropna())
+
+    geomean_df = pd.DataFrame(new_rows, index=["geomean"])
+
+    if baseline_col:
+        # Compute percent cols after adding geomean values.
+        for col in list(df.columns):
+            if col == baseline_col or col.startswith("%"):
+                continue
+            pct_col = f"% {col}"
+            if pct_col in df.columns and baseline_col in geomean_df.columns:
+                geomean_df[pct_col] = (
+                    (geomean_df[col] - geomean_df[baseline_col])
+                    / geomean_df[baseline_col]
+                    * 100.0
+                )
+
+    return pd.concat([df, geomean_df])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Process stats.txt files in subdirectories."
@@ -288,6 +331,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"An error occurred: {e}")
 
+    # Ensure IPC rows follow benchmark number order.
+    if not all_ipc_df.empty:
+        all_ipc_df = all_ipc_df.reindex(BENCHMARK_ORDER)
+
     if all_stats is not None:
         # Convert DataFrame to dictionary for JSON output
         with open(output_file, "w") as f:
@@ -336,11 +383,12 @@ if __name__ == "__main__":
                 columns=rename_to_last_two_parts
             )
             if not args.checkpoint:
+                stat_df_bench = add_geomean_row(stat_df_bench, bench_list[0] if len(bench_list) > 0 else None)
                 print_aligned_table(stat_df_bench)
             else:
-                print_aligned_table(
-                    stat_df_bench.filter(like=f"{args.checkpoint}", axis=0)
-                )
+                filtered = stat_df_bench.filter(like=f"{args.checkpoint}", axis=0)
+                filtered = add_geomean_row(filtered, bench_list[0] if len(bench_list) > 0 else None)
+                print_aligned_table(filtered)
 
     new_columns = []
     base_col = all_ipc_df.columns[0]
@@ -356,4 +404,5 @@ if __name__ == "__main__":
             new_columns.append(new_col_name)
 
     all_ipc_df = all_ipc_df[new_columns]
+    all_ipc_df = add_geomean_row(all_ipc_df, base_col)
     print_aligned_table(all_ipc_df)
