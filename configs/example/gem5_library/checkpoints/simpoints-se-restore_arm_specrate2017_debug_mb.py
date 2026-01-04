@@ -321,7 +321,7 @@ for workload in spec_rate_workloads:
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
                 # warmup_interval=50000000,
-                warmup_interval=50000000,
+                warmup_interval=500000000,
                 # warmup_interval=5000,
             ),
             checkpoint=CheckpointResource(local_path=chkpt),

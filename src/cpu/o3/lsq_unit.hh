@@ -748,6 +748,9 @@ class LSQUnit
     } stats;
 
   public:
+    /** Whether to retire merge buffer entries immediately when fully valid. */
+    bool mbRetireWhenFullValid = false;
+
     /** Executes the load at the given index. */
     Fault read(LSQRequest *request, ssize_t load_idx);
 

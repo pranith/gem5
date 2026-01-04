@@ -160,6 +160,10 @@ class BaseO3CPU(BaseCPU):
         "Cycles a merge buffer entry remains in MERGING state before "
         "retiring and draining",
     )
+    mbRetireWhenFullValid = Param.Bool(
+        False,
+        "Retire merge buffer entries immediately when all bytes are valid",
+    )
     mergeBufferMaxUnretire = Param.Unsigned(
         2,
         "Max times a merge buffer entry can unretire from RETIRED to MERGING",

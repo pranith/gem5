@@ -253,6 +253,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mergeBufferEnabled = params.useMergeBuffer;
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
     mergeBufferPfInFlight = 0;
+    mbRetireWhenFullValid = params.mbRetireWhenFullValid;
 
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
@@ -2268,11 +2269,18 @@ void
 LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
 {
     for (auto &entry : entries) {
-        if (entry.valid && entry.state == EntryState::MERGING &&
-            now >= entry.retireCycle) {
-            entry.state = EntryState::RETIRED;
-            if (lsqPtr) {
-                lsqPtr->stats.mbRetired++;
+        if (entry.valid && entry.state == EntryState::MERGING) {
+
+            bool all_valid =
+                std::all_of(entry.byteValids.begin(), entry.byteValids.end(),
+                            [](bool v) { return v; });
+
+            if (now >= entry.retireCycle ||
+                (lsqPtr && lsqPtr->mbRetireWhenFullValid && all_valid)) {
+                entry.state = EntryState::RETIRED;
+                if (lsqPtr) {
+                    lsqPtr->stats.mbRetired++;
+                }
             }
         }
     }
