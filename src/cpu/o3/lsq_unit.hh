@@ -284,7 +284,7 @@ class LSQUnit
         {
             entries.clear();
         }
-        bool canAcceptStore(Addr paddr, size_t size) const;
+        bool canAcceptSplitStore(LSQRequest* request) const;
         bool canForward(Addr paddr, size_t size) const;
         bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;

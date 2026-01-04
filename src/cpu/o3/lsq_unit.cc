@@ -973,9 +973,7 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
-                bool can_merge_both =
-                    mergeBuffer.canAcceptStore(req0->getPaddr(), size0) &&
-                    mergeBuffer.canAcceptStore(req1->getPaddr(), size1);
+                bool can_merge_both = mergeBuffer.canAcceptSplitStore(request);
 
                 if (can_merge_both) {
                     mb_entry = mergeBuffer.addStore(
@@ -1996,8 +1994,6 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                                typename StoreQueue::iterator store_it,
                                bool is_all_zero)
 {
-    updateRetiredEntries(now);
-
     Addr currAddr = addr;
     size_t remaining = size;
     MergeBufferEntry *last_entry = nullptr;
@@ -2122,29 +2118,52 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 }
 
 bool
-LSQUnit::MergeBuffer::canAcceptStore(Addr paddr, size_t size) const
+LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request) const
 {
-    Addr end = paddr + size;
-    for (const auto &entry : entries) {
-        if (!entry.valid) {
-            continue;
-        }
-        Addr blk_start = entry.blockAddr;
-        Addr blk_end = entry.blockAddr + lineSize;
-        if (end <= blk_start || paddr >= blk_end) {
-            continue;
-        }
+    auto req0 = request->req(0);
+    auto req1 = request->req(1);
 
-        if (entry.state != EntryState::MERGING ||
-            (entry.state == EntryState::RETIRED && entry.unretireCount >= maxUnretire)) {
-            return false;
-        }
-        if (lsqPtr && lsqPtr->needsTSO && &entry != &entries.back()) {
-            return false;
-        }
-    }
+    auto addr0 = req0->getPaddr() & ~(lineSize - 1);
+    auto addr1 = req1->getPaddr() & ~(lineSize - 1);
 
-    return entries.size() < numEntries;
+    bool addr0_exists = false;
+    bool addr1_exists = false;
+
+    bool merge_req0 = false;
+    bool merge_req1 = false;
+
+    auto checkAddrMerge = [this](const Addr addr, bool &addr_exists, bool &can_merge) {
+        return [this, addr, &addr_exists, &can_merge](const MergeBufferEntry &e) {
+            if (e.blockAddr == addr) {
+                addr_exists = true;
+
+                if (e.state == EntryState::MERGING ||
+                    (e.state == EntryState::RETIRED && e.unretireCount < maxUnretire)) {
+                    can_merge = true;
+                }
+            }
+
+            return false;
+        };
+    };
+
+    std::for_each(entries.begin(), entries.end(),
+                 checkAddrMerge(addr0, addr0_exists, merge_req0));
+    std::for_each(entries.begin(), entries.end(),
+                 checkAddrMerge(addr1, addr1_exists, merge_req1));
+
+    int num_allocs = !addr0_exists + !addr1_exists;
+
+    if (addr0_exists && !merge_req0)
+        return false;
+
+    if (addr1_exists && !merge_req1)
+        return false;
+
+    if (entries.size() > (numEntries - num_allocs))
+        return false;
+
+    return true;
 }
 
 bool
