@@ -887,7 +887,10 @@ LSQUnit::writebackStores()
     }
 
     if (mergeBufferEnabled) {
-        mergeBuffer.updateRetiredEntries(now);
+        if (!mergeBuffer.isEmpty()) {
+            mergeBuffer.updateRetiredEntries(now);
+            iewStage->activityThisCycle();
+        }
 
         if (((!needsTSO) || (!storeInFlight)) &&
             lsq->cachePortAvailable(false)) {
@@ -1028,8 +1031,8 @@ LSQUnit::writebackStores()
                     mergeBuffer.forceRetireAll();
                     forcedMBRetire = true;
                 }
-                // Unable to merge, continue to next store
-                continue;
+                // Unable to merge, stop trying
+                break;
             }
         } else if (((!needsTSO) || (!storeInFlight)) &&
                    lsq->cachePortAvailable(false)) {
@@ -1342,6 +1345,8 @@ void
 LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
 {
     assert(store_idx->valid());
+    assert(!store_idx->completed());
+
     store_idx->completed() = true;
     --storesToWB;
     // A bit conservative because a store completion may not free up entries,
