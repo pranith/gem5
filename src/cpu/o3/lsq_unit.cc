@@ -2087,7 +2087,9 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 pf_req->taskId(base->taskId());
 
                 PacketPtr pf_pkt = Packet::createRead(pf_req);
-                pf_pkt->cmd = MemCmd::HardPFReq;
+                // Use a soft prefetch so it can go through cache/MSHR normally.
+                pf_pkt->cmd = MemCmd::SoftPFReq;
+                // Give the packet a data buffer to satisfy downstream asserts.
                 pf_pkt->allocate();
                 pf_pkt->senderState = new MergeBufferPrefetchSenderState(lsqPtr);
 
