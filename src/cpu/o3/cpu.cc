@@ -381,8 +381,11 @@ CPU::heartbeat() const
     };
 
     if (start_cycles == 0) {
-        // for checkpoints, we need to initialize the start cycle
+        // Initialize baselines on first entry (handles checkpoints too).
         start_cycles = curCycle();
+        prev_interval_cycles = curCycle();
+        prev_total_insts = totalInsts();
+        return;
     }
 
     if (get_interval(prev_interval_cycles) == get_interval(curCycle())) {
@@ -390,6 +393,9 @@ CPU::heartbeat() const
     }
 
     Cycles tot_cycles = curCycle() - start_cycles;
+    if (tot_cycles == 0) {
+        return;
+    }
 
     float ipc = (totalInsts() - prev_total_insts) * 1.0 / step;
     float cipc = totalInsts() * 1.0 / tot_cycles;
