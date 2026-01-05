@@ -2088,7 +2088,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 
                 PacketPtr pf_pkt = Packet::createRead(pf_req);
                 pf_pkt->cmd = MemCmd::HardPFReq;
-                // No data payload needed for prefetches.
+                pf_pkt->allocate();
                 pf_pkt->senderState = new MergeBufferPrefetchSenderState(lsqPtr);
 
                 if (lsqPtr->trySendPacket(false, pf_pkt)) {

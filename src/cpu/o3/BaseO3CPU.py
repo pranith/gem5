@@ -156,7 +156,7 @@ class BaseO3CPU(BaseCPU):
         2, "Number of stores that can retire from the store queue per cycle"
     )
     mergeBufferRetireCycles = Param.Cycles(
-        64,
+        16,
         "Cycles a merge buffer entry remains in MERGING state before "
         "retiring and draining",
     )

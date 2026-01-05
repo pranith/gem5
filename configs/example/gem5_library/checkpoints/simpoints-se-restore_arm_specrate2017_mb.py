@@ -166,6 +166,11 @@ class CustomCore(BaseCPUCore):
 
         self.core.useMergeBuffer = True
         self.core.mergeBufferEntries = 32
+        self.core.mbRetireWhenFullValid = True
+        self.core.mergeBufferRetireCycles = 16
+        self.core.mergeBufferResetRetireOnMerge = True
+        self.core.mergeBufferRetireResetCycles = 16
+        self.core.mergeBufferPrefetch = True
         # self.core.branchPred = Rancho_BP()
 
 

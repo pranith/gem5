@@ -190,6 +190,12 @@ class CustomCore(BaseCPUCore):
         super().__init__(ArmO3CPU(), ISA.ARM)
 
         self.core.useMergeBuffer = True
+        self.core.mergeBufferEntries = 32
+        self.core.mbRetireWhenFullValid = True
+        self.core.mergeBufferRetireCycles = 16
+        self.core.mergeBufferResetRetireOnMerge = True
+        self.core.mergeBufferRetireResetCycles = 16
+        self.core.mergeBufferPrefetch = True
         self.core.tracer = TarmacTracer(outfile="file")
         # self.core.branchPred = Rancho_BP()
 
