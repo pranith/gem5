@@ -392,12 +392,13 @@ CPU::heartbeat() const
         return;
     }
 
+    Cycles elapsed = curCycle() - prev_interval_cycles;
     Cycles tot_cycles = curCycle() - start_cycles;
-    if (tot_cycles == 0) {
+    if (elapsed == 0 || tot_cycles == 0) {
         return;
     }
 
-    float ipc = (totalInsts() - prev_total_insts) * 1.0 / step;
+    float ipc = (totalInsts() - prev_total_insts) * 1.0 / elapsed;
     float cipc = totalInsts() * 1.0 / tot_cycles;
 
     prev_interval_cycles = curCycle();
