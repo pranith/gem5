@@ -180,13 +180,28 @@ def main() -> None:
 
     for stat in expanded_stats:
         widths[0] = max(widths[0], len(stat))
-        widths[1] = max(widths[1], len("geomean"))
-        for bench in benches:
+        # Consider extra rows for width calculation.
+        extra_rows = ["geomean"]
+        if "ipc" in stat.lower():
+            extra_rows.append("spec_score")
+        for bench in benches + extra_rows:
             widths[1] = max(widths[1], len(bench))
             row_vals: List[str] = []
             values: List[Optional[float]] = []
             for d in dir_headers:
-                val = summaries[str(Path(d))][stat].get(bench)
+                if bench in benches:
+                    val = summaries[str(Path(d))][stat].get(bench)
+                elif bench == "geomean":
+                    val = geometric_mean(
+                        [summaries[str(Path(d))][stat].get(b) for b in benches]
+                    )
+                elif bench == "spec_score":
+                    vals = [
+                        summaries[str(Path(d))][stat].get(b) for b in benches
+                    ]
+                    val = sum(v for v in vals if v is not None)
+                else:
+                    val = None
                 values.append(val)
                 row_vals.append(format_float(val))
             if len(dir_headers) > 1:
@@ -195,21 +210,6 @@ def main() -> None:
                     row_vals.append(format_float(percent_diff(base_val, val)))
             for i, cell in enumerate(row_vals, start=2):
                 widths[i] = max(widths[i], len(cell))
-
-        # geomean row widths
-        for d in dir_headers:
-            gval = geometric_mean(
-                [summaries[str(Path(d))][stat].get(b) for b in benches]
-            )
-            widths[dir_headers.index(d) + 2] = max(
-                widths[dir_headers.index(d) + 2], len(format_float(gval))
-            )
-        if len(dir_headers) > 1:
-            for d in dir_headers[1:]:
-                widths[dir_headers.index(d) + 2 + len(dir_headers) - 1] = max(
-                    widths[dir_headers.index(d) + 2 + len(dir_headers) - 1],
-                    len(format_float(None)),
-                )
 
     for stat in expanded_stats:
         headers = ["stat", "benchmark"] + dir_headers + pct_headers
@@ -248,6 +248,20 @@ def main() -> None:
             for val in g_values[1:]:
                 g_row.append(format_float(percent_diff(base_val, val)))
         print(" | ".join(cell.ljust(widths[i]) for i, cell in enumerate(g_row)))
+        # SPEC score row (sum of per-benchmark values) for IPC-like stats.
+        if "ipc" in stat.lower():
+            s_row: List[str] = [stat, "spec_score"]
+            s_values: List[Optional[float]] = []
+            for d in dir_headers:
+                vals = [summaries[str(Path(d))][stat].get(b) for b in benches]
+                sval = sum(v for v in vals if v is not None)
+                s_values.append(sval)
+                s_row.append(format_float(sval))
+            if len(dir_headers) > 1:
+                base_val = s_values[0]
+                for val in s_values[1:]:
+                    s_row.append(format_float(percent_diff(base_val, val)))
+            print(" | ".join(cell.ljust(widths[i]) for i, cell in enumerate(s_row)))
         print()  # blank line between stats
 
 

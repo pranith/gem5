@@ -269,6 +269,40 @@ def add_geomean_row(df, baseline_col=None):
     return pd.concat([df, geomean_df])
 
 
+def add_spec_score_row(df, baseline_col=None):
+    """
+    Adds a spec_score row (sum across benchmarks) for numeric columns.
+    """
+    if df is None or df.empty:
+        return df
+
+    spec = {}
+    for col in df.columns:
+        if baseline_col and col.startswith("%"):
+            continue
+        try:
+            series = pd.to_numeric(df[col], errors="coerce")
+        except Exception:
+            continue
+        spec[col] = series.sum()
+
+    spec_df = pd.DataFrame(spec, index=["spec_score"])
+
+    if baseline_col:
+        for col in list(df.columns):
+            if col == baseline_col or col.startswith("%"):
+                continue
+            pct_col = f"% {col}"
+            if pct_col in df.columns and baseline_col in spec_df.columns:
+                spec_df[pct_col] = (
+                    (spec_df[col] - spec_df[baseline_col])
+                    / spec_df[baseline_col]
+                    * 100.0
+                )
+
+    return pd.concat([df, spec_df])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Process stats.txt files in subdirectories."
@@ -383,11 +417,17 @@ if __name__ == "__main__":
                 columns=rename_to_last_two_parts
             )
             if not args.checkpoint:
-                stat_df_bench = add_geomean_row(stat_df_bench, bench_list[0] if len(bench_list) > 0 else None)
+                base_name = bench_list[0] if len(bench_list) > 0 else None
+                stat_df_bench = add_geomean_row(stat_df_bench, base_name)
+                if any("ipc" in c.lower() for c in stat_df_bench.columns):
+                    stat_df_bench = add_spec_score_row(stat_df_bench, base_name)
                 print_aligned_table(stat_df_bench)
             else:
                 filtered = stat_df_bench.filter(like=f"{args.checkpoint}", axis=0)
-                filtered = add_geomean_row(filtered, bench_list[0] if len(bench_list) > 0 else None)
+                base_name = bench_list[0] if len(bench_list) > 0 else None
+                filtered = add_geomean_row(filtered, base_name)
+                if any("ipc" in c.lower() for c in filtered.columns):
+                    filtered = add_spec_score_row(filtered, base_name)
                 print_aligned_table(filtered)
 
     new_columns = []
@@ -405,4 +445,5 @@ if __name__ == "__main__":
 
     all_ipc_df = all_ipc_df[new_columns]
     all_ipc_df = add_geomean_row(all_ipc_df, base_col)
+    all_ipc_df = add_spec_score_row(all_ipc_df, base_col)
     print_aligned_table(all_ipc_df)
