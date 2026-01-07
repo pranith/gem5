@@ -52,6 +52,7 @@ scons build/X86/gem5.opt
 
 """
 
+import argparse
 import shutil
 from pathlib import Path
 
@@ -63,10 +64,6 @@ from m5.objects.ReplacementPolicies import *
 from m5.util import addToPath
 
 m5.util.addToPath("../../..")
-
-# Normalize stats file name in case argparse left it as a list.
-if isinstance(m5.options.stats_file, list):
-    m5.options.stats_file = m5.options.stats_file[0]
 
 from m5.stats import (
     dump,
@@ -95,10 +92,24 @@ from gem5.utils.requires import requires
 
 requires(isa_required=ISA.ARM)
 
-import gem5.utils.multisim as multisim
+parser = argparse.ArgumentParser(
+    description="An example simpoint workload file path"
+)
 
-multisim.set_num_processes(24)
+# The lone arguments is a file path to a directory to store the checkpoints.
+parser.add_argument(
+    "--checkpoint",
+    type=str,
+    required=True,
+    help="Name of the individual checkpoints to run (chkpt_{workload_name}_{chkpt_idx})",
+)
+parser.add_argument(
+    "--maxinsts", type=int, default=None, help="max instructions"
+)
 
+args = parser.parse_args()
+
+spec_path = "/home/pranith/work/spec2017_chkpts_r_arm64"
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64/{x_workload}"
 
 spec_rate_workloads = [
@@ -128,7 +139,7 @@ spec_rate_binary = {
 }
 
 spec_rate_args = {
-    "500.perlbench_r": "-I/home/pranith/work/spec2017_chkpts_r_arm64/500.perlbench_r/lib checkspam.pl 2500 5 25 11 150 1 1 1 1",
+    "500.perlbench_r": f"-I{spec_path}/500.perlbench_r/lib checkspam.pl 2500 5 25 11 150 1 1 1 1",
     "502.gcc_r": "gcc-pp.c -O3 -finline-limit=0 -fif-conversion -fif-conversion2 -o gcc-pp.opts-O3_-finline-limit_0_-fif-conversion_-fif-conversion2.s",
     "505.mcf_r": "inp.in",
     "520.omnetpp_r": "-c General -r 0",
@@ -155,15 +166,37 @@ class Rancho_BTB(SimpleBTB):
     )
 
 
+# class Rancho_BP(TournamentBP):
+#    btb = Rancho_BTB()
+#    ras = ReturnAddrStack(numEntries=8)
+#    localPredictorSize = 64
+#    localCtrBits = 2
+#    localHistoryTableSize = 64
+#    globalPredictorSize = 1024
+#    globalCtrBits = 2
+#    choicePredictorSize = 1024
+#    choiceCtrBits = 2
+#    instShiftAmt = 2
+
+
 # class Rancho_BP(TAGE):
 #     btb = Rancho_BTB()
-#     ras = ReturnAddrStack(numEntries=32)
+#     ras = ReturnAddrStack(numEntries=8)
+#     indirectBranchPred = Rancho_ITTAGE()
 
 
 class CustomCore(BaseCPUCore):
     def __init__(self):
         super().__init__(ArmO3CPU(), ISA.ARM)
 
+        self.core.useMergeBuffer = True
+        self.core.mergeBufferEntries = 32
+        self.core.mbRetireWhenFullValid = True
+        self.core.mergeBufferRetireCycles = 16
+        self.core.mergeBufferResetRetireOnMerge = True
+        self.core.mergeBufferRetireResetCycles = 16
+        self.core.mergeBufferPrefetch = True
+        self.core.tracer = TarmacTracer(outfile="file")
         # self.core.branchPred = Rancho_BP()
 
 
@@ -180,26 +213,6 @@ def parse_simpoint_file(filename):
 
     with open(filename) as file:
         return [line.split()[0] for line in file.readlines()]
-
-
-def max_inst():
-    warmed_up = False
-    if warmed_up:
-        print("end of SimPoint interval")
-        dump()
-        return True
-    else:
-        print("end of warmup, starting to simulate SimPoint")
-        warmed_up = True
-        # Schedule a MAX_INSTS exit event during the simulation
-        max_instructions = board.get_simpoint().get_simpoint_interval()
-        print(max_instructions)
-        simulator.schedule_max_insts(
-            board.get_simpoint().get_simpoint_interval()
-        )
-        # dump()
-        reset()
-        return False
 
 
 def get_checkpoint_list(x_path):
@@ -267,6 +280,8 @@ for workload in spec_rate_workloads:
     weights_file = f"{workload_dir}/{workload}.weights"
     weights_list = [float(e) for e in parse_simpoint_file(weights_file)]
 
+    import m5
+
     shutil.copy(weights_file, m5.options.outdir)
 
     chkpt_dirs = get_checkpoint_list(workload_dir)
@@ -289,8 +304,8 @@ for workload in spec_rate_workloads:
         workload_resource = BinaryResource(
             local_path=binary_file,
             arguments=argv[1:],
-            stdout_file=f"{chkpt}/{binary_name}.txt",
-            stderr_file=f"{chkpt}/{binary_name}.err",
+            # stdout_file=f"{chkpt}/{binary_name}.txt",
+            # stderr_file=f"{chkpt}/{binary_name}.err",
         )
 
         processor = CustomProcessor()
@@ -308,15 +323,22 @@ for workload in spec_rate_workloads:
             simpoint=SimpointResource(
                 simpoint_interval=200000000,
                 # simpoint_interval=20000000,
+                # simpoint_interval=20000,
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
-                warmup_interval=50000000,
+                # warmup_interval=50000000,
+                warmup_interval=500000000,
                 # warmup_interval=5000,
             ),
             checkpoint=CheckpointResource(local_path=chkpt),
         )
 
         chkpt_id = f"chkpt_{workload_name}_{chkpt_idx}"
+        chkpt_idx = chkpt_idx + 1
+
+        if chkpt_id != args.checkpoint:
+            continue
+
         simulator = Simulator(
             board=board,
             id=chkpt_id,
@@ -334,11 +356,14 @@ for workload in spec_rate_workloads:
             )
         }
 
-        simulator.set_on_exit_event(on_exit_event)
-        simulator.schedule_max_insts(board.get_simpoint().get_warmup_list()[0])
-        multisim.add_simulator(simulator)
-        chkpt_idx = chkpt_idx + 1
+        max_insts = board.get_simpoint().get_warmup_list()[0]
 
+        if args.maxinsts and args.maxinsts < max_insts:
+            max_insts = args.maxinsts
+
+        simulator.set_on_exit_event(on_exit_event)
+        simulator.schedule_max_insts(max_insts)
+        simulator.run()
         # break
 
     # break
