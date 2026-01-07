@@ -1131,6 +1131,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 tid, head_inst->seqNum, head_inst->pcState());
 
         if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
+            // Drain the merge buffer to reduce stall
+            iewStage->forceMBDrain(tid);
             DPRINTF(Commit,
                     "[tid:%i] [sn:%llu] "
                     "Waiting for all stores to writeback.\n",
@@ -1249,9 +1251,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     updateComInstStats(head_inst);
 
-    DPRINTF(Commit,
-            "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
-            tid, head_inst->seqNum, head_inst->pcState());
+    DPRINTF(
+        Commit, "[tid:%i] [sn:%llu] Committing instruction with PC:%s %s\n",
+        tid, head_inst->seqNum, head_inst->pcState(),
+        head_inst->staticInst->disassemble(head_inst->pcState().instAddr()));
 
     if (head_inst->isReturn()) {
         DPRINTF(Commit,

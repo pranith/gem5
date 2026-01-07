@@ -51,6 +51,7 @@
 #include "cpu/o3/dyn_inst.hh"
 #include "cpu/o3/iew.hh"
 #include "cpu/o3/limits.hh"
+#include "cpu/o3/lsq_unit.hh"
 #include "debug/Drain.hh"
 #include "debug/Fetch.hh"
 #include "debug/HtmCpu.hh"
@@ -449,6 +450,15 @@ LSQ::recvTimingResp(PacketPtr pkt)
         DPRINTF(LSQ, "Got error packet back for address: %#X\n",
                 pkt->getAddr());
 
+    if (auto *mb_state = dynamic_cast<LSQUnit::MergeBufferDrainSenderState *>(
+            pkt->senderState)) {
+        return mb_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_pf_state =
+                   dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
+                       pkt->senderState)) {
+        return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    }
+
     LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);
     panic_if(!request, "Got packet back with unknown sender state\n");
 
@@ -709,6 +719,12 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    return thread.at(tid).forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
 {
@@ -766,6 +782,11 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
     auto cacheLineSize = cpu->cacheLineSize();
     bool needs_burst = transferNeedsBurst(addr, size, cacheLineSize);
     LSQRequest* request = nullptr;
+
+    DPRINTF(LSQ,
+            "Creating a request for %s inst [sn:%lli] to addr: %#x "
+            "and size: %u\n",
+            (isLoad ? "load" : "store"), inst->seqNum, addr, size);
 
     // Atomic requests that access data across cache line boundary are
     // currently not allowed since the cache does not guarantee corresponding
