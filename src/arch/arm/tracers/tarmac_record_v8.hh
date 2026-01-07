@@ -88,6 +88,7 @@ class TarmacTracerRecordV8 : public TarmacTracerRecord
       protected:
         Addr paddr;
         bool paddrValid;
+        uint64_t seq;
     };
 
     /**
