@@ -1799,6 +1799,7 @@ class Rancho(ArmO3CPU):
     useMergeBuffer = True
     mergeBufferEntries = 32
     mergeBufferPrefetch = True
+    mbRetireWhenFullValid = True
 
     LSQDepCheckShift = 4
     LSQCheckLoads = True
