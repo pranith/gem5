@@ -337,11 +337,8 @@ TarmacTracerRecord::dump()
     auto &regQueue = tracer.regQueue;
 
     const TarmacContext tarmCtx(
-        tracer,
-        thread,
-        staticInst->isMicroop()? macroStaticInst : staticInst,
-        *pc
-    );
+        tracer, thread, staticInst->isMicroop() ? macroStaticInst : staticInst,
+        *pc, fetch_seq);
 
     if (!staticInst->isMicroop()) {
         // Current instruction is NOT a micro-instruction:
