@@ -142,10 +142,6 @@ def create(args):
     # Assign one workload to each CPU
     for cpu, workload in zip(system.cpu_cluster.cpus, processes):
         cpu.workload = workload
-        if tarmac_gen:
-            cpu.tracer = TarmacTracer()
-            if tarmac_dest is not None:
-                cpu.tracer.outfile = tarmac_dest
 
     if args.merge_buffer is not None:
         use_mb = args.merge_buffer == "on"
