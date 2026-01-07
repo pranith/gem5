@@ -81,17 +81,19 @@ namespace gem5
 namespace o3
 {
 
-LSQ::DcachePort::DcachePort(LSQ *_lsq, CPU *_cpu) :
-    RequestPort(_cpu->name() + ".dcache_port"), lsq(_lsq), cpu(_cpu),
-    dcachePortStats(_cpu)
+LSQ::DcachePort::DcachePort(LSQ *_lsq, CPU *_cpu)
+    : RequestPort(_cpu->name() + ".dcache_port"),
+      lsq(_lsq),
+      cpu(_cpu),
+      dcachePortStats(_cpu)
 {}
 
-LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU* _cpu)
+LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU *_cpu)
     : statistics::Group(_cpu),
       ADD_STAT(numRecvResp, statistics::units::Count::get(),
-              "Number of received responses"),
+               "Number of received responses"),
       ADD_STAT(numRecvRespBytes, statistics::units::Byte::get(),
-              "Number of received response bytes"),
+               "Number of received response bytes"),
       ADD_STAT(recvRespAvgBW,
                statistics::units::Rate<statistics::units::Byte,
                                        statistics::units::Cycle>::get(),
@@ -125,19 +127,22 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU* _cpu)
 }
 
 LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
-    : cpu(cpu_ptr), iewStage(iew_ptr),
+    : cpu(cpu_ptr),
+      iewStage(iew_ptr),
       _cacheBlocked(false),
-      cacheStorePorts(params.cacheStorePorts), usedStorePorts(0),
-      cacheLoadPorts(params.cacheLoadPorts), usedLoadPorts(0),
+      cacheStorePorts(params.cacheStorePorts),
+      usedStorePorts(0),
+      cacheLoadPorts(params.cacheLoadPorts),
+      usedLoadPorts(0),
       waitingForStaleTranslation(false),
       staleTranslationWaitTxnId(0),
       lsqPolicy(params.smtLSQPolicy),
       LQEntries(params.LQEntries),
       SQEntries(params.SQEntries),
       maxLQEntries(maxLSQAllocation(lsqPolicy, LQEntries, params.numThreads,
-                  params.smtLSQThreshold)),
+                                    params.smtLSQThreshold)),
       maxSQEntries(maxLSQAllocation(lsqPolicy, SQEntries, params.numThreads,
-                  params.smtLSQThreshold)),
+                                    params.smtLSQThreshold)),
       dcachePort(this, cpu_ptr),
       numThreads(params.numThreads),
       recvRespThrottling(params.recvRespThrottling),
@@ -147,7 +152,7 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
       recvRespCachelines(0),
       recvRespLastCachelineAddr(0),
       recvRespLastActiveCycle(0),
-      retryRespEvent([this]{ sendRetryResp(); }, name())
+      retryRespEvent([this] { sendRetryResp(); }, name())
 {
     assert(numThreads > 0 && numThreads <= MaxThreads);
 
@@ -156,23 +161,25 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
     //**********************************************
 
     /* Run SMT olicy checks. */
-        if (lsqPolicy == SMTQueuePolicy::Dynamic) {
+    if (lsqPolicy == SMTQueuePolicy::Dynamic) {
         DPRINTF(LSQ, "LSQ sharing policy set to Dynamic\n");
     } else if (lsqPolicy == SMTQueuePolicy::Partitioned) {
-        DPRINTF(Fetch, "LSQ sharing policy set to Partitioned: "
+        DPRINTF(Fetch,
+                "LSQ sharing policy set to Partitioned: "
                 "%i entries per LQ | %i entries per SQ\n",
-                maxLQEntries,maxSQEntries);
+                maxLQEntries, maxSQEntries);
     } else if (lsqPolicy == SMTQueuePolicy::Threshold) {
 
         assert(params.smtLSQThreshold > params.LQEntries);
         assert(params.smtLSQThreshold > params.SQEntries);
 
-        DPRINTF(LSQ, "LSQ sharing policy set to Threshold: "
+        DPRINTF(LSQ,
+                "LSQ sharing policy set to Threshold: "
                 "%i entries per LQ | %i entries per SQ\n",
-                maxLQEntries,maxSQEntries);
+                maxLQEntries, maxSQEntries);
     } else {
         panic("Invalid LSQ sharing policy. Options are: Dynamic, "
-                    "Partitioned, Threshold");
+              "Partitioned, Threshold");
     }
 
     thread.reserve(numThreads);
@@ -204,8 +211,9 @@ LSQ::drainSanityCheck() const
 {
     assert(isDrained());
 
-    for (ThreadID tid = 0; tid < numThreads; tid++)
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
         thread[tid]->drainSanityCheck();
+    }
 }
 
 bool
@@ -241,11 +249,18 @@ void
 LSQ::tick()
 {
     // Re-issue loads which got blocked on the per-cycle load ports limit.
-    if (usedLoadPorts == cacheLoadPorts && !_cacheBlocked)
+    if (usedLoadPorts == cacheLoadPorts && !_cacheBlocked) {
         iewStage->cacheUnblocked();
+    }
 
     usedLoadPorts = 0;
     usedStorePorts = 0;
+
+    // Ensure merge buffer retirement progresses even when no stores are
+    // actively being written back (e.g., during serialize stalls).
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
+        thread[tid]->updateMergeBufferRetire();
+    }
 }
 
 bool
@@ -265,9 +280,9 @@ LSQ::cachePortAvailable(bool is_load) const
 {
     bool ret;
     if (is_load) {
-        ret  = usedLoadPorts < cacheLoadPorts;
+        ret = usedLoadPorts < cacheLoadPorts;
     } else {
-        ret  = usedStorePorts < cacheStorePorts;
+        ret = usedStorePorts < cacheStorePorts;
     }
     return ret;
 }
@@ -317,19 +332,25 @@ LSQ::executeStore(const DynInstPtr &inst)
 
 void
 LSQ::commitLoads(InstSeqNum &youngest_inst, ThreadID tid)
-{ thread.at(tid)->commitLoads(youngest_inst); }
+{
+    thread.at(tid)->commitLoads(youngest_inst);
+}
 
 void
 LSQ::commitStores(InstSeqNum &youngest_inst, ThreadID tid)
-{ thread.at(tid)->commitStores(youngest_inst); }
+{
+    thread.at(tid)->commitStores(youngest_inst);
+}
 
 void
 LSQ::writebackStores()
 {
     for (ThreadID tid : *activeThreads) {
         if (numStoresToWB(tid) > 0) {
-            DPRINTF(Writeback,"[tid:%i] Writing back stores. %i stores "
-                "available for Writeback.\n", tid, numStoresToWB(tid));
+            DPRINTF(Writeback,
+                    "[tid:%i] Writing back stores. %i stores "
+                    "available for Writeback.\n",
+                    tid, numStoresToWB(tid));
         }
 
         thread[tid]->writebackStores();
@@ -338,7 +359,9 @@ LSQ::writebackStores()
 
 void
 LSQ::squash(const InstSeqNum &squashed_num, ThreadID tid)
-{ thread.at(tid)->squash(squashed_num); }
+{
+    thread.at(tid)->squash(squashed_num);
+}
 
 bool
 LSQ::violation()
@@ -355,55 +378,75 @@ LSQ::violation()
 
 bool
 LSQ::violation(ThreadID tid)
-{ return thread.at(tid)->violation(); }
+{
+    return thread.at(tid)->violation();
+}
 
 DynInstPtr
 LSQ::getMemDepViolator(ThreadID tid)
-{ return thread.at(tid)->getMemDepViolator(); }
+{
+    return thread.at(tid)->getMemDepViolator();
+}
 
 int
 LSQ::getLoadHead(ThreadID tid)
-{ return thread.at(tid)->getLoadHead(); }
+{
+    return thread.at(tid)->getLoadHead();
+}
 
 InstSeqNum
 LSQ::getLoadHeadSeqNum(ThreadID tid)
-{ return thread.at(tid)->getLoadHeadSeqNum(); }
+{
+    return thread.at(tid)->getLoadHeadSeqNum();
+}
 
 int
 LSQ::getStoreHead(ThreadID tid)
-{ return thread.at(tid)->getStoreHead(); }
+{
+    return thread.at(tid)->getStoreHead();
+}
 
 InstSeqNum
 LSQ::getStoreHeadSeqNum(ThreadID tid)
-{ return thread.at(tid)->getStoreHeadSeqNum(); }
+{
+    return thread.at(tid)->getStoreHeadSeqNum();
+}
 
 int
 LSQ::getCount(ThreadID tid)
-{ return thread.at(tid)->getCount(); }
+{
+    return thread.at(tid)->getCount();
+}
 
 int
 LSQ::numLoads(ThreadID tid)
-{ return thread.at(tid)->numLoads(); }
+{
+    return thread.at(tid)->numLoads();
+}
 
 int
 LSQ::numStores(ThreadID tid)
-{ return thread.at(tid)->numStores(); }
+{
+    return thread.at(tid)->numStores();
+}
 
 int
 LSQ::numHtmStarts(ThreadID tid) const
 {
-    if (tid == InvalidThreadID)
+    if (tid == InvalidThreadID) {
         return 0;
-    else
+    } else {
         return thread[tid]->numHtmStarts();
+    }
 }
 int
 LSQ::numHtmStops(ThreadID tid) const
 {
-    if (tid == InvalidThreadID)
+    if (tid == InvalidThreadID) {
         return 0;
-    else
+    } else {
         return thread[tid]->numHtmStops();
+    }
 }
 
 void
@@ -417,10 +460,11 @@ LSQ::resetHtmStartsStops(ThreadID tid)
 uint64_t
 LSQ::getLatestHtmUid(ThreadID tid) const
 {
-    if (tid == InvalidThreadID)
+    if (tid == InvalidThreadID) {
         return 0;
-    else
+    } else {
         return thread[tid]->getLatestHtmUid();
+    }
 }
 
 void
@@ -445,7 +489,7 @@ LSQ::recvReqRetry()
 void
 LSQ::completeDataAccess(PacketPtr pkt)
 {
-    LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);
+    LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
     thread[cpu->contextToThread(request->contextId())]->completeDataAccess(
         pkt);
 }
@@ -459,11 +503,21 @@ LSQ::sendRetryResp()
 bool
 LSQ::recvTimingResp(PacketPtr pkt)
 {
-    if (pkt->isError())
+    if (pkt->isError()) {
         DPRINTF(LSQ, "Got error packet back for address: %#X\n",
                 pkt->getAddr());
+    }
 
-    LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);
+    if (auto *mb_state = dynamic_cast<LSQUnit::MergeBufferDrainSenderState *>(
+            pkt->senderState)) {
+        return mb_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_pf_state =
+                   dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
+                       pkt->senderState)) {
+        return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    }
+
+    LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
     panic_if(!request, "Got packet back with unknown sender state\n");
 
     thread[cpu->contextToThread(request->contextId())]->recvTimingResp(pkt);
@@ -505,8 +559,7 @@ LSQ::recvTimingSnoopReq(PacketPtr pkt)
 
     // must be a snoop
     if (pkt->isInvalidate()) {
-        DPRINTF(LSQ, "received invalidation for addr:%#x\n",
-                pkt->getAddr());
+        DPRINTF(LSQ, "received invalidation for addr:%#x\n", pkt->getAddr());
         for (ThreadID tid = 0; tid < numThreads; tid++) {
             thread[tid]->checkSnoop(pkt);
         }
@@ -517,7 +570,7 @@ LSQ::recvTimingSnoopReq(PacketPtr pkt)
         waitingForStaleTranslation = true;
         staleTranslationWaitTxnId = pkt->req->getExtraData();
 
-        for (auto& unit : thread) {
+        for (auto &unit : thread) {
             unit->startStaleTranslationFlush();
         }
 
@@ -588,11 +641,15 @@ LSQ::numFreeStoreEntries()
 
 unsigned
 LSQ::numFreeLoadEntries(ThreadID tid)
-{ return thread[tid]->numFreeLoadEntries(); }
+{
+    return thread[tid]->numFreeLoadEntries();
+}
 
 unsigned
 LSQ::numFreeStoreEntries(ThreadID tid)
-{ return thread[tid]->numFreeStoreEntries(); }
+{
+    return thread[tid]->numFreeStoreEntries();
+}
 
 bool
 LSQ::isFull()
@@ -610,11 +667,12 @@ bool
 LSQ::isFull(ThreadID tid)
 {
     //@todo: Change to Calculate All Entries for
-    //Dynamic Policy
-    if (lsqPolicy == SMTQueuePolicy::Dynamic)
+    // Dynamic Policy
+    if (lsqPolicy == SMTQueuePolicy::Dynamic) {
         return isFull();
-    else
+    } else {
         return thread[tid]->lqFull() || thread[tid]->sqFull();
+    }
 }
 
 bool
@@ -663,19 +721,21 @@ bool
 LSQ::lqFull(ThreadID tid)
 {
     //@todo: Change to Calculate All Entries for
-    //Dynamic Policy
-    if (lsqPolicy == SMTQueuePolicy::Dynamic)
+    // Dynamic Policy
+    if (lsqPolicy == SMTQueuePolicy::Dynamic) {
         return lqFull();
-    else
+    } else {
         return thread[tid]->lqFull();
+    }
 }
 
 bool
 LSQ::sqFull()
 {
     for (ThreadID tid : *activeThreads) {
-        if (!sqFull(tid))
+        if (!sqFull(tid)) {
             return false;
+        }
     }
 
     return true;
@@ -684,12 +744,13 @@ LSQ::sqFull()
 bool
 LSQ::sqFull(ThreadID tid)
 {
-     //@todo: Change to Calculate All Entries for
-    //Dynamic Policy
-    if (lsqPolicy == SMTQueuePolicy::Dynamic)
+    //@todo: Change to Calculate All Entries for
+    // Dynamic Policy
+    if (lsqPolicy == SMTQueuePolicy::Dynamic) {
         return sqFull();
-    else
+    } else {
         return thread[tid]->sqFull();
+    }
 }
 
 bool
@@ -707,37 +768,62 @@ LSQ::isStalled()
 bool
 LSQ::isStalled(ThreadID tid)
 {
-    if (lsqPolicy == SMTQueuePolicy::Dynamic)
+    if (lsqPolicy == SMTQueuePolicy::Dynamic) {
         return isStalled();
-    else
+    } else {
         return thread[tid]->isStalled();
+    }
 }
 
 bool
 LSQ::hasStoresToWB()
 {
     for (ThreadID tid : *activeThreads) {
-        if (hasStoresToWB(tid))
+        if (hasStoresToWB(tid)) {
             return true;
+        }
     }
 
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    thread.at(tid)->forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
-{ return thread.at(tid)->hasStoresToWB(); }
+{
+    return thread.at(tid)->hasStoresToWB();
+}
 
+unsigned
+LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markLoadsHitExternalSnoopAfter(barrier_sn);
+}
+
+unsigned
+LSQ::markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                           const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
+}
 int
 LSQ::numStoresToWB(ThreadID tid)
-{ return thread.at(tid)->numStoresToWB(); }
+{
+    return thread.at(tid)->numStoresToWB();
+}
 
 bool
 LSQ::willWB()
 {
     for (ThreadID tid : *activeThreads) {
-        if (willWB(tid))
+        if (willWB(tid)) {
             return true;
+        }
     }
 
     return false;
@@ -745,7 +831,9 @@ LSQ::willWB()
 
 bool
 LSQ::willWB(ThreadID tid)
-{ return thread.at(tid)->willWB(); }
+{
+    return thread.at(tid)->willWB();
+}
 
 void
 LSQ::dumpInsts() const
@@ -757,12 +845,15 @@ LSQ::dumpInsts() const
 
 void
 LSQ::dumpInsts(ThreadID tid) const
-{ thread.at(tid)->dumpInsts(); }
+{
+    thread.at(tid)->dumpInsts();
+}
 
 Fault
-LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
-        unsigned int size, Addr addr, Request::Flags flags, uint64_t *res,
-        AtomicOpFunctorPtr amo_op, const std::vector<bool>& byte_enable)
+LSQ::pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
+                 unsigned int size, Addr addr, Request::Flags flags,
+                 uint64_t *res, AtomicOpFunctorPtr amo_op,
+                 const std::vector<bool> &byte_enable)
 {
     // This comming request can be either load, store or atomic.
     // Atomic request has a corresponding pointer to its atomic memory
@@ -772,7 +863,12 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
     ThreadID tid = cpu->contextToThread(inst->contextId());
     auto cacheLineSize = cpu->cacheLineSize();
     bool needs_burst = transferNeedsBurst(addr, size, cacheLineSize);
-    LSQRequest* request = nullptr;
+    LSQRequest *request = nullptr;
+
+    DPRINTF(LSQ,
+            "Creating a request for %s inst [sn:%lli] to addr: %#x "
+            "and size: %u\n",
+            (isLoad ? "load" : "store"), inst->seqNum, addr, size);
 
     // Atomic requests that access data across cache line boundary are
     // currently not allowed since the cache does not guarantee corresponding
@@ -825,16 +921,18 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
                 inst->reqToVerify = std::make_shared<Request>(*request->req());
             }
             Fault fault;
-            if (isLoad)
+            if (isLoad) {
                 fault = read(request, inst->lqIdx);
-            else
+            } else {
                 fault = write(request, data, inst->sqIdx);
+            }
             // inst->getFault() may have the first-fault of a
             // multi-access split request at this point.
             // Overwrite that only if we got another type of fault
             // (e.g. re-exec).
-            if (fault != NoFault)
+            if (fault != NoFault) {
                 inst->getFault() = fault;
+            }
         } else {
             inst->setMemAccPredicate(false);
             if (isLoad) {
@@ -848,8 +946,9 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
         }
     }
 
-    if (inst->traceData)
+    if (inst->traceData) {
         inst->traceData->setMem(addr, size, flags);
+    }
 
     return inst->getFault();
 }
@@ -891,15 +990,17 @@ SplitDataRequest::finish(const Fault &fault, const RequestPtr &req,
                          gem5::ThreadContext *tc, BaseMMU::Mode mode)
 {
     int i;
-    for (i = 0; i < _reqs.size() && _reqs[i] != req; i++);
+    for (i = 0; i < _reqs.size() && _reqs[i] != req; i++)
+        ;
     assert(i < _reqs.size());
     _fault[i] = fault;
 
     numInTranslationFragments--;
     numTranslatedFragments++;
 
-    if (fault == NoFault)
+    if (fault == NoFault) {
         _mainReq->setFlags(req->getFlags());
+    }
 
     if (numTranslatedFragments == _reqs.size()) {
         if (_inst->isSquashed()) {
@@ -909,12 +1010,13 @@ SplitDataRequest::finish(const Fault &fault, const RequestPtr &req,
             flags.set(Flag::TranslationFinished);
             _inst->translationCompleted(true);
 
-            for (i = 0; i < _fault.size() && _fault[i] == NoFault; i++);
+            for (i = 0; i < _fault.size() && _fault[i] == NoFault; i++)
+                ;
             if (i > 0) {
                 _inst->physEffAddr = LSQRequest::req()->getPaddr();
                 _inst->memReqFlags = _mainReq->getFlags();
                 if (_mainReq->isCondSwap()) {
-                    assert (i == _fault.size());
+                    assert(i == _fault.size());
                     assert(_res);
                     _mainReq->setExtraData(*_res);
                 }
@@ -922,15 +1024,14 @@ SplitDataRequest::finish(const Fault &fault, const RequestPtr &req,
                     _inst->fault = NoFault;
                     setState(State::Request);
                 } else {
-                  _inst->fault = _fault[i];
-                  setState(State::PartialFault);
+                    _inst->fault = _fault[i];
+                    setState(State::PartialFault);
                 }
             } else {
                 _inst->fault = _fault[0];
                 setState(State::Fault);
             }
         }
-
     }
 }
 
@@ -976,9 +1077,9 @@ SplitDataRequest::initiateTranslation()
     Addr final_addr = addrBlockAlign(_addr + _size, cacheLineSize);
     uint32_t size_so_far = 0;
 
-    _mainReq = std::make_shared<Request>(base_addr,
-                _size, _flags, _inst->requestorId(),
-                _inst->pcState().instAddr(), _inst->contextId());
+    _mainReq = std::make_shared<Request>(
+        base_addr, _size, _flags, _inst->requestorId(),
+        _inst->pcState().instAddr(), _inst->contextId());
     _mainReq->setByteEnable(_byteEnable);
 
     // Paddr is not used in _mainReq. However, we will accumulate the flags
@@ -991,7 +1092,7 @@ SplitDataRequest::initiateTranslation()
     auto it_start = _byteEnable.begin();
     auto it_end = _byteEnable.begin() + (next_addr - base_addr);
     addReq(base_addr, next_addr - base_addr,
-                     std::vector<bool>(it_start, it_end));
+           std::vector<bool>(it_start, it_end));
     size_so_far = next_addr - base_addr;
 
     /* We are block aligned now, reading whole blocks. */
@@ -999,8 +1100,7 @@ SplitDataRequest::initiateTranslation()
     while (base_addr != final_addr) {
         auto it_start = _byteEnable.begin() + size_so_far;
         auto it_end = _byteEnable.begin() + size_so_far + cacheLineSize;
-        addReq(base_addr, cacheLineSize,
-                         std::vector<bool>(it_start, it_end));
+        addReq(base_addr, cacheLineSize, std::vector<bool>(it_start, it_end));
         size_so_far += cacheLineSize;
         base_addr += cacheLineSize;
     }
@@ -1010,12 +1110,12 @@ SplitDataRequest::initiateTranslation()
         auto it_start = _byteEnable.begin() + size_so_far;
         auto it_end = _byteEnable.end();
         addReq(base_addr, _size - size_so_far,
-                         std::vector<bool>(it_start, it_end));
+               std::vector<bool>(it_start, it_end));
     }
 
     if (_reqs.size() > 0) {
         /* Setup the requests and send them to translation. */
-        for (auto& r: _reqs) {
+        for (auto &r : _reqs) {
             r->setReqInstSeqNum(_inst->seqNum);
             r->taskId(_taskId);
         }
@@ -1049,9 +1149,9 @@ LSQRequest::LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad)
       _amo_op(nullptr)
 {
     flags.set(Flag::IsLoad, isLoad);
-    flags.set(Flag::WriteBackToRegister,
-              _inst->isStoreConditional() || _inst->isAtomic() ||
-              _inst->isLoad());
+    flags.set(Flag::WriteBackToRegister, _inst->isStoreConditional() ||
+                                             _inst->isAtomic() ||
+                                             _inst->isLoad());
     flags.set(Flag::IsAtomic, _inst->isAtomic());
     install();
 }
@@ -1076,9 +1176,9 @@ LSQRequest::LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad,
       _hasStaleTranslation(stale_translation)
 {
     flags.set(Flag::IsLoad, isLoad);
-    flags.set(Flag::WriteBackToRegister,
-              _inst->isStoreConditional() || _inst->isAtomic() ||
-              _inst->isLoad());
+    flags.set(Flag::WriteBackToRegister, _inst->isStoreConditional() ||
+                                             _inst->isAtomic() ||
+                                             _inst->isLoad());
     flags.set(Flag::IsAtomic, _inst->isAtomic());
     install();
 }
@@ -1097,39 +1197,37 @@ LSQRequest::install()
 
 bool
 LSQRequest::squashed() const
-{ return _inst->isSquashed(); }
+{
+    return _inst->isSquashed();
+}
 
 void
 LSQRequest::addReq(Addr addr, unsigned size,
                    const std::vector<bool> &byte_enable)
 {
-    unsigned inactive_tail_size = inactiveTailSize(byte_enable.begin(),
-                                                   byte_enable.end());
+    unsigned inactive_tail_size =
+        inactiveTailSize(byte_enable.begin(), byte_enable.end());
 
     if (inactive_tail_size != byte_enable.size()) {
-        auto req = new Request(
-                addr, size-inactive_tail_size, _flags, _inst->requestorId(),
-                _inst->pcState().instAddr(), _inst->contextId(),
-                std::move(_amo_op));
+        auto req =
+            new Request(addr, size - inactive_tail_size, _flags,
+                        _inst->requestorId(), _inst->pcState().instAddr(),
+                        _inst->contextId(), std::move(_amo_op));
 
-        req->setByteEnable(
-                std::vector<bool>(byte_enable.begin(),
-                                  byte_enable.end()-inactive_tail_size));
+        req->setByteEnable(std::vector<bool>(
+            byte_enable.begin(), byte_enable.end() - inactive_tail_size));
 
         /* If the request is marked as NO_ACCESS, setup a local access */
         if (_flags.isSet(Request::NO_ACCESS)) {
             req->setLocalAccessor(
-                [this, req](gem5::ThreadContext *tc, PacketPtr pkt) -> Cycles
-                {
+                [this, req](gem5::ThreadContext *tc, PacketPtr pkt) -> Cycles {
                     if ((req->isHTMStart() || req->isHTMCommit())) {
-                        auto& inst = this->instruction();
+                        auto &inst = this->instruction();
                         assert(inst->inHtmTransactionalState());
-                        pkt->setHtmTransactional(
-                            inst->getHtmTransactionUid());
+                        pkt->setHtmTransactional(inst->getHtmTransactionUid());
                     }
                     return Cycles(1);
-                }
-            );
+                });
         }
 
         _reqs.emplace_back(req);
@@ -1141,8 +1239,9 @@ LSQRequest::~LSQRequest()
     assert(!isAnyOutstandingRequest());
     _inst->savedRequest = nullptr;
 
-    for (auto r: _packets)
+    for (auto r : _packets) {
         delete r;
+    }
 };
 
 ContextID
@@ -1155,8 +1254,9 @@ void
 LSQRequest::sendFragmentToTranslation(int i)
 {
     numInTranslationFragments++;
-    _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(),
-            this, isLoad() ? BaseMMU::Read : BaseMMU::Write);
+    _port.getMMUPtr()->translateTiming(req(i), _inst->thread->getTC(), this,
+                                       isLoad() ? BaseMMU::Read
+                                                : BaseMMU::Write);
 }
 
 void
@@ -1164,14 +1264,13 @@ SingleDataRequest::markAsStaleTranslation()
 {
     // If this element has been translated and is currently being requested,
     // then it may be stale
-    if ((!flags.isSet(Flag::Complete)) &&
-        (!flags.isSet(Flag::Discarded)) &&
+    if ((!flags.isSet(Flag::Complete)) && (!flags.isSet(Flag::Discarded)) &&
         (flags.isSet(Flag::TranslationStarted))) {
         _hasStaleTranslation = true;
     }
 
-    DPRINTF(LSQ, "SingleDataRequest %d 0x%08x isBlocking:%d\n",
-        (int)_state, (uint32_t)flags, _hasStaleTranslation);
+    DPRINTF(LSQ, "SingleDataRequest %d 0x%08x isBlocking:%d\n", (int)_state,
+            (uint32_t)flags, _hasStaleTranslation);
 }
 
 void
@@ -1179,14 +1278,13 @@ SplitDataRequest::markAsStaleTranslation()
 {
     // If this element has been translated and is currently being requested,
     // then it may be stale
-    if ((!flags.isSet(Flag::Complete)) &&
-        (!flags.isSet(Flag::Discarded)) &&
+    if ((!flags.isSet(Flag::Complete)) && (!flags.isSet(Flag::Discarded)) &&
         (flags.isSet(Flag::TranslationStarted))) {
         _hasStaleTranslation = true;
     }
 
-    DPRINTF(LSQ, "SplitDataRequest %d 0x%08x isBlocking:%d\n",
-        (int)_state, (uint32_t)flags, _hasStaleTranslation);
+    DPRINTF(LSQ, "SplitDataRequest %d 0x%08x isBlocking:%d\n", (int)_state,
+            (uint32_t)flags, _hasStaleTranslation);
 }
 
 bool
@@ -1204,20 +1302,21 @@ bool
 SplitDataRequest::recvTimingResp(PacketPtr pkt)
 {
     uint32_t pktIdx = 0;
-    while (pktIdx < _packets.size() && pkt != _packets[pktIdx])
+    while (pktIdx < _packets.size() && pkt != _packets[pktIdx]) {
         pktIdx++;
+    }
     assert(pktIdx < _packets.size());
     numReceivedPackets++;
     if (numReceivedPackets == _packets.size()) {
         flags.set(Flag::Complete);
         /* Assemble packets. */
-        PacketPtr resp = isLoad()
-            ? Packet::createRead(_mainReq)
-            : Packet::createWrite(_mainReq);
-        if (isLoad())
+        PacketPtr resp = isLoad() ? Packet::createRead(_mainReq)
+                                  : Packet::createWrite(_mainReq);
+        if (isLoad()) {
             resp->dataStatic(_inst->memData);
-        else
+        } else {
             resp->dataStatic(_data);
+        }
         resp->senderState = this;
         _port.completeDataAccess(resp);
         delete resp;
@@ -1231,10 +1330,8 @@ SingleDataRequest::buildPackets()
 {
     /* Retries do not create new packets. */
     if (_packets.size() == 0) {
-        _packets.push_back(
-                isLoad()
-                    ?  Packet::createRead(req())
-                    :  Packet::createWrite(req()));
+        _packets.push_back(isLoad() ? Packet::createRead(req())
+                                    : Packet::createWrite(req()));
         _packets.back()->dataStatic(_inst->memData);
         _packets.back()->senderState = this;
 
@@ -1245,14 +1342,14 @@ SingleDataRequest::buildPackets()
             _packets.back()->setHtmTransactional(
                 _inst->getHtmTransactionUid());
 
-            DPRINTF(HtmCpu,
-              "HTM %s pc=0x%lx - vaddr=0x%lx - paddr=0x%lx - htmUid=%u\n",
-              isLoad() ? "LD" : "ST",
-              _inst->pcState().instAddr(),
-              _packets.back()->req->hasVaddr() ?
-                  _packets.back()->req->getVaddr() : 0lu,
-              _packets.back()->getAddr(),
-              _inst->getHtmTransactionUid());
+            DPRINTF(
+                HtmCpu,
+                "HTM %s pc=0x%lx - vaddr=0x%lx - paddr=0x%lx - htmUid=%u\n",
+                isLoad() ? "LD" : "ST", _inst->pcState().instAddr(),
+                _packets.back()->req->hasVaddr()
+                    ? _packets.back()->req->getVaddr()
+                    : 0lu,
+                _packets.back()->getAddr(), _inst->getHtmTransactionUid());
         }
     }
     assert(_packets.size() == 1);
@@ -1276,27 +1373,25 @@ SplitDataRequest::buildPackets()
             if (_inst->inHtmTransactionalState()) {
                 _mainPacket->setHtmTransactional(
                     _inst->getHtmTransactionUid());
-                DPRINTF(HtmCpu,
-                  "HTM LD.0 pc=0x%lx-vaddr=0x%lx-paddr=0x%lx-htmUid=%u\n",
-                  _inst->pcState().instAddr(),
-                  _mainPacket->req->hasVaddr() ?
-                      _mainPacket->req->getVaddr() : 0lu,
-                  _mainPacket->getAddr(),
-                  _inst->getHtmTransactionUid());
+                DPRINTF(
+                    HtmCpu,
+                    "HTM LD.0 pc=0x%lx-vaddr=0x%lx-paddr=0x%lx-htmUid=%u\n",
+                    _inst->pcState().instAddr(),
+                    _mainPacket->req->hasVaddr() ? _mainPacket->req->getVaddr()
+                                                 : 0lu,
+                    _mainPacket->getAddr(), _inst->getHtmTransactionUid());
             }
         }
         for (int i = 0; i < _reqs.size() && _fault[i] == NoFault; i++) {
             RequestPtr req = _reqs[i];
-            PacketPtr pkt = isLoad() ? Packet::createRead(req)
-                                     : Packet::createWrite(req);
+            PacketPtr pkt =
+                isLoad() ? Packet::createRead(req) : Packet::createWrite(req);
             ptrdiff_t offset = req->getVaddr() - base_address;
             if (isLoad()) {
                 pkt->dataStatic(_inst->memData + offset);
             } else {
-                uint8_t* req_data = new uint8_t[req->getSize()];
-                std::memcpy(req_data,
-                        _inst->memData + offset,
-                        req->getSize());
+                uint8_t *req_data = new uint8_t[req->getSize()];
+                std::memcpy(req_data, _inst->memData + offset, req->getSize());
                 pkt->dataDynamic(req_data);
             }
             pkt->senderState = this;
@@ -1308,15 +1403,14 @@ SplitDataRequest::buildPackets()
             if (_inst->inHtmTransactionalState()) {
                 _packets.back()->setHtmTransactional(
                     _inst->getHtmTransactionUid());
-                DPRINTF(HtmCpu,
-                  "HTM %s.%d pc=0x%lx-vaddr=0x%lx-paddr=0x%lx-htmUid=%u\n",
-                  isLoad() ? "LD" : "ST",
-                  i+1,
-                  _inst->pcState().instAddr(),
-                  _packets.back()->req->hasVaddr() ?
-                      _packets.back()->req->getVaddr() : 0lu,
-                  _packets.back()->getAddr(),
-                  _inst->getHtmTransactionUid());
+                DPRINTF(
+                    HtmCpu,
+                    "HTM %s.%d pc=0x%lx-vaddr=0x%lx-paddr=0x%lx-htmUid=%u\n",
+                    isLoad() ? "LD" : "ST", i + 1, _inst->pcState().instAddr(),
+                    _packets.back()->req->hasVaddr()
+                        ? _packets.back()->req->getVaddr()
+                        : 0lu,
+                    _packets.back()->getAddr(), _inst->getHtmTransactionUid());
             }
         }
     }
@@ -1327,8 +1421,9 @@ void
 SingleDataRequest::sendPacketToCache()
 {
     assert(_numOutstandingPackets == 0);
-    if (lsqUnit()->trySendPacket(isLoad(), _packets.at(0)))
+    if (lsqUnit()->trySendPacket(isLoad(), _packets.at(0))) {
         _numOutstandingPackets = 1;
+    }
 }
 
 void
@@ -1336,8 +1431,9 @@ SplitDataRequest::sendPacketToCache()
 {
     /* Try to send the packets. */
     while (numReceivedPackets + _numOutstandingPackets < _packets.size() &&
-            lsqUnit()->trySendPacket(isLoad(),
-                _packets.at(numReceivedPackets + _numOutstandingPackets))) {
+           lsqUnit()->trySendPacket(
+               isLoad(),
+               _packets.at(numReceivedPackets + _numOutstandingPackets))) {
         _numOutstandingPackets++;
     }
 }
@@ -1356,13 +1452,14 @@ SplitDataRequest::handleLocalAccess(gem5::ThreadContext *thread,
     Cycles delay(0);
     unsigned offset = 0;
 
-    for (auto r: _reqs) {
+    for (auto r : _reqs) {
         PacketPtr pkt =
             new Packet(r, isLoad() ? MemCmd::ReadReq : MemCmd::WriteReq);
         pkt->dataStatic(mainPkt->getPtr<uint8_t>() + offset);
         Cycles d = r->localAccessor(thread, pkt);
-        if (d > delay)
+        if (d > delay) {
             delay = d;
+        }
         offset += r->getSize();
         delete pkt;
     }
@@ -1371,7 +1468,9 @@ SplitDataRequest::handleLocalAccess(gem5::ThreadContext *thread,
 
 bool
 SingleDataRequest::isCacheBlockHit(Addr blockAddr, Addr blockMask)
-{ return ((LSQRequest::_reqs[0]->getPaddr() & blockMask) == blockAddr); }
+{
+    return ((LSQRequest::_reqs[0]->getPaddr() & blockMask) == blockAddr);
+}
 
 /**
  * Caches may probe into the load-store queue to enforce memory ordering
@@ -1392,16 +1491,16 @@ bool
 SplitDataRequest::isCacheBlockHit(Addr blockAddr, Addr blockMask)
 {
     bool is_hit = false;
-    for (auto &r: _reqs) {
-       /**
-        * The load-store queue handles partial faults which complicates this
-        * method. Physical addresses must be compared between requests and
-        * snoops. Some requests will not have a valid physical address, since
-        * partial faults may have outstanding translations. Therefore, the
-        * existence of a valid request address must be checked before
-        * comparing block hits. We assume no pipeline squash is needed if a
-        * valid request address does not exist.
-        */
+    for (auto &r : _reqs) {
+        /**
+         * The load-store queue handles partial faults which complicates this
+         * method. Physical addresses must be compared between requests and
+         * snoops. Some requests will not have a valid physical address, since
+         * partial faults may have outstanding translations. Therefore, the
+         * existence of a valid request address must be checked before
+         * comparing block hits. We assume no pipeline squash is needed if a
+         * valid request address does not exist.
+         */
         if (r->hasPaddr() && (r->getPaddr() & blockMask) == blockAddr) {
             is_hit = true;
             break;
@@ -1432,8 +1531,8 @@ LSQ::DcachePort::throttleReadResp(PacketPtr pkt)
 
     // Check limits
     bool is_new_cacheline = cacheline_addr != lsq->recvRespLastCachelineAddr;
-    bool max_cachelines = (lsq->recvRespCachelines + is_new_cacheline)
-                          > lsq->recvRespMaxCachelines;
+    bool max_cachelines = (lsq->recvRespCachelines + is_new_cacheline) >
+                          lsq->recvRespMaxCachelines;
     int free_buf_size = lsq->recvRespBufferSize - lsq->recvRespBytes;
     bool max_bytes = pkt->getSize() > free_buf_size;
 
@@ -1453,7 +1552,7 @@ LSQ::DcachePort::throttleReadResp(PacketPtr pkt)
         DPRINTF(LSQ, "throttling ReadResp: max_cachelines=%d max_bytes=%d\n",
                 max_cachelines, max_bytes);
 
-    // Still processing previous response
+        // Still processing previous response
     } else if (lsq->recvRespPendBytes > 0) {
         DPRINTF(LSQ, "recvRespPendBytes=%u\n", lsq->recvRespPendBytes);
 
@@ -1468,7 +1567,7 @@ LSQ::DcachePort::throttleReadResp(PacketPtr pkt)
                                                : lsq->recvRespPendBytes;
         lsq->recvRespPendBytes -= lsq->recvRespBytes;
 
-    // No pending response and no limit reached
+        // No pending response and no limit reached
     } else {
         // Process whole response
         lsq->recvRespBytes += pkt->getSize();
@@ -1535,8 +1634,7 @@ UnsquashableDirectRequest::UnsquashableDirectRequest(
     LSQUnit *port, const DynInstPtr &inst, const Request::Flags &flags_)
     : SingleDataRequest(port, inst, true, 0x0lu, 8, flags_, nullptr, nullptr,
                         nullptr)
-{
-}
+{}
 
 void
 UnsquashableDirectRequest::initiateTranslation()
@@ -1596,7 +1694,7 @@ LSQ::checkStaleTranslations()
 
     DPRINTF(LSQ, "Checking pending TLBI sync\n");
     // Check if all thread queues are complete
-    for (const auto& unit : thread) {
+    for (const auto &unit : thread) {
         if (unit->checkStaleTranslations()) {
             return;
         }
@@ -1605,9 +1703,8 @@ LSQ::checkStaleTranslations()
 
     // All thread queues have committed their sync operations
     // => send a RubyRequest to the sequencer
-    auto req = Request::createMemManagement(
-        Request::TLBI_EXT_SYNC_COMP,
-        cpu->dataRequestorId());
+    auto req = Request::createMemManagement(Request::TLBI_EXT_SYNC_COMP,
+                                            cpu->dataRequestorId());
     req->setExtraData(staleTranslationWaitTxnId);
     PacketPtr pkt = Packet::createRead(req);
 
@@ -1621,7 +1718,7 @@ LSQ::checkStaleTranslations()
 }
 
 Fault
-LSQ::read(LSQRequest* request, ssize_t load_idx)
+LSQ::read(LSQRequest *request, ssize_t load_idx)
 {
     assert(request->req()->contextId() == request->contextId());
     ThreadID tid = cpu->contextToThread(request->req()->contextId());
@@ -1630,7 +1727,7 @@ LSQ::read(LSQRequest* request, ssize_t load_idx)
 }
 
 Fault
-LSQ::write(LSQRequest* request, uint8_t *data, ssize_t store_idx)
+LSQ::write(LSQRequest *request, uint8_t *data, ssize_t store_idx)
 {
     ThreadID tid = cpu->contextToThread(request->req()->contextId());
 

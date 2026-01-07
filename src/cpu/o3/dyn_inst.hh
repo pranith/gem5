@@ -104,7 +104,7 @@ class DynInst : public ExecContext, public RefCounted
     };
 
     static void *operator new(size_t count, Arrays &arrays);
-    static void  operator delete(void* ptr);
+    static void operator delete(void *ptr);
 
     /** BaseDynInst constructor given a binary instruction. */
     DynInst(const Arrays &arrays, const StaticInstPtr &staticInst,
@@ -152,31 +152,31 @@ class DynInst : public ExecContext, public RefCounted
   protected:
     enum Status
     {
-        IqEntry,                 /// Instruction is in the IQ
-        RobEntry,                /// Instruction is in the ROB
-        LsqEntry,                /// Instruction is in the LSQ
-        Completed,               /// Instruction has completed
-        ResultReady,             /// Instruction has its result
-        CanIssue,                /// Instruction can issue and execute
-        Issued,                  /// Instruction has issued
-        Executed,                /// Instruction has executed
-        CanCommit,               /// Instruction can commit
-        AtCommit,                /// Instruction has reached commit
-        Committed,               /// Instruction has committed
-        Squashed,                /// Instruction is squashed
-        SquashedInIQ,            /// Instruction is squashed in the IQ
-        SquashedInLSQ,           /// Instruction is squashed in the LSQ
-        SquashedInROB,           /// Instruction is squashed in the ROB
-        PinnedRegsRenamed,       /// Pinned registers are renamed
-        PinnedRegsWritten,       /// Pinned registers are written back
-        PinnedRegsSquashDone,    /// Regs pinning status updated after squash
-        RecoverInst,             /// Is a recover instruction
-        BlockingInst,            /// Is a blocking instruction
-        ThreadsyncWait,          /// Is a thread synchronization instruction
-        SerializeBefore,         /// Needs to serialize on
-                                 /// instructions ahead of it
-        SerializeAfter,          /// Needs to serialize instructions behind it
-        SerializeHandled,        /// Serialization has been handled
+        IqEntry,              /// Instruction is in the IQ
+        RobEntry,             /// Instruction is in the ROB
+        LsqEntry,             /// Instruction is in the LSQ
+        Completed,            /// Instruction has completed
+        ResultReady,          /// Instruction has its result
+        CanIssue,             /// Instruction can issue and execute
+        Issued,               /// Instruction has issued
+        Executed,             /// Instruction has executed
+        CanCommit,            /// Instruction can commit
+        AtCommit,             /// Instruction has reached commit
+        Committed,            /// Instruction has committed
+        Squashed,             /// Instruction is squashed
+        SquashedInIQ,         /// Instruction is squashed in the IQ
+        SquashedInLSQ,        /// Instruction is squashed in the LSQ
+        SquashedInROB,        /// Instruction is squashed in the ROB
+        PinnedRegsRenamed,    /// Pinned registers are renamed
+        PinnedRegsWritten,    /// Pinned registers are written back
+        PinnedRegsSquashDone, /// Regs pinning status updated after squash
+        RecoverInst,          /// Is a recover instruction
+        BlockingInst,         /// Is a blocking instruction
+        ThreadsyncWait,       /// Is a thread synchronization instruction
+        SerializeBefore,      /// Needs to serialize on
+                              /// instructions ahead of it
+        SerializeAfter,       /// Needs to serialize instructions behind it
+        SerializeHandled,     /// Serialization has been handled
         NumStatus
     };
 
@@ -196,8 +196,8 @@ class DynInst : public ExecContext, public RefCounted
         ReqMade,
         MemOpDone,
         HtmFromTransaction,
-        NoCapableFU,           /// Processor does not have capability to
-                               /// execute the instruction
+        NoCapableFU, /// Processor does not have capability to
+                     /// execute the instruction
         MaxFlags
     };
 
@@ -248,8 +248,16 @@ class DynInst : public ExecContext, public RefCounted
     uint8_t *_readySrcIdx;
 
   public:
-    size_t numSrcs() const { return _numSrcs; }
-    size_t numDests() const { return _numDests; }
+    size_t
+    numSrcs() const
+    {
+        return _numSrcs;
+    }
+    size_t
+    numDests() const
+    {
+        return _numDests;
+    }
 
     // Returns the flattened register index of the idx'th destination
     // register.
@@ -378,19 +386,46 @@ class DynInst : public ExecContext, public RefCounted
 
   public:
     /** Records changes to result? */
-    void recordResult(bool f) { instFlags[RecordResult] = f; }
+    void
+    recordResult(bool f)
+    {
+        instFlags[RecordResult] = f;
+    }
 
     /** Is the effective virtual address valid. */
-    bool effAddrValid() const { return instFlags[EffAddrValid]; }
-    void effAddrValid(bool b) { instFlags[EffAddrValid] = b; }
+    bool
+    effAddrValid() const
+    {
+        return instFlags[EffAddrValid];
+    }
+    void
+    effAddrValid(bool b)
+    {
+        instFlags[EffAddrValid] = b;
+    }
 
     /** Whether or not the memory operation is done. */
-    bool memOpDone() const { return instFlags[MemOpDone]; }
-    void memOpDone(bool f) { instFlags[MemOpDone] = f; }
+    bool
+    memOpDone() const
+    {
+        return instFlags[MemOpDone];
+    }
+    void
+    memOpDone(bool f)
+    {
+        instFlags[MemOpDone] = f;
+    }
 
-    bool notAnInst() const { return instFlags[NotAnInst]; }
-    void setNotAnInst() { instFlags[NotAnInst] = true; }
-
+    bool
+    notAnInst() const
+    {
+        return instFlags[NotAnInst];
+    }
+    void
+    setNotAnInst()
+    {
+        instFlags[NotAnInst] = true;
+    }
 
     ////////////////////////////////////////////
     //
@@ -401,7 +436,7 @@ class DynInst : public ExecContext, public RefCounted
     void demapPage(Addr vaddr, uint64_t asn) override;
 
     Fault initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
-            const std::vector<bool> &byte_enable) override;
+                          const std::vector<bool> &byte_enable) override;
 
     Fault initiateMemMgmtCmd(Request::Flags flags) override;
 
@@ -413,8 +448,16 @@ class DynInst : public ExecContext, public RefCounted
                          AtomicOpFunctorPtr amo_op) override;
 
     /** True if the DTB address translation has started. */
-    bool translationStarted() const { return instFlags[TranslationStarted]; }
-    void translationStarted(bool f) { instFlags[TranslationStarted] = f; }
+    bool
+    translationStarted() const
+    {
+        return instFlags[TranslationStarted];
+    }
+    void
+    translationStarted(bool f)
+    {
+        instFlags[TranslationStarted] = f;
+    }
 
     /** True if the DTB address translation has completed. */
     bool
@@ -422,7 +465,11 @@ class DynInst : public ExecContext, public RefCounted
     {
         return instFlags[TranslationCompleted];
     }
-    void translationCompleted(bool f) { instFlags[TranslationCompleted] = f; }
+    void
+    translationCompleted(bool f)
+    {
+        instFlags[TranslationCompleted] = f;
+    }
 
     /** True if this address was found to match a previous load and they issued
      * out of order. If that happend, then it's only a problem if an incoming
@@ -444,8 +491,16 @@ class DynInst : public ExecContext, public RefCounted
      * If this is true and a older instruction sees it, this instruction must
      * reexecute
      */
-    bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
-    void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
+    bool
+    hitExternalSnoop() const
+    {
+        return instFlags[HitExternalSnoop];
+    }
+    void
+    hitExternalSnoop(bool f)
+    {
+        instFlags[HitExternalSnoop] = f;
+    }
 
     /**
      * Returns true if the DTB address translation is being delayed due to a hw
@@ -471,8 +526,9 @@ class DynInst : public ExecContext, public RefCounted
     {
         renamedDestIdx(idx, renamed_dest);
         prevDestIdx(idx, previous_rename);
-        if (renamed_dest->isPinned())
+        if (renamed_dest->isPinned()) {
             setPinnedRegsRenamed();
+        }
     }
 
     /** Renames a source logical register to the physical register which
@@ -504,22 +560,42 @@ class DynInst : public ExecContext, public RefCounted
     ContextID contextId() const;
 
     /** Returns the fault type. */
-    Fault getFault() const { return fault; }
+    Fault
+    getFault() const
+    {
+        return fault;
+    }
     /** TODO: This I added for the LSQRequest side to be able to modify the
      * fault. There should be a better mechanism in place. */
-    Fault& getFault() { return fault; }
+    Fault &
+    getFault()
+    {
+        return fault;
+    }
 
     /** Checks whether or not this instruction has had its branch target
      *  calculated yet.  For now it is not utilized and is hacked to be
      *  always false.
      *  @todo: Actually use this instruction.
      */
-    bool doneTargCalc() { return false; }
+    bool
+    doneTargCalc()
+    {
+        return false;
+    }
 
     /** Set the predicted target of this current instruction. */
-    void setPredTarg(const PCStateBase &pred_pc) { set(predPC, pred_pc); }
+    void
+    setPredTarg(const PCStateBase &pred_pc)
+    {
+        set(predPC, pred_pc);
+    }
 
-    const PCStateBase &readPredTarg() { return *predPC; }
+    const PCStateBase &
+    readPredTarg()
+    {
+        return *predPC;
+    }
 
     /** Returns whether the instruction was predicted taken or not. */
     bool
@@ -546,26 +622,123 @@ class DynInst : public ExecContext, public RefCounted
     //
     //  Instruction types.  Forward checks to StaticInst object.
     //
-    bool isNop()          const { return staticInst->isNop(); }
-    bool isMemRef()       const { return staticInst->isMemRef(); }
-    bool isLoad()         const { return staticInst->isLoad(); }
-    bool isStore()        const { return staticInst->isStore(); }
-    bool isAtomic()       const { return staticInst->isAtomic(); }
-    bool isStoreConditional() const
-    { return staticInst->isStoreConditional(); }
-    bool isInstPrefetch() const { return staticInst->isInstPrefetch(); }
-    bool isDataPrefetch() const { return staticInst->isDataPrefetch(); }
-    bool isInteger()      const { return staticInst->isInteger(); }
-    bool isFloating()     const { return staticInst->isFloating(); }
-    bool isVector()       const { return staticInst->isVector(); }
-    bool isControl()      const { return staticInst->isControl(); }
-    bool isCall()         const { return staticInst->isCall(); }
-    bool isReturn()       const { return staticInst->isReturn(); }
-    bool isDirectCtrl()   const { return staticInst->isDirectCtrl(); }
-    bool isIndirectCtrl() const { return staticInst->isIndirectCtrl(); }
-    bool isCondCtrl()     const { return staticInst->isCondCtrl(); }
-    bool isUncondCtrl()   const { return staticInst->isUncondCtrl(); }
-    bool isSerializing()  const { return staticInst->isSerializing(); }
+    bool
+    isNop() const
+    {
+        return staticInst->isNop();
+    }
+    bool
+    isMemRef() const
+    {
+        return staticInst->isMemRef();
+    }
+    bool
+    isLoad() const
+    {
+        return staticInst->isLoad();
+    }
+    bool
+    isStore() const
+    {
+        return staticInst->isStore();
+    }
+    bool
+    isAtomic() const
+    {
+        return staticInst->isAtomic();
+    }
+    bool
+    isStoreConditional() const
+    {
+        return staticInst->isStoreConditional();
+    }
+
+    /** Memory ordering version (stub; always returns 0). */
+    uint64_t
+    getMemOrderVersion() const
+    {
+        return 0;
+    }
+
+    /** Whether this load was forwarded via STLF (stub). */
+    bool
+    stlfForwarded() const
+    {
+        return false;
+    }
+
+    /** Version of the store that forwarded this load via STLF (stub). */
+    uint64_t
+    stlfVersion() const
+    {
+        return 0;
+    }
+
+    bool
+    isInstPrefetch() const
+    {
+        return staticInst->isInstPrefetch();
+    }
+    bool
+    isDataPrefetch() const
+    {
+        return staticInst->isDataPrefetch();
+    }
+    bool
+    isInteger() const
+    {
+        return staticInst->isInteger();
+    }
+    bool
+    isFloating() const
+    {
+        return staticInst->isFloating();
+    }
+    bool
+    isVector() const
+    {
+        return staticInst->isVector();
+    }
+    bool
+    isControl() const
+    {
+        return staticInst->isControl();
+    }
+    bool
+    isCall() const
+    {
+        return staticInst->isCall();
+    }
+    bool
+    isReturn() const
+    {
+        return staticInst->isReturn();
+    }
+    bool
+    isDirectCtrl() const
+    {
+        return staticInst->isDirectCtrl();
+    }
+    bool
+    isIndirectCtrl() const
+    {
+        return staticInst->isIndirectCtrl();
+    }
+    bool
+    isCondCtrl() const
+    {
+        return staticInst->isCondCtrl();
+    }
+    bool
+    isUncondCtrl() const
+    {
+        return staticInst->isUncondCtrl();
+    }
+    bool
+    isSerializing() const
+    {
+        return staticInst->isSerializing();
+    }
     bool
     isSerializeBefore() const
     {
@@ -576,24 +749,92 @@ class DynInst : public ExecContext, public RefCounted
     {
         return staticInst->isSerializeAfter() || status[SerializeAfter];
     }
-    bool isSquashAfter() const { return staticInst->isSquashAfter(); }
-    bool isFullMemBarrier()   const { return staticInst->isFullMemBarrier(); }
-    bool isReadBarrier() const { return staticInst->isReadBarrier(); }
-    bool isWriteBarrier() const { return staticInst->isWriteBarrier(); }
-    bool isNonSpeculative() const { return staticInst->isNonSpeculative(); }
-    bool isQuiesce() const { return staticInst->isQuiesce(); }
-    bool isUnverifiable() const { return staticInst->isUnverifiable(); }
-    bool isSyscall() const { return staticInst->isSyscall(); }
-    bool isMacroop() const { return staticInst->isMacroop(); }
-    bool isMicroop() const { return staticInst->isMicroop(); }
-    bool isDelayedCommit() const { return staticInst->isDelayedCommit(); }
-    bool isLastMicroop() const { return staticInst->isLastMicroop(); }
-    bool isFirstMicroop() const { return staticInst->isFirstMicroop(); }
+    bool
+    isSquashAfter() const
+    {
+        return staticInst->isSquashAfter();
+    }
+    bool
+    isFullMemBarrier() const
+    {
+        return staticInst->isFullMemBarrier();
+    }
+    bool
+    isReadBarrier() const
+    {
+        return staticInst->isReadBarrier();
+    }
+    bool
+    isWriteBarrier() const
+    {
+        return staticInst->isWriteBarrier();
+    }
+    bool
+    isNonSpeculative() const
+    {
+        return staticInst->isNonSpeculative();
+    }
+    bool
+    isQuiesce() const
+    {
+        return staticInst->isQuiesce();
+    }
+    bool
+    isUnverifiable() const
+    {
+        return staticInst->isUnverifiable();
+    }
+    bool
+    isSyscall() const
+    {
+        return staticInst->isSyscall();
+    }
+    bool
+    isMacroop() const
+    {
+        return staticInst->isMacroop();
+    }
+    bool
+    isMicroop() const
+    {
+        return staticInst->isMicroop();
+    }
+    bool
+    isDelayedCommit() const
+    {
+        return staticInst->isDelayedCommit();
+    }
+    bool
+    isLastMicroop() const
+    {
+        return staticInst->isLastMicroop();
+    }
+    bool
+    isFirstMicroop() const
+    {
+        return staticInst->isFirstMicroop();
+    }
     // hardware transactional memory
-    bool isHtmStart() const { return staticInst->isHtmStart(); }
-    bool isHtmStop() const { return staticInst->isHtmStop(); }
-    bool isHtmCancel() const { return staticInst->isHtmCancel(); }
-    bool isHtmCmd() const { return staticInst->isHtmCmd(); }
+    bool
+    isHtmStart() const
+    {
+        return staticInst->isHtmStart();
+    }
+    bool
+    isHtmStop() const
+    {
+        return staticInst->isHtmStop();
+    }
+    bool
+    isHtmCancel() const
+    {
+        return staticInst->isHtmCancel();
+    }
+    bool
+    isHtmCmd() const
+    {
+        return staticInst->isHtmCmd();
+    }
 
     uint64_t
     getHtmTransactionUid() const override
@@ -618,10 +859,11 @@ class DynInst : public ExecContext, public RefCounted
     uint64_t
     getHtmTransactionalDepth() const override
     {
-        if (inHtmTransactionalState())
+        if (inHtmTransactionalState()) {
             return htmDepth;
-        else
+        } else {
             return 0;
+        }
     }
 
     void
@@ -637,8 +879,8 @@ class DynInst : public ExecContext, public RefCounted
     {
         if (inHtmTransactionalState()) {
             DPRINTF(HtmCpu,
-                "clearing instuction's transactional state htmUid=%u\n",
-                getHtmTransactionUid());
+                    "clearing instuction's transactional state htmUid=%u\n",
+                    getHtmTransactionUid());
 
             instFlags.reset(HtmFromTransaction);
             htmUid = -1;
@@ -647,35 +889,71 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Temporarily sets this instruction as a serialize before instruction. */
-    void setSerializeBefore() { status.set(SerializeBefore); }
+    void
+    setSerializeBefore()
+    {
+        status.set(SerializeBefore);
+    }
 
     /** Clears the serializeBefore part of this instruction. */
-    void clearSerializeBefore() { status.reset(SerializeBefore); }
+    void
+    clearSerializeBefore()
+    {
+        status.reset(SerializeBefore);
+    }
 
     /** Checks if this serializeBefore is only temporarily set. */
-    bool isTempSerializeBefore() { return status[SerializeBefore]; }
+    bool
+    isTempSerializeBefore()
+    {
+        return status[SerializeBefore];
+    }
 
     /** Temporarily sets this instruction as a serialize after instruction. */
-    void setSerializeAfter() { status.set(SerializeAfter); }
+    void
+    setSerializeAfter()
+    {
+        status.set(SerializeAfter);
+    }
 
     /** Clears the serializeAfter part of this instruction.*/
-    void clearSerializeAfter() { status.reset(SerializeAfter); }
+    void
+    clearSerializeAfter()
+    {
+        status.reset(SerializeAfter);
+    }
 
     /** Checks if this serializeAfter is only temporarily set. */
-    bool isTempSerializeAfter() { return status[SerializeAfter]; }
+    bool
+    isTempSerializeAfter()
+    {
+        return status[SerializeAfter];
+    }
 
     /** Sets the serialization part of this instruction as handled. */
-    void setSerializeHandled() { status.set(SerializeHandled); }
+    void
+    setSerializeHandled()
+    {
+        status.set(SerializeHandled);
+    }
 
     /** Checks if the serialization part of this instruction has been
      *  handled.  This does not apply to the temporary serializing
      *  state; it only applies to this instruction's own permanent
      *  serializing state.
      */
-    bool isSerializeHandled() { return status[SerializeHandled]; }
+    bool
+    isSerializeHandled()
+    {
+        return status[SerializeHandled];
+    }
 
     /** Returns the opclass of this instruction. */
-    OpClass opClass() const { return staticInst->opClass(); }
+    OpClass
+    opClass() const
+    {
+        return staticInst->opClass();
+    }
 
     /** Returns the branch target address. */
     std::unique_ptr<PCStateBase>
@@ -685,10 +963,18 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Returns the number of source registers. */
-    size_t numSrcRegs() const { return numSrcs(); }
+    size_t
+    numSrcRegs() const
+    {
+        return numSrcs();
+    }
 
     /** Returns the number of destination registers. */
-    size_t numDestRegs() const { return numDests(); }
+    size_t
+    numDestRegs() const
+    {
+        return numDests();
+    }
 
     size_t
     numDestRegs(RegClassType type) const
@@ -697,19 +983,31 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Returns the logical register index of the i'th destination register. */
-    const RegId& destRegIdx(int i) const { return staticInst->destRegIdx(i); }
+    const RegId &
+    destRegIdx(int i) const
+    {
+        return staticInst->destRegIdx(i);
+    }
 
     /** Returns the logical register index of the i'th source register. */
-    const RegId& srcRegIdx(int i) const { return staticInst->srcRegIdx(i); }
+    const RegId &
+    srcRegIdx(int i) const
+    {
+        return staticInst->srcRegIdx(i);
+    }
 
     /** Return the size of the instResult queue. */
-    uint8_t resultSize() { return instResult.size(); }
+    uint8_t
+    resultSize()
+    {
+        return instResult.size();
+    }
 
     /** Pops a result off the instResult queue.
      * If the result stack is empty, return the default value.
      * */
     InstResult
-    popResult(InstResult dflt=InstResult())
+    popResult(InstResult dflt = InstResult())
     {
         if (!instResult.empty()) {
             InstResult t = instResult.front();
@@ -721,7 +1019,7 @@ class DynInst : public ExecContext, public RefCounted
 
     /** Pushes a result onto the instResult queue. */
     /** @{ */
-    template<typename T>
+    template <typename T>
     void
     setResult(const RegClass &reg_class, T &&t)
     {
@@ -738,67 +1036,147 @@ class DynInst : public ExecContext, public RefCounted
     void markSrcRegReady(RegIndex src_idx);
 
     /** Sets this instruction as completed. */
-    void setCompleted() { status.set(Completed); }
+    void
+    setCompleted()
+    {
+        status.set(Completed);
+    }
 
     /** Returns whether or not this instruction is completed. */
-    bool isCompleted() const { return status[Completed]; }
+    bool
+    isCompleted() const
+    {
+        return status[Completed];
+    }
 
     /** Marks the result as ready. */
-    void setResultReady() { status.set(ResultReady); }
+    void
+    setResultReady()
+    {
+        status.set(ResultReady);
+    }
 
     /** Returns whether or not the result is ready. */
-    bool isResultReady() const { return status[ResultReady]; }
+    bool
+    isResultReady() const
+    {
+        return status[ResultReady];
+    }
 
     /** Sets this instruction as ready to issue. */
-    void setCanIssue() { status.set(CanIssue); }
+    void
+    setCanIssue()
+    {
+        status.set(CanIssue);
+    }
 
     /** Returns whether or not this instruction is ready to issue. */
-    bool readyToIssue() const { return status[CanIssue]; }
+    bool
+    readyToIssue() const
+    {
+        return status[CanIssue];
+    }
 
     /** Clears this instruction being able to issue. */
-    void clearCanIssue() { status.reset(CanIssue); }
+    void
+    clearCanIssue()
+    {
+        status.reset(CanIssue);
+    }
 
     /** Sets this instruction as issued from the IQ. */
-    void setIssued() { status.set(Issued); }
+    void
+    setIssued()
+    {
+        status.set(Issued);
+    }
 
     /** Returns whether or not this instruction has issued. */
-    bool isIssued() const { return status[Issued]; }
+    bool
+    isIssued() const
+    {
+        return status[Issued];
+    }
 
     /** Clears this instruction as being issued. */
-    void clearIssued() { status.reset(Issued); }
+    void
+    clearIssued()
+    {
+        status.reset(Issued);
+    }
 
     /** Sets this instruction as executed. */
-    void setExecuted() { status.set(Executed); }
+    void
+    setExecuted()
+    {
+        status.set(Executed);
+    }
 
     /** Returns whether or not this instruction has executed. */
-    bool isExecuted() const { return status[Executed]; }
+    bool
+    isExecuted() const
+    {
+        return status[Executed];
+    }
 
     /** Sets this instruction as ready to commit. */
-    void setCanCommit() { status.set(CanCommit); }
+    void
+    setCanCommit()
+    {
+        status.set(CanCommit);
+    }
 
     /** Clears this instruction as being ready to commit. */
-    void clearCanCommit() { status.reset(CanCommit); }
+    void
+    clearCanCommit()
+    {
+        status.reset(CanCommit);
+    }
 
     /** Returns whether or not this instruction is ready to commit. */
-    bool readyToCommit() const { return status[CanCommit]; }
+    bool
+    readyToCommit() const
+    {
+        return status[CanCommit];
+    }
 
-    void setAtCommit() { status.set(AtCommit); }
+    void
+    setAtCommit()
+    {
+        status.set(AtCommit);
+    }
 
-    bool isAtCommit() { return status[AtCommit]; }
+    bool
+    isAtCommit()
+    {
+        return status[AtCommit];
+    }
 
     /** Sets this instruction as committed. */
-    void setCommitted() { status.set(Committed); }
+    void
+    setCommitted()
+    {
+        status.set(Committed);
+    }
 
     /** Returns whether or not this instruction is committed. */
-    bool isCommitted() const { return status[Committed]; }
+    bool
+    isCommitted() const
+    {
+        return status[Committed];
+    }
 
     /** Sets this instruction as squashed. */
     void setSquashed();
 
     /** Returns whether or not this instruction is squashed. */
-    bool isSquashed() const { return status[Squashed]; }
+    bool
+    isSquashed() const
+    {
+        return status[Squashed];
+    }
 
-    //Instruction Queue Entry
+    // Instruction Queue Entry
     //-----------------------
     /** Sets this instruction as a entry the IQ. */
     void setInIQ(IQUnit *_iq);
@@ -807,64 +1185,129 @@ class DynInst : public ExecContext, public RefCounted
     void clearInIQ();
 
     /** Returns whether or not this instruction has issued. */
-    bool isInIQ() const { return status[IqEntry]; }
+    bool
+    isInIQ() const
+    {
+        return status[IqEntry];
+    }
 
     /** Sets this instruction as squashed in the IQ. */
-    void setSquashedInIQ() { status.set(SquashedInIQ); status.set(Squashed);}
+    void
+    setSquashedInIQ()
+    {
+        status.set(SquashedInIQ);
+        status.set(Squashed);
+    }
 
     /** Returns whether or not this instruction is squashed in the IQ. */
-    bool isSquashedInIQ() const { return status[SquashedInIQ]; }
+    bool
+    isSquashedInIQ() const
+    {
+        return status[SquashedInIQ];
+    }
 
     /** Pointer to the IQ storing the instruction */
     IQUnit *iq = nullptr;
 
-    //Load / Store Queue Functions
+    // Load / Store Queue Functions
     //-----------------------
     /** Sets this instruction as a entry the LSQ. */
-    void setInLSQ() { status.set(LsqEntry); }
+    void
+    setInLSQ()
+    {
+        status.set(LsqEntry);
+    }
 
     /** Sets this instruction as a entry the LSQ. */
-    void removeInLSQ() { status.reset(LsqEntry); }
+    void
+    removeInLSQ()
+    {
+        status.reset(LsqEntry);
+    }
 
     /** Returns whether or not this instruction is in the LSQ. */
-    bool isInLSQ() const { return status[LsqEntry]; }
+    bool
+    isInLSQ() const
+    {
+        return status[LsqEntry];
+    }
 
     /** Sets this instruction as squashed in the LSQ. */
-    void setSquashedInLSQ() { status.set(SquashedInLSQ); status.set(Squashed);}
+    void
+    setSquashedInLSQ()
+    {
+        status.set(SquashedInLSQ);
+        status.set(Squashed);
+    }
 
     /** Returns whether or not this instruction is squashed in the LSQ. */
-    bool isSquashedInLSQ() const { return status[SquashedInLSQ]; }
+    bool
+    isSquashedInLSQ() const
+    {
+        return status[SquashedInLSQ];
+    }
 
-
-    //Reorder Buffer Functions
+    // Reorder Buffer Functions
     //-----------------------
     /** Sets this instruction as a entry the ROB. */
-    void setInROB() { status.set(RobEntry); }
+    void
+    setInROB()
+    {
+        status.set(RobEntry);
+    }
 
     /** Sets this instruction as a entry the ROB. */
-    void clearInROB() { status.reset(RobEntry); }
+    void
+    clearInROB()
+    {
+        status.reset(RobEntry);
+    }
 
     /** Returns whether or not this instruction is in the ROB. */
-    bool isInROB() const { return status[RobEntry]; }
+    bool
+    isInROB() const
+    {
+        return status[RobEntry];
+    }
 
     /** Sets this instruction as squashed in the ROB. */
-    void setSquashedInROB() { status.set(SquashedInROB); }
+    void
+    setSquashedInROB()
+    {
+        status.set(SquashedInROB);
+    }
 
     /** Returns whether or not this instruction is squashed in the ROB. */
-    bool isSquashedInROB() const { return status[SquashedInROB]; }
+    bool
+    isSquashedInROB() const
+    {
+        return status[SquashedInROB];
+    }
 
     /** Mark this instruction as having attempted to execute
      * but CPU did not have a capable functional unit.
      */
-    void setNoCapableFU() { instFlags.set(NoCapableFU); }
+    void
+    setNoCapableFU()
+    {
+        instFlags.set(NoCapableFU);
+    }
 
     /** Returns whether or not this instruction attempted
      * to execute and found not capable FU.
      */
-    bool noCapableFU() const { return instFlags[NoCapableFU]; }
+    bool
+    noCapableFU() const
+    {
+        return instFlags[NoCapableFU];
+    }
 
     /** Returns whether pinned registers are renamed */
-    bool isPinnedRegsRenamed() const { return status[PinnedRegsRenamed]; }
+    bool
+    isPinnedRegsRenamed() const
+    {
+        return status[PinnedRegsRenamed];
+    }
 
     /** Sets the destination registers as renamed */
     void
@@ -876,7 +1319,11 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Returns whether destination registers are written */
-    bool isPinnedRegsWritten() const { return status[PinnedRegsWritten]; }
+    bool
+    isPinnedRegsWritten() const
+    {
+        return status[PinnedRegsWritten];
+    }
 
     /** Sets destination registers as written */
     void
@@ -910,9 +1357,17 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Set the PC state of this instruction. */
-    void pcState(const PCStateBase &val) override { set(pc, val); }
+    void
+    pcState(const PCStateBase &val) override
+    {
+        set(pc, val);
+    }
 
-    bool readPredicate() const override { return instFlags[Predicate]; }
+    bool
+    readPredicate() const override
+    {
+        return instFlags[Predicate];
+    }
 
     void
     setPredicate(bool val) override
@@ -937,29 +1392,61 @@ class DynInst : public ExecContext, public RefCounted
     }
 
     /** Sets the thread id. */
-    void setTid(ThreadID tid) { threadNumber = tid; }
+    void
+    setTid(ThreadID tid)
+    {
+        threadNumber = tid;
+    }
 
     /** Sets the pointer to the thread state. */
-    void setThreadState(ThreadState *state) { thread = state; }
+    void
+    setThreadState(ThreadState *state)
+    {
+        thread = state;
+    }
 
     /** Returns the thread context. */
     gem5::ThreadContext *tcBase() const override;
 
   public:
     /** Is this instruction's memory access strictly ordered? */
-    bool strictlyOrdered() const { return instFlags[IsStrictlyOrdered]; }
-    void strictlyOrdered(bool so) { instFlags[IsStrictlyOrdered] = so; }
+    bool
+    strictlyOrdered() const
+    {
+        return instFlags[IsStrictlyOrdered];
+    }
+    void
+    strictlyOrdered(bool so)
+    {
+        instFlags[IsStrictlyOrdered] = so;
+    }
 
     /** Has this instruction generated a memory request. */
-    bool hasRequest() const { return instFlags[ReqMade]; }
+    bool
+    hasRequest() const
+    {
+        return instFlags[ReqMade];
+    }
     /** Assert this instruction has generated a memory request. */
-    void setRequest() { instFlags[ReqMade] = true; }
+    void
+    setRequest()
+    {
+        instFlags[ReqMade] = true;
+    }
 
     /** Returns iterator to this instruction in the list of all insts. */
-    ListIt &getInstListIt() { return instListIt; }
+    ListIt &
+    getInstListIt()
+    {
+        return instListIt;
+    }
 
     /** Sets iterator for this instruction in the list of all insts. */
-    void setInstListIt(ListIt _instListIt) { instListIt = _instListIt; }
+    void
+    setInstListIt(ListIt _instListIt)
+    {
+        instListIt = _instListIt;
+    }
 
   public:
     /** Returns the number of consecutive store conditional failures. */
@@ -984,9 +1471,9 @@ class DynInst : public ExecContext, public RefCounted
     // Value -1 indicates that particular phase
     // hasn't happened (yet).
     /** Tick records used for the pipeline activity viewer. */
-    Tick fetchTick = -1;      // instruction fetch is completed.
-    int32_t decodeTick = -1;  // instruction enters decode phase
-    int32_t renameTick = -1;  // instruction enters rename phase
+    Tick fetchTick = -1;        // instruction fetch is completed.
+    int32_t decodeTick = -1;    // instruction enters decode phase
+    int32_t renameTick = -1;    // instruction enters rename phase
     int32_t renameEndTick = -1; // instruction exits rename phase
     int32_t dispatchTick = -1;
     int32_t issueTick = -1;
@@ -1026,7 +1513,6 @@ class DynInst : public ExecContext, public RefCounted
     void trap(const Fault &fault);
 
   public:
-
     // The register accessor methods provide the index of the
     // instruction's operand (e.g., 0 or 1), not the architectural
     // register index, to simplify the implementation of register

@@ -222,10 +222,42 @@ class IEW
     void deactivateStage();
 
     /** Returns if the LSQ has any stores to writeback. */
-    bool hasStoresToWB() { return ldstQueue.hasStoresToWB(); }
+    bool
+    hasStoresToWB()
+    {
+        return ldstQueue.hasStoresToWB();
+    }
 
     /** Returns if the LSQ has any stores to writeback. */
-    bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
+    bool
+    hasStoresToWB(ThreadID tid)
+    {
+        return ldstQueue.hasStoresToWB(tid);
+    }
+
+    /** Mark the merge buffer entries for drain */
+    void
+    forceMBDrain(ThreadID tid)
+    {
+        return ldstQueue.forceMBDrain(tid);
+    }
+
+    /** Marks loads younger than barrier_sn that hit external snoops. */
+    unsigned
+    markLoadsHitExternalSnoopAfter(ThreadID tid, const InstSeqNum &barrier_sn)
+    {
+        return ldstQueue.markLoadsHitExternalSnoopAfter(tid, barrier_sn);
+    }
+
+    /** Marks acquire loads younger than barrier_sn that hit external
+     * snoops. */
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                          const InstSeqNum &barrier_sn)
+    {
+        return ldstQueue.markAcquireLoadsHitExternalSnoopAfter(tid,
+                                                               barrier_sn);
+    }
 
     /** Check misprediction  */
     void checkMisprediction(const DynInstPtr &inst);
@@ -235,7 +267,8 @@ class IEW
     // htmUid that has been committed (architecturally, not transactionally)
     // to ensure that the core and the memory subsystem are observing
     // correct ordering constraints.
-    void setLastRetiredHtmUid(ThreadID tid, uint64_t htmUid)
+    void
+    setLastRetiredHtmUid(ThreadID tid, uint64_t htmUid)
     {
         ldstQueue.setLastRetiredHtmUid(tid, htmUid);
     }
@@ -287,7 +320,8 @@ class IEW
     /** Removes instructions from rename from a thread's instruction list. */
     void emptyRenameInsts(ThreadID tid);
 
-    /** Sorts instructions coming from rename into lists separated by thread. */
+    /** Sorts instructions coming from rename into lists separated by thread.
+     */
     void sortInsts();
 
   public:
@@ -340,7 +374,7 @@ class IEW
     std::queue<DynInstPtr> skidBuffer[MaxThreads];
 
     /** Scoreboard pointer. */
-    Scoreboard* scoreboard;
+    Scoreboard *scoreboard;
 
   private:
     /** CPU pointer. */
@@ -417,7 +451,6 @@ class IEW
 
     /** Maximum size of the skid buffer. */
     unsigned skidBufferMax;
-
 
     struct IEWStats : public statistics::Group
     {

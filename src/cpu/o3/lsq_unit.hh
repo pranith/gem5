@@ -43,6 +43,10 @@
 #define __CPU_O3_LSQ_UNIT_HH__
 
 #include <cstring>
+#include <list>
+#include <map>
+#include <memory>
+#include <queue>
 
 #include "arch/generic/debugfaults.hh"
 #include "arch/generic/vec_reg.hh"
@@ -94,27 +98,41 @@ class LSQEntry
 
     LSQRequest *
     request()
-    { return _request; }
+    {
+        return _request;
+    }
     void
     setRequest(LSQRequest *r)
-    { _request = r; }
+    {
+        _request = r;
+    }
     bool
     hasRequest()
-    { return _request != nullptr; }
+    {
+        return _request != nullptr;
+    }
     /** Member accessors. */
     /** @{ */
     bool
     valid() const
-    { return _valid; }
+    {
+        return _valid;
+    }
     uint32_t &
     size()
-    { return _size; }
+    {
+        return _size;
+    }
     const uint32_t &
     size() const
-    { return _size; }
+    {
+        return _size;
+    }
     const DynInstPtr &
     instruction() const
-    { return _inst; }
+    {
+        return _inst;
+    }
     /** @} */
 };
 
@@ -148,34 +166,54 @@ class SQEntry : public LSQEntry
     /** @{ */
     bool &
     canWB()
-    { return _canWB; }
+    {
+        return _canWB;
+    }
     const bool &
     canWB() const
-    { return _canWB; }
+    {
+        return _canWB;
+    }
     bool &
     completed()
-    { return _completed; }
+    {
+        return _completed;
+    }
     const bool &
     completed() const
-    { return _completed; }
+    {
+        return _completed;
+    }
     bool &
     committed()
-    { return _committed; }
+    {
+        return _committed;
+    }
     const bool &
     committed() const
-    { return _committed; }
+    {
+        return _committed;
+    }
     bool &
     isAllZeros()
-    { return _isAllZeros; }
+    {
+        return _isAllZeros;
+    }
     const bool &
     isAllZeros() const
-    { return _isAllZeros; }
+    {
+        return _isAllZeros;
+    }
     char *
     data()
-    { return _data; }
+    {
+        return _data;
+    }
     const char *
     data() const
-    { return _data; }
+    {
+        return _data;
+    }
     /** @} */
 };
 
@@ -202,13 +240,147 @@ class LSQUnit
   public:
     static constexpr auto MaxDataBytes = MaxVecRegLenInBytes;
 
-  private:
+  public:
     /** Coverage of one address range with another */
     enum class AddrRangeCoverage
     {
         PartialAddrRangeCoverage, /* Two ranges partly overlap */
-        FullAddrRangeCoverage, /* One range fully covers another */
-        NoAddrRangeCoverage /* Two ranges are disjoint */
+        FullAddrRangeCoverage,    /* One range fully covers another */
+        NoAddrRangeCoverage       /* Two ranges are disjoint */
+    };
+
+    class MergeBuffer
+    {
+      public:
+        enum class EntryState
+        {
+            MERGING,
+            RETIRED,
+            DRAINING,
+            FORCE_RETIRED
+        };
+
+        struct MergeBufferEntry
+        {
+            Addr blockAddr;
+            uint64_t version = 0;
+            std::vector<bool> byteValids;
+            std::vector<uint8_t> blockData;
+            EntryState state;
+            RequestPtr baseReq;
+            Cycles retireCycle;
+            Cycles allocCycle;
+            unsigned unretireCount;
+            bool valid;
+            bool isAtomic = false;
+            LSQRequest *atomicReq = nullptr;
+            bool isRelease = false;
+            std::vector<bool> waitBits;
+
+            MergeBufferEntry(size_t size)
+                : byteValids(size, false),
+                  blockData(size, 0),
+                  state(EntryState::MERGING),
+                  retireCycle(0),
+                  allocCycle(0),
+                  unretireCount(0),
+                  valid(false)
+            {}
+        };
+
+      private:
+        size_t lineSize;
+        size_t numEntries;
+        Cycles retireWindow;
+        unsigned maxUnretire;
+
+        std::list<MergeBufferEntry> entries;
+
+        /** Version count tracking for versioning support (stub; always empty).
+         */
+        std::deque<std::pair<uint64_t, size_t>> versionCounts;
+
+        LSQUnit *lsqPtr;
+        bool resetRetireOnMerge;
+        Cycles resetRetireWindow;
+
+      public:
+        MergeBuffer() {}
+
+        void
+        init(LSQUnit *lsq_ptr, size_t num_entries, size_t line_size,
+             Cycles retire_window, bool reset_on_merge, Cycles reset_window,
+             unsigned max_unretire)
+        {
+            lsqPtr = lsq_ptr;
+            numEntries = num_entries;
+            lineSize = line_size;
+            retireWindow = retire_window;
+            resetRetireOnMerge = reset_on_merge;
+            resetRetireWindow = reset_window;
+            maxUnretire = max_unretire;
+        }
+
+        MergeBufferEntry *addStore(Cycles now, Addr addr, uint8_t *data,
+                                   size_t size,
+                                   typename StoreQueue::iterator store_it,
+                                   bool is_all_zero);
+        MergeBufferEntry *addAtomic(Cycles now, LSQRequest *request,
+                                    typename StoreQueue::iterator store_it,
+                                    uint64_t version);
+        void updateRetiredEntries(Cycles now);
+        bool drainOne(LSQUnit *lsq_ptr);
+        void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
+        void forceRetireAll();
+        void forceRetireVersionsBefore(uint64_t version);
+        /** Returns a vector of valid bits (stub; returns empty). */
+        std::vector<bool>
+        validVector() const
+        {
+            return std::vector<bool>(numEntries, false);
+        }
+        std::optional<uint64_t> youngestVersion() const;
+        std::optional<uint64_t> oldestVersion() const;
+        void dumpWaitBits() const;
+        size_t indexOf(const MergeBufferEntry *entry) const;
+        void
+        reset()
+        {
+            entries.clear();
+        }
+        bool canAcceptSplitStore(LSQRequest *request, uint64_t version,
+                                 bool &mb_full) const;
+        bool canForward(Addr paddr, size_t size) const;
+        bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
+        AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        bool
+        isEmpty() const
+        {
+            return entries.size() == 0;
+        }
+        bool
+        isFull() const
+        {
+            return entries.size() == numEntries;
+        }
+
+        std::string
+        name() const
+        {
+            return lsqPtr->name() + ".mb";
+        }
+
+      private:
+        void
+        updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
+                    size_t size, bool is_all_zero)
+        {
+            for (size_t i = 0; i < size; i++) {
+                uint8_t byte = is_all_zero ? 0 : data[i];
+                entry.blockData[offset + i] = byte;
+                entry.byteValids[offset + i] = true;
+            }
+        }
     };
 
   public:
@@ -223,7 +395,7 @@ class LSQUnit
 
     /** Initializes the LSQ unit with the specified number of entries. */
     void init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
-            LSQ *lsq_ptr, unsigned id);
+              LSQ *lsq_ptr, unsigned id);
 
     /** Returns the name of the LSQ unit. */
     std::string name() const;
@@ -250,8 +422,8 @@ class LSQUnit
      * @param load_idx index to start checking at
      * @param inst the instruction to check
      */
-    Fault checkViolations(typename LoadQueue::iterator& loadIt,
-            const DynInstPtr& inst);
+    Fault checkViolations(typename LoadQueue::iterator &loadIt,
+                          const DynInstPtr &inst);
 
     /** Check if an incoming invalidate hits in the lsq on a load
      * that might have issued out of order wrt another load beacuse
@@ -262,7 +434,12 @@ class LSQUnit
     /** Executes a load instruction. */
     Fault executeLoad(const DynInstPtr &inst);
 
-    Fault executeLoad(int lq_idx) { panic("Not implemented"); return NoFault; }
+    Fault
+    executeLoad(int lq_idx)
+    {
+        panic("Not implemented");
+        return NoFault;
+    }
     /** Executes a store instruction. */
     Fault executeStore(const DynInstPtr &inst);
 
@@ -303,10 +480,18 @@ class LSQUnit
     unsigned numFreeStoreEntries();
 
     /** Returns the number of loads in the LQ. */
-    int numLoads() { return loadQueue.size(); }
+    int
+    numLoads()
+    {
+        return loadQueue.size();
+    }
 
     /** Returns the number of stores in the SQ. */
-    int numStores() { return storeQueue.size(); }
+    int
+    numStores()
+    {
+        return storeQueue.size();
+    }
 
     /** Returns the current occupancy of the passed
      * queue (store queue or load queue) */
@@ -319,9 +504,21 @@ class LSQUnit
     }
 
     // hardware transactional memory
-    int numHtmStarts() const { return htmStarts; }
-    int numHtmStops() const { return htmStops; }
-    void resetHtmStartsStops() { htmStarts = htmStops = 0; }
+    int
+    numHtmStarts() const
+    {
+        return htmStarts;
+    }
+    int
+    numHtmStops() const
+    {
+        return htmStops;
+    }
+    void
+    resetHtmStartsStops()
+    {
+        htmStarts = htmStops = 0;
+    }
     uint64_t getLatestHtmUid() const;
     void
     setLastRetiredHtmUid(uint64_t htm_uid)
@@ -335,47 +532,115 @@ class LSQUnit
     bool checkStaleTranslations() const;
 
     /** Returns if either the LQ or SQ is full. */
-    bool isFull() { return lqFull() || sqFull(); }
+    bool
+    isFull()
+    {
+        return lqFull() || sqFull();
+    }
 
     /** Returns if both the LQ and SQ are empty. */
-    bool isEmpty() const { return lqEmpty() && sqEmpty(); }
+    bool
+    isEmpty() const
+    {
+        return lqEmpty() && sqEmpty();
+    }
 
     /** Returns if the LQ is full. */
-    bool lqFull() { return loadQueue.full(); }
+    bool
+    lqFull()
+    {
+        return loadQueue.full();
+    }
 
     /** Returns if the SQ is full. */
-    bool sqFull() { return storeQueue.full(); }
+    bool
+    sqFull()
+    {
+        return storeQueue.full();
+    }
 
     /** Returns if the LQ is empty. */
-    bool lqEmpty() const { return loadQueue.size() == 0; }
+    bool
+    lqEmpty() const
+    {
+        return loadQueue.size() == 0;
+    }
 
     /** Returns if the SQ is empty. */
-    bool sqEmpty() const { return storeQueue.size() == 0; }
+    bool
+    sqEmpty() const
+    {
+        return storeQueue.size() == 0;
+    }
+
+    /** Returns if the SQ is empty. */
+    bool
+    mbEmpty() const
+    {
+        return mergeBuffer.isEmpty();
+    }
 
     /** Returns the number of instructions in the LSQ. */
-    unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
+    unsigned
+    getCount()
+    {
+        return loadQueue.size() + storeQueue.size();
+    }
 
     /** Returns if there are any stores to writeback. */
-    bool hasStoresToWB() { return storesToWB; }
+    bool
+    hasStoresToWB()
+    {
+        return !mbEmpty() || (storesToWB > 0);
+    }
+
+    /** Advance merge buffer retirement independent of store writeback. */
+    void updateMergeBufferRetire();
 
     /** Returns the number of stores to writeback. */
-    int numStoresToWB() { return storesToWB; }
+    int
+    numStoresToWB()
+    {
+        return storesToWB;
+    }
 
     /** Returns if the LSQ unit will writeback on this cycle. */
     bool
     willWB()
     {
-        return storeWBIt.dereferenceable() &&
-                        storeWBIt->valid() &&
-                        storeWBIt->canWB() &&
-                        !storeWBIt->completed() &&
-                        !isStoreBlocked;
+        return storeWBIt.dereferenceable() && storeWBIt->valid() &&
+               storeWBIt->canWB() && !storeWBIt->completed() &&
+               !isStoreBlocked;
     }
+
+    /** Marks loads younger than barrier_sn that hit external snoops for
+     * re-execution. Returns the number of loads marked. */
+    unsigned markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+
+    /** Marks acquire loads younger than barrier_sn that hit external snoops
+     * for re-execution. Returns the number of loads marked. */
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+
+    /** Marks loads with version > version that hit external snoops for
+     * re-execution. Returns the number of loads marked. */
+    unsigned markLoadsHitExternalSnoop(uint64_t version);
 
     /** Handles doing the retry. */
     void recvRetry();
 
+    /** Forces merge buffer drain. */
+    void
+    forceMBDrain()
+    {
+        mergeBuffer.forceRetireAll();
+    }
+
+    /** Handles merge buffer drain completion. */
+    void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
+
     unsigned int cacheLineSize();
+
   private:
     /** Reset the LSQ state */
     void resetState();
@@ -399,12 +664,11 @@ class LSQUnit
      */
     bool trySendPacket(bool isLoad, PacketPtr data_pkt);
 
-
     /** Debugging function to dump instructions in the LSQ. */
     void dumpInsts() const;
 
     /** Schedule event for the cpu. */
-    void schedule(Event& ev, Tick when);
+    void schedule(Event &ev, Tick when);
 
     BaseMMU *getMMUPtr();
 
@@ -427,7 +691,7 @@ class LSQUnit
       public:
         /** Constructs a writeback event. */
         WritebackEvent(const DynInstPtr &_inst, PacketPtr pkt,
-                LSQUnit *lsq_ptr);
+                       LSQUnit *lsq_ptr);
 
         /** Processes the writeback event. */
         void process();
@@ -447,6 +711,25 @@ class LSQUnit
     };
 
   public:
+    /** Sender state used for merge buffer drain packets. */
+    struct MergeBufferDrainSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        MergeBufferDrainSenderState(MergeBuffer::MergeBufferEntry *e,
+                                    LSQUnit *unit)
+            : entry(e), lsqUnit(unit)
+        {}
+    };
+
+    /** Sender state for merge buffer prefetches. */
+    struct MergeBufferPrefetchSenderState : public Packet::SenderState
+    {
+        LSQUnit *lsqUnit;
+        MergeBufferPrefetchSenderState(LSQUnit *unit) : lsqUnit(unit) {}
+    };
+
+  public:
     /**
      * Handles writing back and completing the load or store that has
      * returned from memory.
@@ -458,12 +741,21 @@ class LSQUnit
   private:
     /** The LSQUnit thread id. */
     ThreadID lsqID;
+
   public:
     /** The store queue. */
     StoreQueue storeQueue;
 
     /** The load queue. */
     LoadQueue loadQueue;
+
+    /** The merge buffer. */
+    MergeBuffer mergeBuffer;
+
+    /** Max store queue deallocations per cycle. */
+    unsigned storeDeallocateWidth;
+    unsigned storeDeallocsThisCycle;
+    Cycles lastStoreDeallocCycle;
 
   private:
     /** The number of places to shift addresses in the LSQ before checking
@@ -473,6 +765,15 @@ class LSQUnit
 
     /** Should loads be checked for dependency issues */
     bool checkLoads;
+
+    /** Use a merge buffer that stores move to from the SQ */
+    bool mergeBufferEnabled;
+    /** Prefetch on merge buffer allocation to accelerate draining. */
+    bool mergeBufferPrefetchEnabled;
+    /** Limit outstanding merge buffer prefetches. */
+    unsigned mergeBufferPfInFlight;
+    /** Optimize store-release by tracking release entries in MB. */
+    bool optimizeStoreRelease = false;
 
     /** The number of store instructions in the SQ waiting to writeback. */
     int storesToWB;
@@ -501,6 +802,10 @@ class LSQUnit
      * forwarding.
      */
     InstSeqNum stallingStoreIsn;
+    /** The MB entry that causes the stall due to partial store to load
+     * forwarding.
+     */
+    Addr stallingMBAddr;
     /** The index of the above store. */
     ssize_t stallingLoadIdx;
 
@@ -540,11 +845,22 @@ class LSQUnit
         /** Tota number of memory ordering violations. */
         statistics::Scalar memOrderViolation;
 
+        /** Number of possible consistency violations detected. */
+        statistics::Scalar possibleConsistencyViolation;
+
         /** Total number of squashed stores. */
         statistics::Scalar squashedStores;
 
         /** Number of loads that were rescheduled. */
         statistics::Scalar rescheduledLoads;
+
+        /** Number of loads rescheduled due to partial store-queue forwarding.
+         */
+        statistics::Scalar sqPartialFwdRescheduledLoads;
+
+        /** Number of loads rescheduled due to partial merge-buffer forwarding.
+         */
+        statistics::Scalar mbPartialFwdRescheduledLoads;
 
         /** Number of times the LSQ is blocked due to the cache. */
         statistics::Scalar blockedByCache;
@@ -560,9 +876,44 @@ class LSQUnit
         statistics::Average lqAvgOccupancy;
         /** SQ Occupancy */
         statistics::Average sqAvgOccupancy;
+        /** Merge buffer allocations of new entries */
+        statistics::Scalar mbAllocations;
+        /** Merge buffer merges into existing entries */
+        statistics::Scalar mbMerges;
+        /** Merge buffer entries retired */
+        statistics::Scalar mbRetired;
+        /** Merge buffer drains issued */
+        statistics::Scalar mbDrains;
+        /** Merge buffer unretire count */
+        statistics::Scalar mbUnretire;
+        /** Merge buffer forwards to loads */
+        statistics::Scalar mbForwards;
+        /** Stores blocked from dealloc because merge buffer is full. */
+        statistics::Scalar mbFullStoreDeallocStalls;
+        /** Older-version MB entries force retired for same block address. */
+        statistics::Scalar mbForceRetiresOlderVersion;
+        /** Average merge buffer occupancy (valid entries / total). */
+        statistics::Average mbAvgOccupancy;
+        /** Total cycles entries reside in the merge buffer. */
+        statistics::Scalar mbResidencyCycles;
+        /** Number of cycles store WB/dealloc stalled by a barrier at the head.
+         */
+        statistics::Scalar barrierSqStallCycles;
+        /** Sum of SQ occupancy during barrier-induced stall cycles. */
+        statistics::Scalar barrierSqStallOccupancy;
+        /** Cycles release MB entries waited on outstanding bytes. */
+        statistics::Scalar mbReleaseWaitCycles;
+        /** Cycles loads waited on older MB versions. */
+        statistics::Scalar mbVersionLoadStallCycles;
+        /** Instructions rescheduled/replayed due to barrier handling in LSQ.
+         */
+        statistics::Scalar barrierReschedulesLSQ;
     } stats;
 
   public:
+    /** Whether to retire merge buffer entries immediately when fully valid. */
+    bool mbRetireWhenFullValid = false;
+
     /** Executes the load at the given index. */
     Fault read(LSQRequest *request, ssize_t load_idx);
 
@@ -570,20 +921,30 @@ class LSQUnit
     Fault write(LSQRequest *requst, uint8_t *data, ssize_t store_idx);
 
     /** Returns the index of the head load instruction. */
-    int getLoadHead() { return loadQueue.head(); }
+    int
+    getLoadHead()
+    {
+        return loadQueue.head();
+    }
 
     /** Returns the sequence number of the head load instruction. */
     InstSeqNum getLoadHeadSeqNum();
 
     /** Returns the index of the head store instruction. */
-    int getStoreHead() { return storeQueue.head(); }
+    int
+    getStoreHead()
+    {
+        return storeQueue.head();
+    }
     /** Returns the sequence number of the head store instruction. */
     InstSeqNum getStoreHeadSeqNum();
 
     /** Returns whether or not the LSQ unit is stalled. */
     bool
     isStalled()
-    { return stalled; }
+    {
+        return stalled;
+    }
 };
 
 } // namespace o3

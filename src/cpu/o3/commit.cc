@@ -185,7 +185,11 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
       ADD_STAT(committedInstType, statistics::units::Count::get(),
                "Class of committed instruction"),
       ADD_STAT(commitEligibleSamples, statistics::units::Cycle::get(),
-               "number cycles where commit BW limit reached")
+               "number cycles where commit BW limit reached"),
+      ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
+               "Barriers at ROB head not yet executed"),
+      ADD_STAT(commitBarrierDrainStallCycles, statistics::units::Count::get(),
+               "Cycles stalled draining stores at barrier commit")
 {
     using namespace statistics;
 
@@ -1130,11 +1134,31 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
-            DPRINTF(Commit,
-                    "[tid:%i] [sn:%llu] "
-                    "Waiting for all stores to writeback.\n",
-                    tid, head_inst->seqNum);
+        bool need_store_drain = iewStage->hasStoresToWB(tid);
+
+        // Acquire-only barriers can bypass store drain. Read+write barriers
+        // still need to wait for any release store in the MB to drain.
+        const bool bypass_mb_drain =
+            head_inst->isReadBarrier() && !head_inst->isWriteBarrier();
+
+        if (bypass_mb_drain) {
+            need_store_drain = false;
+        }
+
+        if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
+            ++stats.barrierHeadNotExecuted;
+            iewStage->forceMBDrain(tid);
+        }
+
+        if (inst_num > 0 || need_store_drain) {
+            // Drain the merge buffer to reduce stall.
+            if (need_store_drain) {
+                ++stats.commitBarrierDrainStallCycles;
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] "
+                        "Waiting for all stores to writeback.\n",
+                        tid, head_inst->seqNum);
+            }
             return false;
         }
 
@@ -1177,14 +1201,44 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // then there is no need to raise a new fault
     }
 
+    if (cpu->speculativeBarrierIssueEnabled() && inst_fault == NoFault &&
+        head_inst->isReadBarrier()) {
+
+        if (!head_inst->isWriteBarrier()) {
+            // A read barrier that is not release will squash and re-execute
+            // younger loads that saw a snoop.
+            const unsigned marked = iewStage->markLoadsHitExternalSnoopAfter(
+                tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
+                        "due to external snoops at barrier commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
+        } else {
+            // A RCsc release barrier will check only snooped acquire loads to
+            // squash
+            const unsigned marked =
+                iewStage->markAcquireLoadsHitExternalSnoopAfter(
+                    tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u acquire load(s) for "
+                        "re-exec due to external snoops at release barrier "
+                        "commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
+        }
+    }
+
     // Stores mark themselves as completed.
     if (!head_inst->isStore() && inst_fault == NoFault) {
         head_inst->setCompleted();
     }
 
     if (inst_fault != NoFault) {
-        DPRINTF(Commit, "Inst [tid:%i] [sn:%llu] PC %s has a fault\n",
-                tid, head_inst->seqNum, head_inst->pcState());
+        DPRINTF(Commit, "Inst [tid:%i] [sn:%llu] PC %s has a fault\n", tid,
+                head_inst->seqNum, head_inst->pcState());
 
         if (iewStage->hasStoresToWB(tid) || inst_num > 0) {
             DPRINTF(Commit,
@@ -1216,8 +1270,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // prevents external agents from changing any specific state
         // that the trap need.
         cpu->trap(inst_fault, tid,
-                  head_inst->notAnInst() ? nullStaticInstPtr :
-                      head_inst->staticInst);
+                  head_inst->notAnInst() ? nullStaticInstPtr
+                                         : head_inst->staticInst);
 
         // Exit state update mode to avoid accidental updating.
         thread[tid]->noSquashFromTC = false;
@@ -1225,13 +1279,13 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         commitStatus[tid] = TrapPending;
 
         DPRINTF(Commit,
-            "[tid:%i] [sn:%llu] Committing instruction with fault\n",
-            tid, head_inst->seqNum);
+                "[tid:%i] [sn:%llu] Committing instruction with fault\n", tid,
+                head_inst->seqNum);
         if (head_inst->traceData) {
             // We ignore ReExecution "faults" here as they are not real
             // (architectural) faults but signal flush/replays.
-            if (debug::ExecFaulting
-                && dynamic_cast<ReExec*>(inst_fault.get()) == nullptr) {
+            if (debug::ExecFaulting &&
+                dynamic_cast<ReExec *>(inst_fault.get()) == nullptr) {
 
                 head_inst->traceData->setFaulting(true);
                 head_inst->traceData->setFetchSeq(head_inst->seqNum);
@@ -1249,9 +1303,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     updateComInstStats(head_inst);
 
-    DPRINTF(Commit,
-            "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
-            tid, head_inst->seqNum, head_inst->pcState());
+    DPRINTF(
+        Commit, "[tid:%i] [sn:%llu] Committing instruction with PC:%s %s\n",
+        tid, head_inst->seqNum, head_inst->pcState(),
+        head_inst->staticInst->disassemble(head_inst->pcState().instAddr()));
 
     if (head_inst->isReturn()) {
         DPRINTF(Commit,
@@ -1267,8 +1322,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     // hardware transactional memory
     // the HTM UID is purely for correctness and debugging purposes
-    if (head_inst->isHtmStart())
+    if (head_inst->isHtmStart()) {
         iewStage->setLastRetiredHtmUid(tid, head_inst->getHtmTransactionUid());
+    }
 
     // Finally clear the head ROB entry.
     rob->retireHead(tid);
@@ -1284,10 +1340,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     }
 
     // If this was a store, record it for this cycle.
-    if (head_inst->isStore() || head_inst->isAtomic())
+    if (head_inst->isStore() || head_inst->isAtomic()) {
         committedStores[tid] = true;
+    }
 
-    // Return true to indicate that we have committed an instruction.
     return true;
 }
 
@@ -1295,7 +1351,6 @@ void
 Commit::getInsts()
 {
     DPRINTF(Commit, "Getting instructions from Rename stage.\n");
-
     // Read any renamed instructions and place them into the ROB.
     int insts_to_process = std::min((int)renameWidth, fromRename->size);
 
@@ -1303,8 +1358,7 @@ Commit::getInsts()
         const DynInstPtr &inst = fromRename->insts[inst_num];
         ThreadID tid = inst->threadNumber;
 
-        if (!inst->isSquashed() &&
-            commitStatus[tid] != ROBSquashing &&
+        if (!inst->isSquashed() && commitStatus[tid] != ROBSquashing &&
             commitStatus[tid] != TrapPending) {
             changedROBNumEntries[tid] = true;
 
@@ -1317,7 +1371,8 @@ Commit::getInsts()
 
             youngestSeqNum[tid] = inst->seqNum;
         } else {
-            DPRINTF(Commit, "[tid:%i] [sn:%llu] "
+            DPRINTF(Commit,
+                    "[tid:%i] [sn:%llu] "
                     "Instruction PC %s was squashed, skipping.\n",
                     tid, inst->seqNum, inst->pcState());
         }
@@ -1332,7 +1387,8 @@ Commit::markCompletedInsts()
     for (int inst_num = 0; inst_num < fromIEW->size; ++inst_num) {
         assert(fromIEW->insts[inst_num]);
         if (!fromIEW->insts[inst_num]->isSquashed()) {
-            DPRINTF(Commit, "[tid:%i] Marking PC %s, [sn:%llu] ready "
+            DPRINTF(Commit,
+                    "[tid:%i] Marking PC %s, [sn:%llu] ready "
                     "within ROB.\n",
                     fromIEW->insts[inst_num]->threadNumber,
                     fromIEW->insts[inst_num]->pcState(),
@@ -1435,10 +1491,8 @@ Commit::getCommittingThread()
         // before we consider other threads using the specified SMT
         // commit policy.
         for (ThreadID tid : *activeThreads) {
-            if (cpu->isThreadExiting(tid) &&
-                !rob->isEmpty(tid) &&
-                (commitStatus[tid] == Running ||
-                 commitStatus[tid] == Idle ||
+            if (cpu->isThreadExiting(tid) && !rob->isEmpty(tid) &&
+                (commitStatus[tid] == Running || commitStatus[tid] == Idle ||
                  commitStatus[tid] == FetchTrapPending)) {
                 assert(rob->isHeadReady(tid) &&
                        rob->readHeadInst(tid)->isSquashed());
@@ -1447,21 +1501,20 @@ Commit::getCommittingThread()
         }
 
         switch (commitPolicy) {
-          case CommitPolicy::RoundRobin:
-            return roundRobin();
+            case CommitPolicy::RoundRobin:
+                return roundRobin();
 
-          case CommitPolicy::OldestReady:
-            return oldestReady();
+            case CommitPolicy::OldestReady:
+                return oldestReady();
 
-          default:
-            return InvalidThreadID;
+            default:
+                return InvalidThreadID;
         }
     } else {
         assert(!activeThreads->empty());
         ThreadID tid = activeThreads->front();
 
-        if (commitStatus[tid] == Running ||
-            commitStatus[tid] == Idle ||
+        if (commitStatus[tid] == Running || commitStatus[tid] == Idle ||
             commitStatus[tid] == FetchTrapPending) {
             return tid;
         } else {
@@ -1474,13 +1527,12 @@ ThreadID
 Commit::roundRobin()
 {
     auto pri_iter = priority_list.begin();
-    auto end      = priority_list.end();
+    auto end = priority_list.end();
 
     while (pri_iter != end) {
         ThreadID tid = *pri_iter;
 
-        if (commitStatus[tid] == Running ||
-            commitStatus[tid] == Idle ||
+        if (commitStatus[tid] == Running || commitStatus[tid] == Idle ||
             commitStatus[tid] == FetchTrapPending) {
 
             if (rob->isHeadReady(tid)) {
@@ -1506,8 +1558,7 @@ Commit::oldestReady()
 
     for (ThreadID tid : *activeThreads) {
         if (!rob->isEmpty(tid) &&
-            (commitStatus[tid] == Running ||
-             commitStatus[tid] == Idle ||
+            (commitStatus[tid] == Running || commitStatus[tid] == Idle ||
              commitStatus[tid] == FetchTrapPending)) {
 
             if (rob->isHeadReady(tid)) {

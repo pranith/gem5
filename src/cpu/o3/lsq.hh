@@ -188,17 +188,23 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
     State _state;
     void
     setState(const State &newState)
-    { _state = newState; }
+    {
+        _state = newState;
+    }
 
     uint32_t numTranslatedFragments;
     uint32_t numInTranslationFragments;
 
     void
     markDelayed() override
-    { flags.set(Flag::Delayed); }
+    {
+        flags.set(Flag::Delayed);
+    }
     bool
     isDelayed()
-    { return flags.isSet(Flag::Delayed); }
+    {
+        return flags.isSet(Flag::Delayed);
+    }
 
   public:
     LSQUnit &_port;
@@ -220,7 +226,9 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
   protected:
     LSQUnit *
     lsqUnit()
-    { return &_port; }
+    {
+        return &_port;
+    }
     LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad);
     LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad,
                const Addr &addr, const uint32_t &size,
@@ -230,11 +238,15 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
 
     bool
     isLoad() const
-    { return flags.isSet(Flag::IsLoad); }
+    {
+        return flags.isSet(Flag::IsLoad);
+    }
 
     bool
     isAtomic() const
-    { return flags.isSet(Flag::IsAtomic); }
+    {
+        return flags.isSet(Flag::IsAtomic);
+    }
 
     /** Install the request in the LQ/SQ. */
     void install();
@@ -282,15 +294,21 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
     /** Set up Context numbers. */
     void
     setContext(const ContextID &context_id)
-    { req()->setContext(context_id); }
+    {
+        req()->setContext(context_id);
+    }
 
     const DynInstPtr &
     instruction()
-    { return _inst; }
+    {
+        return _inst;
+    }
 
     bool
     hasStaleTranslation() const
-    { return _hasStaleTranslation; }
+    {
+        return _hasStaleTranslation;
+    }
 
     virtual void markAsStaleTranslation() = 0;
 
@@ -300,7 +318,9 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
     void
     setVirt(Addr vaddr, unsigned size, Request::Flags flags_,
             RequestorID requestor_id, Addr pc)
-    { req()->setVirt(vaddr, size, flags_, requestor_id, pc); }
+    {
+        req()->setVirt(vaddr, size, flags_, requestor_id, pc);
+    }
 
     ContextID contextId() const;
 
@@ -315,23 +335,33 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
 
     uint32_t
     taskId() const
-    { return _taskId; }
+    {
+        return _taskId;
+    }
 
     RequestPtr
     req(int idx = 0)
-    { return _reqs.at(idx); }
+    {
+        return _reqs.at(idx);
+    }
     const RequestPtr
     req(int idx = 0) const
-    { return _reqs.at(idx); }
+    {
+        return _reqs.at(idx);
+    }
 
     Addr
     getVaddr(int idx = 0) const
-    { return req(idx)->getVaddr(); }
+    {
+        return req(idx)->getVaddr();
+    }
     virtual void initiateTranslation() = 0;
 
     PacketPtr
     packet(int idx = 0)
-    { return _packets.at(idx); }
+    {
+        return _packets.at(idx);
+    }
 
     virtual PacketPtr
     mainPacket()
@@ -372,11 +402,15 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
 
     bool
     isSplit() const
-    { return flags.isSet(Flag::IsSplit); }
+    {
+        return flags.isSet(Flag::IsSplit);
+    }
 
     bool
     needWBToRegister() const
-    { return flags.isSet(Flag::WriteBackToRegister); }
+    {
+        return flags.isSet(Flag::WriteBackToRegister);
+    }
     /** @} */
     virtual bool recvTimingResp(PacketPtr pkt) = 0;
     virtual void sendPacketToCache() = 0;
@@ -396,7 +430,9 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
     /** Update the status to reflect that a packet was sent. */
     void
     packetSent()
-    { flags.set(Flag::Sent); }
+    {
+        flags.set(Flag::Sent);
+    }
     /** Update the status to reflect that a packet was not sent.
      * When a packet fails to be sent, we mark the request as needing a
      * retry. Note that Retry flag is sticky.
@@ -411,15 +447,21 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
     void sendFragmentToTranslation(int i);
     bool
     isComplete()
-    { return flags.isSet(Flag::Complete); }
+    {
+        return flags.isSet(Flag::Complete);
+    }
 
     bool
     isInTranslation()
-    { return _state == State::Translation; }
+    {
+        return _state == State::Translation;
+    }
 
     bool
     isTranslationComplete()
-    { return flags.isSet(Flag::TranslationStarted) && !isInTranslation(); }
+    {
+        return flags.isSet(Flag::TranslationStarted) && !isInTranslation();
+    }
 
     bool
     isTranslationBlocked()
@@ -431,33 +473,45 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
 
     bool
     isSent()
-    { return flags.isSet(Flag::Sent); }
+    {
+        return flags.isSet(Flag::Sent);
+    }
 
     bool
     isPartialFault()
-    { return _state == State::PartialFault; }
+    {
+        return _state == State::PartialFault;
+    }
 
     bool
     isMemAccessRequired()
-    { return (_state == State::Request || (isPartialFault() && isLoad())); }
+    {
+        return (_state == State::Request || (isPartialFault() && isLoad()));
+    }
 
     void
     setStateToFault()
-    { setState(State::Fault); }
+    {
+        setState(State::Fault);
+    }
 
     /**
      * The LSQ entry is cleared
      */
     void
     freeLSQEntry()
-    { release(Flag::LSQEntryFreed); }
+    {
+        release(Flag::LSQEntryFreed);
+    }
 
     /**
      * The request is discarded (e.g. partial store-load forwarding)
      */
     void
     discard()
-    { release(Flag::Discarded); }
+    {
+        release(Flag::Discarded);
+    }
 
     void
     packetReplied()
@@ -499,11 +553,15 @@ class LSQRequest : public BaseMMU::Translation, public Packet::SenderState
 
     void
     complete()
-    { flags.set(Flag::Complete); }
+    {
+        flags.set(Flag::Complete);
+    }
 
     virtual std::string
     name() const
-    { return "LSQRequest"; }
+    {
+        return "LSQRequest";
+    }
 };
 
 class SingleDataRequest : public LSQRequest
@@ -531,7 +589,9 @@ class SingleDataRequest : public LSQRequest
     virtual bool isCacheBlockHit(Addr blockAddr, Addr cacheBlockMask);
     virtual std::string
     name() const
-    { return "SingleDataRequest"; }
+    {
+        return "SingleDataRequest";
+    }
 };
 
 // This class extends SingleDataRequest for the purpose
@@ -550,7 +610,9 @@ class UnsquashableDirectRequest : public SingleDataRequest
                         gem5::ThreadContext *tc, BaseMMU::Mode mode);
     virtual std::string
     name() const
-    { return "UnsquashableDirectRequest"; }
+    {
+        return "UnsquashableDirectRequest";
+    }
 };
 
 class SplitDataRequest : public LSQRequest
@@ -572,7 +634,9 @@ class SplitDataRequest : public LSQRequest
           numReceivedPackets(0),
           _mainReq(nullptr),
           _mainPacket(nullptr)
-    { flags.set(Flag::IsSplit); }
+    {
+        flags.set(Flag::IsSplit);
+    }
     virtual ~SplitDataRequest()
     {
         if (_mainReq) {
@@ -599,7 +663,9 @@ class SplitDataRequest : public LSQRequest
     virtual PacketPtr mainPacket();
     virtual std::string
     name() const
-    { return "SplitDataRequest"; }
+    {
+        return "SplitDataRequest";
+    }
 };
 
 class LSQ
@@ -669,7 +735,9 @@ class LSQ
          */
         virtual bool
         isSnooping() const
-        { return true; }
+        {
+            return true;
+        }
 
         /** Applies throttling in recvTimingResp for incoming load responses */
         bool throttleReadResp(PacketPtr pkt);
@@ -770,7 +838,6 @@ class LSQ
     /** Returns the total number of stores for a single thread. */
     int numStores(ThreadID tid);
 
-
     // hardware transactional memory
 
     int numHtmStarts(ThreadID tid) const;
@@ -837,7 +904,17 @@ class LSQ
      * to memory.
      */
     bool hasStoresToWB(ThreadID tid);
+    void forceMBDrain(ThreadID tid);
 
+    /** Marks loads younger than barrier_sn that hit external snoops. */
+    unsigned markLoadsHitExternalSnoopAfter(ThreadID tid,
+                                            const InstSeqNum &barrier_sn);
+
+    /** Marks acquire loads younger than barrier_sn that hit external
+     * snoops. */
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                          const InstSeqNum &barrier_sn);
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);
 
@@ -856,12 +933,12 @@ class LSQ
     /** Executes a read operation, using the load specified at the load
      * index.
      */
-    Fault read(LSQRequest* request, ssize_t load_idx);
+    Fault read(LSQRequest *request, ssize_t load_idx);
 
     /** Executes a store operation, using the store specified at the store
      * index.
      */
-    Fault write(LSQRequest* request, uint8_t *data, ssize_t store_idx);
+    Fault write(LSQRequest *request, uint8_t *data, ssize_t store_idx);
 
     /** Checks if queues have any marked operations left,
      * and sends the appropriate Sync Completion message if not.
@@ -884,10 +961,10 @@ class LSQ
 
     void recvTimingSnoopReq(PacketPtr pkt);
 
-    Fault pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
+    Fault pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
                       unsigned int size, Addr addr, Request::Flags flags,
                       uint64_t *res, AtomicOpFunctorPtr amo_op,
-                      const std::vector<bool>& byte_enable);
+                      const std::vector<bool> &byte_enable);
 
     /** The CPU pointer. */
     CPU *cpu;
@@ -904,7 +981,11 @@ class LSQ
     /** Another store port is in use */
     void cachePortBusy(bool is_load);
 
-    RequestPort &getDataPort() { return dcachePort; }
+    RequestPort &
+    getDataPort()
+    {
+        return dcachePort;
+    }
 
     void sendRetryResp();
 
@@ -934,8 +1015,8 @@ class LSQ
      * can occupy at most.
      */
     static uint32_t
-    maxLSQAllocation(SMTQueuePolicy pol, uint32_t entries,
-            uint32_t numThreads, uint32_t SMTThreshold)
+    maxLSQAllocation(SMTQueuePolicy pol, uint32_t entries, uint32_t numThreads,
+                     uint32_t SMTThreshold)
     {
         if (pol == SMTQueuePolicy::Dynamic) {
             return entries;
@@ -943,9 +1024,9 @@ class LSQ
             //@todo:make work if part_amt doesnt divide evenly.
             return entries / numThreads;
         } else if (pol == SMTQueuePolicy::Threshold) {
-            //Divide up by threshold amount
+            // Divide up by threshold amount
             //@todo: Should threads check the max and the total
-            //amount of the LSQ
+            // amount of the LSQ
             return SMTThreshold;
         }
         return 0;

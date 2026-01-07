@@ -73,8 +73,7 @@
 namespace gem5
 {
 
-template <class>
-class Checker;
+template <class> class Checker;
 class ThreadContext;
 
 class Checkpoint;
@@ -117,7 +116,6 @@ class CPU : public BaseCPU
     Status _status;
 
   private:
-
     /** The tick event used for scheduling CPU ticks. */
     EventFunctionWrapper tickEvent;
 
@@ -128,18 +126,20 @@ class CPU : public BaseCPU
     void
     scheduleTickEvent(Cycles delay)
     {
-        if (tickEvent.squashed())
+        if (tickEvent.squashed()) {
             reschedule(tickEvent, clockEdge(delay));
-        else if (!tickEvent.scheduled())
+        } else if (!tickEvent.scheduled()) {
             schedule(tickEvent, clockEdge(delay));
+        }
     }
 
     /** Unschedule tick event, regardless of its current state. */
     void
     unscheduleTickEvent()
     {
-        if (tickEvent.scheduled())
+        if (tickEvent.scheduled()) {
             tickEvent.squash();
+        }
     }
 
     /**
@@ -174,7 +174,7 @@ class CPU : public BaseCPU
     CPU(const BaseO3CPUParams &params);
 
     ProbePointArg<PacketPtr> *ppInstAccessComplete;
-    ProbePointArg<std::pair<DynInstPtr, PacketPtr> > *ppDataAccessComplete;
+    ProbePointArg<std::pair<DynInstPtr, PacketPtr>> *ppDataAccessComplete;
 
     /** Register probe points. */
     void regProbePoints() override;
@@ -235,7 +235,11 @@ class CPU : public BaseCPU
     void updateThreadPriority();
 
     /** Is the CPU draining? */
-    bool isDraining() const { return drainState() == DrainState::Draining; }
+    bool
+    isDraining() const
+    {
+        return drainState() == DrainState::Draining;
+    }
 
     void serializeThread(CheckpointOut &cp, ThreadID tid) const override;
     void unserializeThread(CheckpointIn &cp, ThreadID tid) override;
@@ -281,7 +285,11 @@ class CPU : public BaseCPU
     void verifyMemoryMode() const override;
 
     /** Get the current instruction sequence number, and increment it. */
-    InstSeqNum getAndIncrementInstSeq() { return globalSeqNum++; }
+    InstSeqNum
+    getAndIncrementInstSeq()
+    {
+        return globalSeqNum++;
+    }
 
     /** Get the current fetch target sequence number, and increment it. */
     InstSeqNum
@@ -300,7 +308,11 @@ class CPU : public BaseCPU
     void processInterrupts(const Fault &interrupt);
 
     /** Halts the CPU. */
-    void halt() { panic("Halt not implemented!\n"); }
+    void
+    halt()
+    {
+        panic("Halt not implemented!\n");
+    }
 
     /** Register accessors.  Index refers to the physical register index. */
 
@@ -499,7 +511,11 @@ class CPU : public BaseCPU
 
   public:
     /** Records that there was time buffer activity this cycle. */
-    void activityThisCycle() { activityRec.activity(); }
+    void
+    activityThisCycle()
+    {
+        activityRec.activity();
+    }
 
     /** Changes a stage's status to active within the activity recorder. */
     void
@@ -574,14 +590,14 @@ class CPU : public BaseCPU
 
     /** CPU pushRequest function, forwards request to LSQ. */
     Fault
-    pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
+    pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
                 unsigned int size, Addr addr, Request::Flags flags,
                 uint64_t *res, AtomicOpFunctorPtr amo_op = nullptr,
-                const std::vector<bool>& byte_enable=std::vector<bool>())
+                const std::vector<bool> &byte_enable = std::vector<bool>())
 
     {
-        return iew.ldstQueue.pushRequest(inst, isLoad, data, size, addr,
-                flags, res, std::move(amo_op), byte_enable);
+        return iew.ldstQueue.pushRequest(inst, isLoad, data, size, addr, flags,
+                                         res, std::move(amo_op), byte_enable);
     }
 
     /** Used by the fetch unit to get a hold of the instruction port. */
@@ -615,6 +631,20 @@ class CPU : public BaseCPU
     // hardware transactional memory
     void htmSendAbortSignal(ThreadID tid, uint64_t htm_uid,
                             HtmFailureFaultCause cause) override;
+
+    /** Returns whether memory ordering versioning is enabled (stub). */
+    bool
+    versioningEnabled() const
+    {
+        return false;
+    }
+
+    /** Returns whether speculative barrier issue is enabled (stub). */
+    bool
+    speculativeBarrierIssueEnabled() const
+    {
+        return false;
+    }
 };
 
 } // namespace o3
