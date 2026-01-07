@@ -1661,7 +1661,7 @@ class Rancho_MemFU(MinorFU):
 
 
 class Rancho_MiscFU(MinorFU):
-    opClasses = minorMakeOpClassSet(["IprAccess", "InstPrefetch"])
+    opClasses = minorMakeOpClassSet(["InstPrefetch"])
     opLat = 1
 
 
@@ -1734,7 +1734,7 @@ class Rancho_L2(Cache):
     mshrs = 4
     tgts_per_mshr = 8
     size = "1024kB"
-    assoc = 16
+    assoc = 8
     write_buffers = 16
     # prefetcher FIXME
 
@@ -1781,7 +1781,6 @@ class Rancho(ArmO3CPU):
             PredALU(),
             WritePort(),
             RdWrPort(count=2),
-            IprPort(),
         ]
     )
 
@@ -1800,6 +1799,8 @@ class Rancho(ArmO3CPU):
     mergeBufferEntries = 32
     mergeBufferPrefetch = True
     mbRetireWhenFullValid = True
+    speculativeBarrierIssue = True
+    enableVersioning = True
 
     LSQDepCheckShift = 4
     LSQCheckLoads = True
