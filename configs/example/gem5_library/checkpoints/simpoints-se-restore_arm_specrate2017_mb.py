@@ -164,6 +164,13 @@ class CustomCore(BaseCPUCore):
     def __init__(self):
         super().__init__(ArmO3CPU(), ISA.ARM)
 
+        self.core.useMergeBuffer = True
+        self.core.mergeBufferEntries = 32
+        self.core.mbRetireWhenFullValid = True
+        self.core.mergeBufferRetireCycles = 16
+        self.core.mergeBufferResetRetireOnMerge = False
+        self.core.mergeBufferRetireResetCycles = 4
+        self.core.mergeBufferPrefetch = True
         # self.core.branchPred = Rancho_BP()
 
 
