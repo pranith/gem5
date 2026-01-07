@@ -51,12 +51,12 @@ using namespace ArmISA;
 namespace trace {
 
 TarmacTracerRecordV8::TraceInstEntryV8::TraceInstEntryV8(
-    const TarmacContext& tarmCtx,
-    bool predicate)
-      : TraceInstEntry(tarmCtx, predicate),
-        TraceEntryV8(tarmCtx.tarmacCpuName()),
-        paddr(0),
-        paddrValid(false)
+    const TarmacContext &tarmCtx, bool predicate)
+    : TraceInstEntry(tarmCtx, predicate),
+      TraceEntryV8(tarmCtx.tarmacCpuName()),
+      paddr(0),
+      paddrValid(false),
+      seq(tarmCtx.seq)
 {
     const auto thread = tarmCtx.thread;
 
@@ -239,18 +239,19 @@ TarmacTracerRecordV8::TraceInstEntryV8::print(
 
     // Print the instruction record formatted according
     // to the Tarmac specification
-    ccprintf(outs, "%s clk %s %s (%u) %08x%s %s %s %s_%s : %s\n",
-             curTick(),                     /* Tick time */
-             cpuName,                       /* Cpu name */
-             taken? "IT" : "IS",            /* Instruction taken/skipped */
-             instCount,                     /* Instruction count */
-             addr,                          /* Instruction virt address */
-             paddr_str,                     /* Instruction phys address */
-             opcode_str,                    /* Instruction opcode */
-             iSetStateToStr(isetstate),     /* Instruction Set */
-             opModeToStr(mode),             /* Exception level */
-             secureMode? "s" : "ns",        /* Security */
-             disassemble);                  /* Instruction disass */
+    ccprintf(outs, "%s clk %s %s (%u %u) %08x%s %s %s %s_%s : %s\n",
+             curTick(),                 /* Tick time */
+             cpuName,                   /* Cpu name */
+             taken ? "IT" : "IS",       /* Instruction taken/skipped */
+             instCount,                 /* Instruction count */
+             seq,                       /* sequence number  */
+             addr,                      /* Instruction virt address */
+             paddr_str,                 /* Instruction phys address */
+             opcode_str,                /* Instruction opcode */
+             iSetStateToStr(isetstate), /* Instruction Set */
+             opModeToStr(mode),         /* Exception level */
+             secureMode ? "s" : "ns",   /* Security */
+             disassemble);              /* Instruction disass */
 }
 
 void
