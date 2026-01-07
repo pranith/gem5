@@ -28,6 +28,7 @@
 
 #include "sim/debug.hh"
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -109,6 +110,34 @@ eventqDump()
     for (uint32_t i = 0; i < numMainEventQueues; ++i) {
         mainEventQueue[i]->dump();
     }
+}
+
+namespace
+{
+std::atomic<uint64_t> debugStartSeqNum{0};
+} // namespace
+
+void
+setDebugStartSeqNum(uint64_t seq_num)
+{
+    debugStartSeqNum.store(seq_num, std::memory_order_relaxed);
+}
+
+uint64_t
+getDebugStartSeqNum()
+{
+    return debugStartSeqNum.load(std::memory_order_relaxed);
+}
+
+bool
+consumeDebugStartSeqNum(uint64_t seq_num)
+{
+    const uint64_t target = debugStartSeqNum.load(std::memory_order_relaxed);
+    if (target && seq_num == target) {
+        debugStartSeqNum.store(0, std::memory_order_relaxed);
+        return true;
+    }
+    return false;
 }
 
 } // namespace gem5
