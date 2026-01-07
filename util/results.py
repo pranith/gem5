@@ -2,12 +2,32 @@
 
 import argparse
 import json
+import numbers
 import os
 import re
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+BENCHMARK_MAPPING = {
+    "500.perlbench_r": "perlbench_r",
+    "502.gcc_r": "cpugcc_r",
+    "505.mcf_r": "mcf_r",
+    "520.omnetpp_r": "omnetpp_r",
+    "523.xalancbmk_r": "cpuxalan_r",
+    "525.x264_r": "x264_r",
+    "531.deepsjeng_r": "deepsjeng_r",
+    "541.leela_r": "leela_r",
+    "548.exchange2_r": "exchange2_r",
+    "557.xz_r": "xz_r",
+}
+BENCHMARK_ORDER = [
+    BENCHMARK_MAPPING[k]
+    for k in sorted(
+        BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0])
+    )
+]
 
 
 def parse_stats_file(filepath):
@@ -57,19 +77,6 @@ def read_weights_file(weights_file_path):
 
 def create_stats_dataframe(base_dir):
     """Creates DataFrame and adds weights with correct mapping."""
-    benchmark_mapping = {
-        "500.perlbench_r": "perlbench_r",
-        "502.gcc_r": "cpugcc_r",
-        "505.mcf_r": "mcf_r",
-        "520.omnetpp_r": "omnetpp_r",
-        "523.xalancbmk_r": "cpuxalan_r",
-        "525.x264_r": "x264_r",
-        "531.deepsjeng_r": "deepsjeng_r",
-        "541.leela_r": "leela_r",
-        "548.exchange2_r": "exchange2_r",
-        "557.xz_r": "xz_r",
-    }
-
     data = []
     labels = []
     for subdir in os.listdir(base_dir):
@@ -84,7 +91,7 @@ def create_stats_dataframe(base_dir):
                     benchmark_number = next(
                         (
                             k
-                            for k, v in benchmark_mapping.items()
+                            for k, v in BENCHMARK_MAPPING.items()
                             if v == benchmark_name
                         ),
                         None,
@@ -102,7 +109,7 @@ def create_stats_dataframe(base_dir):
                         )
                         continue
 
-                benchmark_name = benchmark_mapping[benchmark_number]
+                benchmark_name = BENCHMARK_MAPPING[benchmark_number]
                 weights_file = os.path.join(
                     base_dir, f"{benchmark_number}.weights"
                 )
@@ -156,7 +163,11 @@ def create_stats_dataframe(base_dir):
 
     # Calculate per-benchmark IPC
     benchmark_ipc = {}
-    for benchmark_number, benchmark_name in benchmark_mapping.items():
+    # Iterate benchmarks in numeric order of their SPEC IDs.
+    for benchmark_number in sorted(
+        BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0])
+    ):
+        benchmark_name = BENCHMARK_MAPPING[benchmark_number]
         benchmark_entries = df[
             df.index.str.contains(f"chkpt_{benchmark_name}_")
         ]
@@ -191,6 +202,115 @@ def rename_to_last_two_parts(col_name):
     else:
         # Return original name if fewer than 2 parts (e.g., 'IPC', 'ShortName')
         return col_name
+
+
+def print_aligned_table(df):
+    """Pretty-print a DataFrame with fixed-width columns."""
+    if df is None or df.empty:
+        print("No data to display.")
+        return
+
+    df_str = df.copy()
+    # Convert all entries to strings with 3 decimal places where numeric.
+    for col in df_str.columns:
+        df_str[col] = df_str[col].apply(
+            lambda x: f"{x:.3f}" if isinstance(x, numbers.Number) else str(x)
+        )
+
+    columns = ["index"] + list(df_str.columns)
+    widths = [max(len("index"), max(len(str(idx)) for idx in df_str.index))]
+    for col in df_str.columns:
+        col_width = max(len(col), max(len(str(val)) for val in df_str[col]))
+        widths.append(col_width)
+
+    # Header
+    header_cells = [col.ljust(widths[i]) for i, col in enumerate(columns)]
+    print(" | ".join(header_cells))
+    print("-+-".join("-" * w for w in widths))
+
+    # Rows
+    for idx, row in df_str.iterrows():
+        cells = [str(idx).ljust(widths[0])]
+        for i, col in enumerate(df_str.columns, start=1):
+            cells.append(str(row[col]).ljust(widths[i]))
+        print(" | ".join(cells))
+
+
+def add_geomean_row(df, baseline_col=None):
+    """
+    Adds a geomean row to the DataFrame for numeric columns.
+    If baseline_col is provided, percent columns are assumed to follow
+    immediately after each dir column and are computed based on geomean.
+    """
+    import numpy as np
+
+    if df is None or df.empty:
+        return df
+
+    geomean = lambda s: (
+        float(np.exp(np.log(s[s > 0]).mean())) if (s > 0).any() else np.nan
+    )
+
+    new_rows = {}
+    for col in df.columns:
+        if baseline_col and col.startswith("%"):
+            continue
+        try:
+            series = pd.to_numeric(df[col], errors="coerce")
+        except Exception:
+            continue
+        new_rows[col] = geomean(series.dropna())
+
+    geomean_df = pd.DataFrame(new_rows, index=["geomean"])
+
+    if baseline_col:
+        # Compute percent cols after adding geomean values.
+        for col in list(df.columns):
+            if col == baseline_col or col.startswith("%"):
+                continue
+            pct_col = f"% {col}"
+            if pct_col in df.columns and baseline_col in geomean_df.columns:
+                geomean_df[pct_col] = (
+                    (geomean_df[col] - geomean_df[baseline_col])
+                    / geomean_df[baseline_col]
+                    * 100.0
+                )
+
+    return pd.concat([df, geomean_df])
+
+
+def add_spec_score_row(df, baseline_col=None):
+    """
+    Adds a spec_score row (sum across benchmarks) for numeric columns.
+    """
+    if df is None or df.empty:
+        return df
+
+    spec = {}
+    for col in df.columns:
+        if baseline_col and col.startswith("%"):
+            continue
+        try:
+            series = pd.to_numeric(df[col], errors="coerce")
+        except Exception:
+            continue
+        spec[col] = series.sum()
+
+    spec_df = pd.DataFrame(spec, index=["spec_score"])
+
+    if baseline_col:
+        for col in list(df.columns):
+            if col == baseline_col or col.startswith("%"):
+                continue
+            pct_col = f"% {col}"
+            if pct_col in df.columns and baseline_col in spec_df.columns:
+                spec_df[pct_col] = (
+                    (spec_df[col] - spec_df[baseline_col])
+                    / spec_df[baseline_col]
+                    * 100.0
+                )
+
+    return pd.concat([df, spec_df])
 
 
 if __name__ == "__main__":
@@ -255,6 +375,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"An error occurred: {e}")
 
+    # Ensure IPC rows follow benchmark number order.
+    if not all_ipc_df.empty:
+        all_ipc_df = all_ipc_df.reindex(BENCHMARK_ORDER)
+
     if all_stats is not None:
         # Convert DataFrame to dictionary for JSON output
         with open(output_file, "w") as f:
@@ -277,22 +401,19 @@ if __name__ == "__main__":
             for bench_run, df in all_stats.items():
                 bench_list.append(bench_run)
                 for stat in extract_stats:
-                    print(f"Extracting stat {stat} in bench {bench_run}")
-                    # print(df)
-                    if exact_stat:
-                        stat_df = df.filter(items=[stat])
-                    else:
-                        stat_df = df.filter(regex=rf"{stat}")
-
-                    # print(stat_df)
+                    print(
+                        f"Extracting stat pattern '{stat}' in bench {bench_run}"
+                    )
+                    stat_df = (
+                        df.filter(items=[stat])
+                        if exact_stat
+                        else df.filter(regex=rf"{stat}")
+                    )
                     if not stat_df.empty:
-                        # save the stat names for calculating %
                         matching_stats.extend([col for col in stat_df.columns])
                         stat_df_bench = stat_df_bench.join(
                             stat_df, how="outer", rsuffix=f"_{bench_run}"
                         )
-                        # stat_df_bench = stat_df_bench.set_axis(stat_df.index)
-                        # print(stat_df_bench)
 
             # Calculate %diff for all stats
             for stat in matching_stats:
@@ -308,9 +429,22 @@ if __name__ == "__main__":
                 columns=rename_to_last_two_parts
             )
             if not args.checkpoint:
-                print(stat_df_bench)
+                base_name = bench_list[0] if len(bench_list) > 0 else None
+                stat_df_bench = add_geomean_row(stat_df_bench, base_name)
+                if any("ipc" in c.lower() for c in stat_df_bench.columns):
+                    stat_df_bench = add_spec_score_row(
+                        stat_df_bench, base_name
+                    )
+                print_aligned_table(stat_df_bench)
             else:
-                print(stat_df_bench.filter(like=f"{args.checkpoint}", axis=0))
+                filtered = stat_df_bench.filter(
+                    like=f"{args.checkpoint}", axis=0
+                )
+                base_name = bench_list[0] if len(bench_list) > 0 else None
+                filtered = add_geomean_row(filtered, base_name)
+                if any("ipc" in c.lower() for c in filtered.columns):
+                    filtered = add_spec_score_row(filtered, base_name)
+                print_aligned_table(filtered)
 
     new_columns = []
     base_col = all_ipc_df.columns[0]
@@ -326,6 +460,6 @@ if __name__ == "__main__":
             new_columns.append(new_col_name)
 
     all_ipc_df = all_ipc_df[new_columns]
-    pd.options.display.float_format = "{:.2f}".format
-    print(all_ipc_df.to_string())
-    # print(all_ipc_df)
+    all_ipc_df = add_geomean_row(all_ipc_df, base_col)
+    all_ipc_df = add_spec_score_row(all_ipc_df, base_col)
+    print_aligned_table(all_ipc_df)
