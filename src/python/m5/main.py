@@ -290,6 +290,12 @@ def parse_options():
         help="Start debug output at TICK",
     )
     option(
+        "--debug-start-sn",
+        metavar="SEQNUM",
+        type="int",
+        help="Enable debug output once the instruction with SEQNUM is decoded",
+    )
+    option(
         "--debug-end",
         metavar="TICK",
         type="int",
@@ -620,8 +626,12 @@ def main():
         _check_tracing()
         e = event.create(trace.enable, event.Event.Debug_Enable_Pri)
         event.mainq.schedule(e, options.debug_start)
-    else:
+    elif not options.debug_start_sn:
         trace.enable()
+
+    if options.debug_start_sn:
+        _check_tracing()
+        debug.setDebugStartSeqNum(int(options.debug_start_sn))
 
     if options.debug_end:
         _check_tracing()
