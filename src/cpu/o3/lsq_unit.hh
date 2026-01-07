@@ -43,6 +43,10 @@
 #define __CPU_O3_LSQ_UNIT_HH__
 
 #include <cstring>
+#include <list>
+#include <map>
+#include <memory>
+#include <queue>
 
 #include "arch/generic/debugfaults.hh"
 #include "arch/generic/vec_reg.hh"
@@ -202,13 +206,121 @@ class LSQUnit
   public:
     static constexpr auto MaxDataBytes = MaxVecRegLenInBytes;
 
-  private:
+  public:
     /** Coverage of one address range with another */
     enum class AddrRangeCoverage
     {
         PartialAddrRangeCoverage, /* Two ranges partly overlap */
         FullAddrRangeCoverage, /* One range fully covers another */
         NoAddrRangeCoverage /* Two ranges are disjoint */
+    };
+
+    class MergeBuffer
+    {
+      public:
+        enum class EntryState
+        {
+            MERGING,
+            RETIRED,
+            DRAINING,
+            FORCE_RETIRED
+        };
+
+        struct MergeBufferEntry
+        {
+            Addr blockAddr;
+            std::vector<bool> byteValids;
+            std::vector<uint8_t> blockData;
+            EntryState state;
+            RequestPtr baseReq;
+            Cycles retireCycle;
+            unsigned unretireCount;
+            bool valid;
+
+            MergeBufferEntry(size_t size)
+                : byteValids(size, false),
+                  blockData(size, 0),
+                  state(EntryState::MERGING),
+                  retireCycle(0),
+                  unretireCount(0),
+                  valid(false)
+            {}
+        };
+
+      private:
+        size_t lineSize;
+        size_t numEntries;
+        Cycles retireWindow;
+        unsigned maxUnretire;
+
+        std::list<MergeBufferEntry> entries;
+
+        LSQUnit *lsqPtr;
+        bool resetRetireOnMerge;
+        Cycles resetRetireWindow;
+
+      public:
+        MergeBuffer() {}
+
+        void
+        init(LSQUnit *lsq_ptr, size_t num_entries, size_t line_size,
+             Cycles retire_window, bool reset_on_merge, Cycles reset_window,
+             unsigned max_unretire)
+        {
+            lsqPtr = lsq_ptr;
+            numEntries = num_entries;
+            lineSize = line_size;
+            retireWindow = retire_window;
+            resetRetireOnMerge = reset_on_merge;
+            resetRetireWindow = reset_window;
+            maxUnretire = max_unretire;
+        }
+
+        MergeBufferEntry *addStore(Cycles now, Addr addr, uint8_t *data,
+                                   size_t size,
+                                   typename StoreQueue::iterator store_it,
+                                   bool is_all_zero);
+        void updateRetiredEntries(Cycles now);
+        bool drainOne(LSQUnit *lsq_ptr);
+        void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
+        void forceRetireAll();
+        void
+        reset()
+        {
+            entries.clear();
+        }
+        bool canAcceptSplitStore(LSQRequest *request) const;
+        bool canForward(Addr paddr, size_t size) const;
+        bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
+        AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        bool
+        isEmpty() const
+        {
+            return entries.size() == 0;
+        }
+        bool
+        isFull() const
+        {
+            return entries.size() == numEntries;
+        }
+
+        std::string
+        name() const
+        {
+            return lsqPtr->name() + ".mb";
+        }
+
+      private:
+        void
+        updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
+                    size_t size, bool is_all_zero)
+        {
+            for (size_t i = 0; i < size; i++) {
+                uint8_t byte = is_all_zero ? 0 : data[i];
+                entry.blockData[offset + i] = byte;
+                entry.byteValids[offset + i] = true;
+            }
+        }
     };
 
   public:
@@ -352,11 +464,22 @@ class LSQUnit
     /** Returns if the SQ is empty. */
     bool sqEmpty() const { return storeQueue.size() == 0; }
 
+    /** Returns if the SQ is empty. */
+    bool
+    mbEmpty() const
+    {
+        return mergeBuffer.isEmpty();
+    }
+
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
 
     /** Returns if there are any stores to writeback. */
-    bool hasStoresToWB() { return storesToWB; }
+    bool
+    hasStoresToWB()
+    {
+        return !mbEmpty() || (storesToWB > 0);
+    }
 
     /** Returns the number of stores to writeback. */
     int numStoresToWB() { return storesToWB; }
@@ -374,6 +497,16 @@ class LSQUnit
 
     /** Handles doing the retry. */
     void recvRetry();
+
+    /** Forces merge buffer drain. */
+    void
+    forceMBDrain()
+    {
+        mergeBuffer.forceRetireAll();
+    }
+
+    /** Handles merge buffer drain completion. */
+    void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
 
     unsigned int cacheLineSize();
   private:
@@ -447,6 +580,25 @@ class LSQUnit
     };
 
   public:
+    /** Sender state used for merge buffer drain packets. */
+    struct MergeBufferDrainSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        MergeBufferDrainSenderState(MergeBuffer::MergeBufferEntry *e,
+                                    LSQUnit *unit)
+            : entry(e), lsqUnit(unit)
+        {}
+    };
+
+    /** Sender state for merge buffer prefetches. */
+    struct MergeBufferPrefetchSenderState : public Packet::SenderState
+    {
+        LSQUnit *lsqUnit;
+        MergeBufferPrefetchSenderState(LSQUnit *unit) : lsqUnit(unit) {}
+    };
+
+  public:
     /**
      * Handles writing back and completing the load or store that has
      * returned from memory.
@@ -465,6 +617,14 @@ class LSQUnit
     /** The load queue. */
     LoadQueue loadQueue;
 
+    /** The merge buffer. */
+    MergeBuffer mergeBuffer;
+
+    /** Max store queue deallocations per cycle. */
+    unsigned storeDeallocateWidth;
+    unsigned storeDeallocsThisCycle;
+    Cycles lastStoreDeallocCycle;
+
   private:
     /** The number of places to shift addresses in the LSQ before checking
      * for dependency violations
@@ -473,6 +633,13 @@ class LSQUnit
 
     /** Should loads be checked for dependency issues */
     bool checkLoads;
+
+    /** Use a merge buffer that stores move to from the SQ */
+    bool mergeBufferEnabled;
+    /** Prefetch on merge buffer allocation to accelerate draining. */
+    bool mergeBufferPrefetchEnabled;
+    /** Limit outstanding merge buffer prefetches. */
+    unsigned mergeBufferPfInFlight;
 
     /** The number of store instructions in the SQ waiting to writeback. */
     int storesToWB;
@@ -501,6 +668,10 @@ class LSQUnit
      * forwarding.
      */
     InstSeqNum stallingStoreIsn;
+    /** The MB entry that causes the stall due to partial store to load
+     * forwarding.
+     */
+    Addr stallingMBAddr;
     /** The index of the above store. */
     ssize_t stallingLoadIdx;
 
@@ -546,6 +717,14 @@ class LSQUnit
         /** Number of loads that were rescheduled. */
         statistics::Scalar rescheduledLoads;
 
+        /** Number of loads rescheduled due to partial store-queue forwarding.
+         */
+        statistics::Scalar sqPartialFwdRescheduledLoads;
+
+        /** Number of loads rescheduled due to partial merge-buffer forwarding.
+         */
+        statistics::Scalar mbPartialFwdRescheduledLoads;
+
         /** Number of times the LSQ is blocked due to the cache. */
         statistics::Scalar blockedByCache;
 
@@ -560,9 +739,24 @@ class LSQUnit
         statistics::Average lqAvgOccupancy;
         /** SQ Occupancy */
         statistics::Average sqAvgOccupancy;
+        /** Merge buffer allocations of new entries */
+        statistics::Scalar mbAllocations;
+        /** Merge buffer merges into existing entries */
+        statistics::Scalar mbMerges;
+        /** Merge buffer entries retired */
+        statistics::Scalar mbRetired;
+        /** Merge buffer drains issued */
+        statistics::Scalar mbDrains;
+        /** Merge buffer unretire count */
+        statistics::Scalar mbUnretire;
+        /** Merge buffer forwards to loads */
+        statistics::Scalar mbForwards;
     } stats;
 
   public:
+    /** Whether to retire merge buffer entries immediately when fully valid. */
+    bool mbRetireWhenFullValid = false;
+
     /** Executes the load at the given index. */
     Fault read(LSQRequest *request, ssize_t load_idx);
 

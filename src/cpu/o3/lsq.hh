@@ -837,6 +837,7 @@ class LSQ
      * to memory.
      */
     bool hasStoresToWB(ThreadID tid);
+    void forceMBDrain(ThreadID tid);
 
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);

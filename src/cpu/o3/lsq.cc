@@ -463,6 +463,15 @@ LSQ::recvTimingResp(PacketPtr pkt)
         DPRINTF(LSQ, "Got error packet back for address: %#X\n",
                 pkt->getAddr());
 
+    if (auto *mb_state = dynamic_cast<LSQUnit::MergeBufferDrainSenderState *>(
+            pkt->senderState)) {
+        return mb_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_pf_state =
+                   dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
+                       pkt->senderState)) {
+        return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    }
+
     LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);
     panic_if(!request, "Got packet back with unknown sender state\n");
 
@@ -724,13 +733,23 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    thread.at(tid)->forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
-{ return thread.at(tid)->hasStoresToWB(); }
+{
+    return thread.at(tid)->hasStoresToWB();
+}
 
 int
 LSQ::numStoresToWB(ThreadID tid)
-{ return thread.at(tid)->numStoresToWB(); }
+{
+    return thread.at(tid)->numStoresToWB();
+}
 
 bool
 LSQ::willWB()
@@ -745,7 +764,9 @@ LSQ::willWB()
 
 bool
 LSQ::willWB(ThreadID tid)
-{ return thread.at(tid)->willWB(); }
+{
+    return thread.at(tid)->willWB();
+}
 
 void
 LSQ::dumpInsts() const
@@ -757,7 +778,9 @@ LSQ::dumpInsts() const
 
 void
 LSQ::dumpInsts(ThreadID tid) const
-{ thread.at(tid)->dumpInsts(); }
+{
+    thread.at(tid)->dumpInsts();
+}
 
 Fault
 LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
@@ -773,6 +796,11 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
     auto cacheLineSize = cpu->cacheLineSize();
     bool needs_burst = transferNeedsBurst(addr, size, cacheLineSize);
     LSQRequest* request = nullptr;
+
+    DPRINTF(LSQ,
+            "Creating a request for %s inst [sn:%lli] to addr: %#x "
+            "and size: %u\n",
+            (isLoad ? "load" : "store"), inst->seqNum, addr, size);
 
     // Atomic requests that access data across cache line boundary are
     // currently not allowed since the cache does not guarantee corresponding
@@ -1092,7 +1120,9 @@ LSQRequest::install()
 
 bool
 LSQRequest::squashed() const
-{ return _inst->isSquashed(); }
+{
+    return _inst->isSquashed();
+}
 
 void
 LSQRequest::addReq(Addr addr, unsigned size,
