@@ -60,6 +60,18 @@ void takeCheckpoint(Tick when);
  */
 void eventqDump();
 
+/** Arm a decode-triggered trace enable at the given instruction seqNum */
+void setDebugStartSeqNum(uint64_t seq_num);
+
+/** Return the current decode-triggered seqNum (0 when disabled) */
+uint64_t getDebugStartSeqNum();
+
+/**
+ * Check whether a given seqNum should enable tracing. Returns true once,
+ * clearing the trigger after it fires.
+ */
+bool consumeDebugStartSeqNum(uint64_t seq_num);
+
 } // namespace gem5
 
 #endif // __SIM_DEBUG_HH__
