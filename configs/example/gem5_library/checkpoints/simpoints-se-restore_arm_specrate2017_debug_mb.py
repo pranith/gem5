@@ -196,6 +196,8 @@ class CustomCore(BaseCPUCore):
         self.core.mergeBufferResetRetireOnMerge = True
         self.core.mergeBufferRetireResetCycles = 16
         self.core.mergeBufferPrefetch = True
+        self.core.speculativeBarrierIssue = True
+        self.core.enableVersioning = True
         self.core.tracer = TarmacTracer(outfile="file")
         # self.core.branchPred = Rancho_BP()
 
