@@ -2048,7 +2048,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     *(store_it->request()->mainReq()));
             }
             if (resetRetireOnMerge) {
-                it->retireCycle = now + resetRetireWindow;
+                it->retireCycle += resetRetireWindow;
             }
             if (lsqPtr) {
                 lsqPtr->stats.mbMerges++;
