@@ -134,6 +134,9 @@ pybind_init_debug(py::module_ &m_native)
         .def("enable", &trace::enable)
         .def("disable", &trace::disable)
         ;
+
+    m_debug.def("setDebugStartSeqNum", &setDebugStartSeqNum)
+        .def("getDebugStartSeqNum", &getDebugStartSeqNum);
 }
 
 } // namespace gem5
