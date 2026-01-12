@@ -227,6 +227,8 @@ class MemDepUnit
 
     typedef typename MemDepHash::iterator MemDepHashIt;
 
+    CPU *cpu = nullptr;
+
     /** A hash map of all memory dependence entries. */
     MemDepHash memDepHash;
 
@@ -248,6 +250,9 @@ class MemDepUnit
 
     /** Sequence numbers of outstanding store barriers. */
     std::unordered_set<InstSeqNum> storeBarrierSNs;
+
+    /** Last retired barrier version for this thread. */
+    uint64_t retiredBarrierVersion = 0;
 
     /** Is there an outstanding load barrier that loads must wait on. */
     bool hasLoadBarrier() const { return !loadBarrierSNs.empty(); }
