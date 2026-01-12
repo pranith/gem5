@@ -114,6 +114,8 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
         bdelayDoneSeqNum[tid] = 0;
         squashInst[tid] = nullptr;
         squashAfterDelaySlot[tid] = 0;
+        memOrderVersion[tid] = 0;
+        memOrderHistory[tid].clear();
     }
 }
 
@@ -135,6 +137,9 @@ Decode::clearStates(ThreadID tid)
         DecodeStruct& decode_struct = cpu->decodeQueue[i];
         removeCommThreadInsts(tid, decode_struct);
     }
+
+    memOrderVersion[tid] = 0;
+    memOrderHistory[tid].clear();
 
     // Clear out any of this thread's instructions being sent to fetch.
     for (int i = -cpu->timeBuffer.getPast();
@@ -229,6 +234,21 @@ void
 Decode::setActiveThreads(std::list<ThreadID> *at_ptr)
 {
     activeThreads = at_ptr;
+}
+
+void
+Decode::rollbackMemOrderVersion(ThreadID tid, InstSeqNum seq_num)
+{
+    auto &hist = memOrderHistory[tid];
+
+    auto it = hist.upper_bound(seq_num);
+    hist.erase(it, hist.end());
+
+    if (hist.empty()) {
+        memOrderVersion[tid] = 0;
+    } else {
+        memOrderVersion[tid] = hist.rbegin()->second;
+    }
 }
 
 void
@@ -373,6 +393,8 @@ Decode::squash(const DynInstPtr &inst, bool control_miss, ThreadID tid)
 
     // Squash instructions up until this one
     cpu->removeInstsUntil(squash_seq_num, tid);
+
+    // rollbackMemOrderVersion(tid, squash_seq_num);
 }
 
 unsigned
@@ -418,6 +440,9 @@ Decode::squash(ThreadID tid)
     while (!skidBuffer[tid].empty()) {
         skidBuffer[tid].pop();
     }
+
+    // InstSeqNum keep_seq = fromCommit->commitInfo[tid].doneSeqNum;
+    // rollbackMemOrderVersion(tid, keep_seq ? keep_seq : 0);
 
     return squash_count;
 }
@@ -525,6 +550,17 @@ Decode::checkSignalsAndUpdate(ThreadID tid)
 
     // Update the per thread stall statuses.
     readStallSignals(tid);
+
+    // Drop historical versions that are older than the last committed
+    // instruction to keep the history bounded. Keep the entry at
+    // doneSeqNum if present so we can still roll back to it.
+    if (false && fromCommit->commitInfo[tid].doneSeqNum) {
+        auto &hist = memOrderHistory[tid];
+        auto it = hist.lower_bound(fromCommit->commitInfo[tid].doneSeqNum);
+        if (it != hist.begin()) {
+            hist.erase(hist.begin(), it);
+        }
+    }
 
     // Check squash signals from commit.
     if (fromCommit->commitInfo[tid].squash) {
@@ -703,6 +739,25 @@ Decode::decodeInsts(ThreadID tid)
         // This current instruction is valid, so add it into the decode
         // queue.  The next instruction may not be valid, so check to
         // see if branches were predicted correctly.
+
+        if (cpu->versioningEnabled()) {
+            // Increment the per-thread memory version on barriers so that
+            // following memory ops can be tagged with a new epoch.
+            if (inst->isWriteBarrier() || inst->isReadBarrier()) {
+                ++memOrderVersion[tid];
+
+                DPRINTF(Decode,
+                        "[tid:%i] Decoded a barrier instruction %i with PC:"
+                        "%s %s. Mem Order version is %i\n",
+                        tid, inst->seqNum, inst->pcState(),
+                        inst->staticInst->disassemble(
+                            inst->pcState().instAddr()),
+                        memOrderVersion[tid]);
+            }
+
+            inst->setMemOrderVersion(memOrderVersion[tid]);
+        }
+
         toRename->insts[toRenameIndex] = inst;
 
         ++(toRename->size);

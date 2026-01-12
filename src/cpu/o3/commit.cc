@@ -1268,6 +1268,11 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                                  head_inst->renamedDestIdx(i));
     }
 
+    if (cpu->speculativeBarrierIssueEnabled() &&
+        (head_inst->isReadBarrier() || head_inst->isWriteBarrier())) {
+        cpu->updateRetiredBarrierVersion(tid, head_inst->getMemOrderVersion());
+    }
+
     // hardware transactional memory
     // the HTM UID is purely for correctness and debugging purposes
     if (head_inst->isHtmStart())

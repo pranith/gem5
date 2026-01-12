@@ -104,10 +104,13 @@ MemDepUnit::init(const BaseO3CPUParams &params, ThreadID tid, CPU *cpu)
     DPRINTF(MemDepUnit, "Creating MemDepUnit %i object.\n",tid);
 
     id = tid;
+    this->cpu = cpu;
 
     depPred.init(params.store_set_clear_period,
                  params.SSITSize, params.SSITAssoc, params.SSITReplPolicy,
                  params.SSITIndexingPolicy, params.LFSTSize);
+
+    retiredBarrierVersion = 0;
 
     std::string stats_group_name = csprintf("MemDepUnit__%i", tid);
     cpu->addStatGroup(stats_group_name.c_str(), &stats);
@@ -217,23 +220,25 @@ MemDepUnit::insert(const DynInstPtr &inst)
     // Check any barriers and the dependence predictor for any
     // producing memrefs/stores.
     std::vector<InstSeqNum>  producing_stores;
-    if ((inst->isLoad() || inst->isAtomic()) && hasLoadBarrier()) {
-        DPRINTF(MemDepUnit, "%d load barriers in flight\n",
-                loadBarrierSNs.size());
-        producing_stores.insert(std::end(producing_stores),
-                                std::begin(loadBarrierSNs),
-                                std::end(loadBarrierSNs));
-    } else if ((inst->isStore() || inst->isAtomic()) && hasStoreBarrier()) {
-        DPRINTF(MemDepUnit, "%d store barriers in flight\n",
-                storeBarrierSNs.size());
-        producing_stores.insert(std::end(producing_stores),
-                                std::begin(storeBarrierSNs),
-                                std::end(storeBarrierSNs));
-    } else {
-        InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
-        if (dep != 0)
-            producing_stores.push_back(dep);
+    bool specBarriers = cpu->speculativeBarrierIssueEnabled();
+    if (!specBarriers) {
+        if ((inst->isLoad() || inst->isAtomic()) && hasLoadBarrier()) {
+            DPRINTF(MemDepUnit, "%d load barriers in flight\n",
+                    loadBarrierSNs.size());
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(loadBarrierSNs),
+                                    std::end(loadBarrierSNs));
+        } else if ((inst->isStore() || inst->isAtomic()) && hasStoreBarrier()) {
+            DPRINTF(MemDepUnit, "%d store barriers in flight\n",
+                    storeBarrierSNs.size());
+            producing_stores.insert(std::end(producing_stores),
+                                    std::begin(storeBarrierSNs),
+                                    std::end(storeBarrierSNs));
+        }
     }
+    InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
+    if (dep != 0)
+        producing_stores.push_back(dep);
 
     std::vector<MemDepEntryPtr> store_entries;
 
