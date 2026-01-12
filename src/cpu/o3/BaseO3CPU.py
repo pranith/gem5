@@ -245,6 +245,16 @@ class BaseO3CPU(BaseCPU):
     recvRespThrottling = Param.Bool(
         False, "Enable load receive response throttling in the LSQ"
     )
+
+    speculativeBarrierIssue = Param.Bool(
+        False,
+        "Allow memory ops to issue past barriers and validate ordering via epochs",
+    )
+
+    enableVersioning = Param.Bool(
+        False,
+        "Increment per-thread mem ordering version on barriers and tag mem ops",
+    )
     recvRespMaxCachelines = Param.Unsigned(
         1,
         "Maximum number of different receive response cachelines per cycle",

@@ -83,6 +83,9 @@ CPU::CPU(const BaseO3CPUParams &params)
       instcount(0),
 #endif
       removeInstsThisCycle(false),
+      speculativeBarrierIssue(params.speculativeBarrierIssue),
+      enableVersioning(params.enableVersioning),
+      retiredBarrierVersion{},
       bac(this, params),
       ftq(this, params),
       fetch(this, params),

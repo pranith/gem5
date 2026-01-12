@@ -147,6 +147,42 @@ LSQUnit::handleMBDrain(MergeBuffer::MergeBufferEntry *entry)
 }
 
 void
+LSQUnit::mergeBufferPrefetch(MergeBuffer::MergeBufferEntry *entry)
+{
+    if (!entry || !entry->baseReq) {
+        return;
+    }
+
+    const size_t line_size = entry->byteValids.size();
+
+    RequestPtr base = entry->baseReq;
+    Request::Flags flags = base->getFlags() | Request::PREFETCH;
+    RequestorID rid = base->requestorId();
+    RequestPtr pf_req =
+        std::make_shared<Request>(entry->blockAddr, line_size, flags, rid);
+    if (base->hasContextId()) {
+        pf_req->setContext(base->contextId());
+    }
+    if (base->hasPC()) {
+        pf_req->setPC(base->getPC());
+    }
+    pf_req->taskId(base->taskId());
+
+    PacketPtr pf_pkt = Packet::createRead(pf_req);
+    pf_pkt->cmd = MemCmd::SoftPFReq;
+    pf_pkt->allocate();
+    pf_pkt->senderState = new MergeBufferPrefetchSenderState(this);
+
+    if (trySendPacket(false, pf_pkt)) {
+        ++mergeBufferPfInFlight;
+    } else {
+        delete static_cast<MergeBufferPrefetchSenderState *>(
+            pf_pkt->senderState);
+        delete pf_pkt;
+    }
+}
+
+void
 LSQUnit::completeDataAccess(PacketPtr pkt)
 {
     LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
@@ -546,7 +582,6 @@ LSQUnit::checkSnoop(PacketPtr pkt)
     auto iter = loadQueue.begin();
 
     Addr invalidate_addr = pkt->getAddr() & cacheBlockMask;
-
     DynInstPtr ld_inst = iter->instruction();
     assert(ld_inst);
     LSQRequest *request = iter->request();
@@ -652,6 +687,17 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
                     }
                 }
 
+                auto inst_mem_version = inst->getMemOrderVersion();
+                auto ld_mem_version = ld_inst->getMemOrderVersion();
+                // If this load and a younger load have the same version and
+                // the younger load did not see an invalidation snoop yet, we
+                // don't need to mark the younger load as a possible violation
+                // in a weak memory model
+                if (!needsTSO && cpu->versioningEnabled() &&
+                    inst_mem_version >= ld_mem_version) {
+                    ++loadIt;
+                    continue;
+                }
                 // Otherwise, mark the load has a possible load violation and
                 // if we see a snoop before it's commited, we need to squash
                 ld_inst->possibleLoadViolation(true);
@@ -693,8 +739,8 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
     // Execute a specific load.
     Fault load_fault = NoFault;
 
-    DPRINTF(LSQUnit, "Executing load PC %s, [sn:%lli]\n",
-            inst->pcState(), inst->seqNum);
+    DPRINTF(LSQUnit, "Executing load PC %s, [sn:%lli] ver:%llu\n",
+            inst->pcState(), inst->seqNum, inst->getMemOrderVersion());
 
     assert(!inst->isSquashed());
 
@@ -782,8 +828,9 @@ LSQUnit::executeStore(const DynInstPtr &store_inst)
 
     ssize_t store_idx = store_inst->sqIdx;
 
-    DPRINTF(LSQUnit, "Executing store PC %s [sn:%lli]\n",
-            store_inst->pcState(), store_inst->seqNum);
+    DPRINTF(LSQUnit, "Executing store PC %s [sn:%lli] ver:%llu\n",
+            store_inst->pcState(), store_inst->seqNum,
+            store_inst->getMemOrderVersion());
 
     assert(!store_inst->isSquashed());
 
@@ -941,9 +988,11 @@ LSQUnit::writebackStores()
     while (storesToWB > 0 && storeWBIt.dereferenceable() &&
            storeWBIt->valid() && storeWBIt->canWB()) {
 
-        DPRINTF(LSQUnit, "Trying to drain store at idx:%i PC:%s [sn:%lu]\n",
+        DPRINTF(LSQUnit, "Trying to drain store at idx:%i PC:%s [sn:%lu] "
+                "ver:%llu\n",
                 storeWBIt.idx(), storeWBIt->instruction()->pcState(),
-                storeWBIt->instruction()->seqNum);
+                storeWBIt->instruction()->seqNum,
+                storeWBIt->instruction()->getMemOrderVersion());
 
         if (storeDeallocsThisCycle >= storeDeallocateWidth) {
             DPRINTF(LSQUnit, "Unable to write back any more stores, store "
@@ -1009,18 +1058,20 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
-                bool can_merge_both = mergeBuffer.canAcceptSplitStore(request);
+                uint64_t version = inst->getMemOrderVersion();
+                bool can_merge_both =
+                    mergeBuffer.canAcceptSplitStore(request, version);
 
                 if (can_merge_both) {
                     mb_entry = mergeBuffer.addStore(
                         now, req0->getPaddr(),
                         reinterpret_cast<uint8_t *>(storeWBIt->data()), size0,
-                        storeWBIt, storeWBIt->isAllZeros());
+                        storeWBIt, storeWBIt->isAllZeros(), version);
 
                     auto *mb_entry2 = mergeBuffer.addStore(
                         now, req1->getPaddr(),
                         reinterpret_cast<uint8_t *>(storeWBIt->data()) + size0,
-                        size1, storeWBIt, storeWBIt->isAllZeros());
+                        size1, storeWBIt, storeWBIt->isAllZeros(), version);
 
                     if (!mb_entry || !mb_entry2) {
                         panic("Only one part of a split store merged!");
@@ -1033,7 +1084,7 @@ LSQUnit::writebackStores()
                 mb_entry = mergeBuffer.addStore(
                     now, request->mainReq()->getPaddr(),
                     (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
-                    storeWBIt->isAllZeros());
+                    storeWBIt->isAllZeros(), inst->getMemOrderVersion());
             }
 
             DPRINTF(LSQUnit,
@@ -1608,9 +1659,10 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
 
     DPRINTF(LSQUnit,
             "[sn:%lli] Read called, load idx: %i, store idx: %i, "
-            "storeHead: %i addr: %#x%s\n",
+            "storeHead: %i addr: %#x ver:%llu%s\n",
             load_inst->seqNum, load_idx - 1, load_inst->sqIt._idx,
             storeQueue.head() - 1, request->mainReq()->getPaddr(),
+            load_inst->getMemOrderVersion(),
             request->isSplit() ? " split" : "");
 
     if (request->mainReq()->isLLSC()) {
@@ -1985,9 +2037,10 @@ LSQUnit::write(LSQRequest *request, uint8_t *data, ssize_t store_idx)
     assert(storeQueue[store_idx].valid());
 
     DPRINTF(LSQUnit, "Doing write to store idx %i, addr %#x | storeHead:%i "
-            "[sn:%llu]\n",
+            "[sn:%llu] ver:%llu\n",
             store_idx - 1, request->req()->getPaddr(), storeQueue.head() - 1,
-            storeQueue[store_idx].instruction()->seqNum);
+            storeQueue[store_idx].instruction()->seqNum,
+            storeQueue[store_idx].instruction()->getMemOrderVersion());
 
     storeQueue[store_idx].setRequest(request);
     unsigned size = request->_size;
@@ -2038,7 +2091,8 @@ LSQUnit::MergeBuffer::MergeBufferEntry *
 LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                                size_t size,
                                typename StoreQueue::iterator store_it,
-                               bool is_all_zero)
+                               bool is_all_zero,
+                               uint64_t version)
 {
     Addr currAddr = addr;
     size_t remaining = size;
@@ -2049,106 +2103,91 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
         uint32_t offset = currAddr & (lineSize - 1);
         size_t chunk = std::min(lineSize - offset, remaining);
 
-        auto it = std::find_if(entries.begin(), entries.end(),
-                               [lineAddr](const MergeBufferEntry &e) {
-                                   return e.valid && e.blockAddr == lineAddr;
-                               });
+        size_t found_idx = entries.size();
+        for (size_t idx = 0; idx < entries.size(); ++idx) {
+            if (!entryValid[idx])
+                continue;
+            const auto &e = entries[idx];
+            if (e.blockAddr == lineAddr && e.version == version) {
+                found_idx = idx;
+                break;
+            }
+        }
 
-        if (it != entries.end()) {
+        if (found_idx != entries.size()) {
+            auto &entry = entries[found_idx];
 
-            if (lsqPtr && lsqPtr->needsTSO && &(*it) != &entries.back()) {
-                DPRINTF(LSQUnit,
-                        "Blocking merge for Addr:%#x; matching MB "
-                        "entry is not the most recent allocation\n",
-                        lineAddr);
-                return nullptr;
+            if (lsqPtr && lsqPtr->needsTSO) {
+                if (lastAllocatedIdx != numEntries &&
+                    found_idx != lastAllocatedIdx) {
+                    DPRINTF(LSQUnit,
+                            "Blocking merge for Addr:%#x ver:%llu; matching MB "
+                            "entry is not the most recent allocation",
+                            lineAddr, version);
+                    return nullptr;
+                }
             }
 
             DPRINTF(LSQUnit,
-                    "Found an existing MB entry for Addr:%#x retiring in %lu, "
-                    "now:%lu\n",
-                    lineAddr, it->retireCycle, now);
-            if (it->state == EntryState::RETIRED &&
-                it->unretireCount < maxUnretire) {
-                // Allow unretire if new data arrives later.
-                it->state = EntryState::MERGING;
-                it->retireCycle = now + retireWindow;
-                it->unretireCount++;
+                    "Found an existing MB entry for Addr:%#x ver:%llu "
+                    "retiring in %lu, now:%lu\n",
+                    lineAddr, entry.version, entry.retireCycle, now);
+            if (entry.state == EntryState::RETIRED &&
+                entry.unretireCount < maxUnretire) {
+                entry.state = EntryState::MERGING;
+                entry.retireCycle = now + retireWindow;
+                entry.unretireCount++;
                 if (lsqPtr) {
                     lsqPtr->stats.mbUnretire++;
                 }
-            } else if (it->state != EntryState::MERGING) {
-                DPRINTF(LSQUnit, "MB entry for Addr:%#x marked %s\n", lineAddr,
-                        (it->state == EntryState::RETIRED) ? "RETIRED"
-                        : (it->state == EntryState::DRAINING)
+            } else if (entry.state != EntryState::MERGING) {
+                DPRINTF(LSQUnit, "MB entry for Addr:%#x ver:%llu marked %s\n",
+                        lineAddr, entry.version,
+                        (entry.state == EntryState::RETIRED) ? "RETIRED"
+                        : (entry.state == EntryState::DRAINING)
                             ? "DRAINING"
                             : "FORCE_RETIRED");
                 return nullptr;
             }
 
-            updateEntry(*it, data + (currAddr - addr), offset, chunk,
+            updateEntry(entry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
 
-            if (!it->baseReq) {
-                it->baseReq = std::make_shared<Request>(
+            if (!entry.baseReq) {
+                entry.baseReq = std::make_shared<Request>(
                     *(store_it->request()->mainReq()));
             }
             if (resetRetireOnMerge) {
-                it->retireCycle += resetRetireWindow;
+                entry.retireCycle += resetRetireWindow;
             }
             if (lsqPtr) {
                 lsqPtr->stats.mbMerges++;
             }
-            last_entry = &(*it);
+            last_entry = &entry;
         } else {
-            if (entries.size() >= numEntries) {
+            size_t free_idx = entryValid.size();
+            for (size_t idx = 0; idx < entryValid.size(); ++idx) {
+                if (!entryValid[idx]) {
+                    free_idx = idx;
+                    break;
+                }
+            }
+            if (free_idx == entryValid.size()) {
                 return nullptr;
             }
-            MergeBufferEntry newEntry(lineSize);
+            MergeBufferEntry newEntry(lineSize, version);
             newEntry.blockAddr = lineAddr;
-            newEntry.valid = true;
             newEntry.retireCycle = now + retireWindow;
             newEntry.baseReq =
                 std::make_shared<Request>(*(store_it->request()->mainReq()));
             updateEntry(newEntry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
 
-            entries.push_back(std::move(newEntry));
-            last_entry = &entries.back();
-
-            if (lsqPtr && lsqPtr->mergeBufferPrefetchEnabled &&
-                lsqPtr->mergeBufferPfInFlight == 0) {
-                // Prefetch the cache line to speed up later drains.
-                RequestPtr base = store_it->request()->mainReq();
-                Request::Flags flags = base->getFlags() | Request::PREFETCH;
-                RequestorID rid = base->requestorId();
-                RequestPtr pf_req =
-                    std::make_shared<Request>(lineAddr, lineSize, flags, rid);
-                if (base->hasContextId()) {
-                    pf_req->setContext(base->contextId());
-                }
-                if (base->hasPC()) {
-                    pf_req->setPC(base->getPC());
-                }
-                pf_req->taskId(base->taskId());
-
-                PacketPtr pf_pkt = Packet::createRead(pf_req);
-                // Use a soft prefetch so it can go through cache/MSHR
-                // normally.
-                pf_pkt->cmd = MemCmd::SoftPFReq;
-                // Give the packet a data buffer to satisfy downstream asserts.
-                pf_pkt->allocate();
-                pf_pkt->senderState =
-                    new MergeBufferPrefetchSenderState(lsqPtr);
-
-                if (lsqPtr->trySendPacket(false, pf_pkt)) {
-                    ++lsqPtr->mergeBufferPfInFlight;
-                } else {
-                    delete static_cast<MergeBufferPrefetchSenderState *>(
-                        pf_pkt->senderState);
-                    delete pf_pkt;
-                }
-            }
+            entries[free_idx] = std::move(newEntry);
+            entryValid[free_idx] = true;
+            last_entry = &entries[free_idx];
+            lastAllocatedIdx = free_idx;
+            recordAllocVersion(version);
 
             if (lsqPtr) {
                 lsqPtr->stats.mbAllocations++;
@@ -2156,20 +2195,26 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             // Reset unretire count on new allocations
             last_entry->unretireCount = 0;
             DPRINTF(LSQUnit,
-                    "Allocating a new MB entry for Addr:%#x retiring in %lu, "
-                    "now: %lu\n",
-                    lineAddr, now + retireWindow, now);
+                    "Allocating a new MB entry for Addr:%#x ver:%llu "
+                    "retiring in %lu, now: %lu\n",
+                    lineAddr, version, now + retireWindow, now);
         }
 
         currAddr += chunk;
         remaining -= chunk;
     }
 
+    // Prefetch on merge buffer allocation to accelerate draining.
+    if (lsqPtr && lsqPtr->mergeBufferPrefetchEnabled && last_entry) {
+        lsqPtr->mergeBufferPrefetch(last_entry);
+    }
+
     return last_entry;
 }
 
 bool
-LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request) const
+LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
+                                          uint64_t version) const
 {
     auto req0 = request->req(0);
     auto req1 = request->req(1);
@@ -2183,28 +2228,29 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request) const
     bool merge_req0 = false;
     bool merge_req1 = false;
 
-    auto checkAddrMerge = [this](const Addr addr, bool &addr_exists,
-                                 bool &can_merge) {
-        return
-            [this, addr, &addr_exists, &can_merge](const MergeBufferEntry &e) {
-                if (e.blockAddr == addr) {
-                    addr_exists = true;
+    auto checkAddrMerge = [this, version](const Addr addr, bool &addr_exists,
+                                          bool &can_merge) {
+        for (size_t idx = 0; idx < entries.size(); ++idx) {
+            if (!entryValid[idx])
+                continue;
+            const auto &e = entries[idx];
+            if (e.blockAddr != addr)
+                continue;
 
-                    if (e.state == EntryState::MERGING ||
-                        (e.state == EntryState::RETIRED &&
-                         e.unretireCount < maxUnretire)) {
-                        can_merge = true;
-                    }
+	    if (e.version == version) {
+                addr_exists = true;
+
+                if (e.state == EntryState::MERGING ||
+                    (e.state == EntryState::RETIRED &&
+                     e.unretireCount < maxUnretire)) {
+                    can_merge = true;
                 }
-
-                return false;
-            };
+	    }
+        }
     };
 
-    std::for_each(entries.begin(), entries.end(),
-                  checkAddrMerge(addr0, addr0_exists, merge_req0));
-    std::for_each(entries.begin(), entries.end(),
-                  checkAddrMerge(addr1, addr1_exists, merge_req1));
+    checkAddrMerge(addr0, addr0_exists, merge_req0);
+    checkAddrMerge(addr1, addr1_exists, merge_req1);
 
     int num_allocs = !addr0_exists + !addr1_exists;
 
@@ -2216,7 +2262,10 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request) const
         return false;
     }
 
-    if (entries.size() > (numEntries - num_allocs)) {
+    size_t valid_entries = std::count(entryValid.begin(),
+                                      entryValid.end(), true);
+
+    if (valid_entries + num_allocs > numEntries) {
         return false;
     }
 
@@ -2227,10 +2276,11 @@ bool
 LSQUnit::MergeBuffer::canForward(Addr paddr, size_t size) const
 {
     Addr end = paddr + size;
-    for (const auto &entry : entries) {
-        if (!entry.valid) {
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
             continue;
         }
+        const auto &entry = entries[idx];
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
@@ -2256,16 +2306,34 @@ LSQUnit::AddrRangeCoverage
 LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size) const
 {
     Addr end = paddr + size;
-    for (const auto &entry : entries) {
-        if (!entry.valid) {
+    bool versioned = lsqPtr && lsqPtr->cpu->versioningEnabled();
+    std::vector<size_t> candidates;
+    candidates.reserve(entries.size());
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
             continue;
         }
+        const auto &entry = entries[idx];
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
             continue;
         }
-        size_t offset = paddr - blk_start;
+        candidates.push_back(idx);
+    }
+
+    if (versioned) {
+        std::sort(candidates.begin(), candidates.end(),
+                  [this](size_t a, size_t b) {
+                      const auto &ea = entries[a];
+                      const auto &eb = entries[b];
+                      return ea.version > eb.version;
+                  });
+    }
+
+    for (size_t idx : candidates) {
+        const auto &entry = entries[idx];
+        size_t offset = paddr - entry.blockAddr;
         bool fits = (offset + size) <= lineSize;
         size_t to_check = std::min<size_t>(size, lineSize - offset);
         bool all_present = true;
@@ -2293,16 +2361,34 @@ bool
 LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size) const
 {
     Addr end = paddr + size;
-    for (const auto &entry : entries) {
-        if (!entry.valid) {
+    bool versioned = lsqPtr && lsqPtr->cpu->versioningEnabled();
+    std::vector<size_t> candidates;
+    candidates.reserve(entries.size());
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
             continue;
         }
+        const auto &entry = entries[idx];
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
             continue;
         }
-        size_t offset = paddr - blk_start;
+        candidates.push_back(idx);
+    }
+
+    if (versioned) {
+        std::sort(candidates.begin(), candidates.end(),
+                  [this](size_t a, size_t b) {
+                      const auto &ea = entries[a];
+                      const auto &eb = entries[b];
+                      return ea.version > eb.version;
+                  });
+    }
+
+    for (size_t idx : candidates) {
+        const auto &entry = entries[idx];
+        size_t offset = paddr - entry.blockAddr;
         bool fits = (offset + size) <= lineSize;
         size_t to_copy = std::min<size_t>(size, lineSize - offset);
         bool all_present = true;
@@ -2324,8 +2410,12 @@ LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size) const
 void
 LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
 {
-    for (auto &entry : entries) {
-        if (entry.valid && entry.state == EntryState::MERGING) {
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        auto &entry = entries[idx];
+        if (entry.state == EntryState::MERGING) {
 
             bool all_valid =
                 std::all_of(entry.byteValids.begin(), entry.byteValids.end(),
@@ -2383,10 +2473,11 @@ LSQUnit::LSQUnit(const LSQUnit &l) : stats(nullptr)
 void
 LSQUnit::MergeBuffer::forceRetireAll()
 {
-    for (auto &entry : entries) {
-        if (!entry.valid) {
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
             continue;
         }
+        auto &entry = entries[idx];
         if (entry.state == EntryState::MERGING ||
             entry.state == EntryState::RETIRED) {
             entry.state = EntryState::FORCE_RETIRED;
@@ -2395,31 +2486,57 @@ LSQUnit::MergeBuffer::forceRetireAll()
     }
 }
 
+std::optional<uint64_t>
+LSQUnit::MergeBuffer::youngestVersion() const
+{
+    if (versionCounts.empty()) {
+        return std::nullopt;
+    }
+    return versionCounts.front().first;
+}
+
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 {
-    // Oldest entry is at the front of the list; enforce FIFO draining in TSO.
-    auto it = entries.begin();
-    while (it != entries.end() && !it->valid) {
-        it = entries.erase(it);
+    // Find a ready entry regardless of index; prefer lowest version then retire time.
+    size_t idx = entries.size();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (!entryValid[i]) {
+            continue;
+        }
+        const auto &e = entries[i];
+        bool ready = (e.state == EntryState::RETIRED ||
+                      e.state == EntryState::FORCE_RETIRED);
+        if (!ready) {
+            continue;
+        }
+        if (idx == entries.size()) {
+            idx = i;
+            continue;
+        }
+        const auto &cur = entries[idx];
+        if (e.version < cur.version ||
+            (e.version == cur.version && e.retireCycle < cur.retireCycle)) {
+            idx = i;
+        }
     }
 
-    if (lsq_ptr->needsTSO) {
-        if (it == entries.end() || (it->state != EntryState::RETIRED &&
-                                    it->state != EntryState::FORCE_RETIRED)) {
-            return false;
-        }
-    } else {
-        it = std::find_if(it, entries.end(), [](MergeBufferEntry &e) {
-            return e.valid && (e.state == EntryState::RETIRED ||
-                               e.state == EntryState::FORCE_RETIRED);
-        });
-        if (it == entries.end()) {
-            return false;
-        }
+    if (idx == entries.size()) {
+        DPRINTF(LSQUnit, "No MB entry ready to drain.\n");
+        return false;
     }
 
-    MergeBufferEntry &entry = *it;
+    MergeBufferEntry &entry = entries[idx];
+
+    // Ensure we only drain the lowest-version entries (head of version queue).
+    if (!versionCounts.empty() && entry.version != versionCounts.front().first) {
+        DPRINTF(LSQUnit,
+                "Deferring drain for block %#x with version ver:%llu "
+                "(head version ver:%llu)\n",
+                entry.blockAddr, entry.version, versionCounts.front().first);
+        return false;
+    }
+
     assert(entry.baseReq);
     RequestPtr base = entry.baseReq;
 
@@ -2457,6 +2574,11 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
         return false;
     }
 
+    DPRINTF(LSQUnit,
+            "Sending a memory request for merge buffer entry block addr %#x "
+            "version ver:%llu\n",
+            entry.blockAddr, entry.version);
+
     if (lsqPtr) {
         lsqPtr->stats.mbDrains++;
     }
@@ -2480,13 +2602,110 @@ LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
 
     DPRINTF(LSQUnit,
             "Drain response for merge buffer entry with "
-            "block addr:%#x cycle:%lu\n",
-            entry->blockAddr, lsq_ptr->cpu->curCycle());
+            "block addr:%#x ver:%llu cycle:%lu\n",
+            entry->blockAddr, entry->version, lsq_ptr->cpu->curCycle());
 
     lsq_ptr->handleMBDrain(entry);
 
-    entries.remove_if(
-        [entry](const MergeBufferEntry &e) { return &e == entry; });
+    auto it = std::find_if(entries.begin(), entries.end(),
+                           [entry](const MergeBufferEntry &e) {
+                               return &e == entry;
+                           });
+    if (it != entries.end()) {
+        size_t idx = std::distance(entries.begin(), it);
+        invalidateEntry(idx);
+    }
+}
+
+void
+LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
+{
+    if (idx >= entries.size() || idx >= entryValid.size()) {
+        DPRINTF(LSQUnit, "Merge buffer invalidate idx out of bounds\n");
+        return;
+    }
+
+    entryValid[idx] = false;
+    if (idx == lastAllocatedIdx) {
+        lastAllocatedIdx = numEntries;
+    }
+    auto &entry = entries[idx];
+    recordInvalidateVersion(entry.version);
+    entry.baseReq = nullptr;
+    entry.byteValids.assign(lineSize, false);
+    entry.blockData.assign(lineSize, 0);
+    entry.state = EntryState::MERGING;
+    entry.retireCycle = Cycles(0);
+    entry.unretireCount = 0;
+    entry.blockAddr = 0;
+    entry.version = 0;
+}
+
+void
+LSQUnit::MergeBuffer::recordAllocVersion(uint64_t version)
+{
+    if (versionCounts.empty()) {
+        DPRINTF(LSQUnit, "Inserting a new version entry ver:%llu total:%llu\n",
+                version, versionCounts.size());
+        versionCounts.emplace_back(version, 1);
+        return;
+    }
+
+    if (version >= versionCounts.back().first) {
+        if (version == versionCounts.back().first) {
+            DPRINTF(LSQUnit,
+                    "Incrementing the version entry ver:%llu count %llu\n",
+                    version, versionCounts.back().second);
+            versionCounts.back().second++;
+        } else {
+            DPRINTF(LSQUnit, "Inserting a new version entry ver:%llu\n",
+                    version);
+            versionCounts.emplace_back(version, 1);
+        }
+        return;
+    }
+
+    assert(false);
+    auto it = std::find_if(
+        versionCounts.begin(), versionCounts.end(),
+        [version](const std::pair<uint64_t, size_t> &p) {
+            return p.first >= version;
+        });
+
+    if (it != versionCounts.end() && it->first == version) {
+        it->second++;
+    } else {
+        versionCounts.insert(it, std::make_pair(version, 1));
+    }
+}
+
+void
+LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
+{
+    auto it = std::find_if(
+        versionCounts.begin(), versionCounts.end(),
+        [version](const std::pair<uint64_t, size_t> &p) {
+            return p.first == version;
+        });
+
+    if (it == versionCounts.end()) {
+        assert(false);
+        return;
+    }
+
+    // dealloc always happens for the lowest version
+    assert(it == versionCounts.begin());
+    assert(it->second > 0);
+
+    DPRINTF(LSQUnit, "Decrementing the version entry ver:%llu count %llu\n",
+            version, it->second);
+
+    it->second--;
+    if (it->second == 0) {
+        DPRINTF(LSQUnit, "Deallocating the version entry ver:%llu\n",
+                it->first);
+        versionCounts.erase(it);
+    }
 }
 
 } // namespace o3
