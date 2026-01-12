@@ -42,6 +42,8 @@
 #ifndef __CPU_O3_DECODE_HH__
 #define __CPU_O3_DECODE_HH__
 
+#include <array>
+#include <map>
 #include <queue>
 
 #include "base/statistics.hh"
@@ -274,6 +276,15 @@ class Decode
 
     /** The width of decode, in instructions. */
     unsigned decodeWidth;
+
+    /** Per-thread memory ordering version used for loads/stores. */
+    std::array<uint64_t, MaxThreads> memOrderVersion;
+
+    /** Version history keyed by sequence number to support rollback. */
+    std::array<std::map<InstSeqNum, uint64_t>, MaxThreads> memOrderHistory;
+
+    /** Trim history after a squash and restore the current version. */
+    void rollbackMemOrderVersion(ThreadID tid, InstSeqNum seq_num);
 
     /** Index of instructions being sent to rename. */
     unsigned toRenameIndex;

@@ -628,6 +628,9 @@ class DynInst : public ExecContext, public RefCounted
         htmDepth = htm_depth;
     }
 
+    void setMemOrderVersion(uint64_t version) { memOrderVersion = version; }
+    uint64_t getMemOrderVersion() const { return memOrderVersion; }
+
     void
     clearHtmTransactionalState()
     {
@@ -1030,6 +1033,9 @@ class DynInst : public ExecContext, public RefCounted
     /* Values used by LoadToUse stat */
     Tick firstIssue = -1;
     Tick lastWakeDependents = -1;
+
+    /** Load/store ordering version assigned at decode time. */
+    uint64_t memOrderVersion = 0;
 
     /** Reads a misc. register, including any side-effects the read
      * might have as defined by the architecture.

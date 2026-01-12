@@ -44,10 +44,11 @@
 
 #include <algorithm>
 #include <cstring>
-#include <list>
+#include <deque>
 #include <map>
 #include <memory>
 #include <queue>
+#include <optional>
 
 #include "arch/generic/debugfaults.hh"
 #include "arch/generic/vec_reg.hh"
@@ -230,15 +231,15 @@ class LSQUnit
             RequestPtr baseReq;
             Cycles retireCycle;
             unsigned unretireCount;
-            bool valid;
+            uint64_t version;
 
-            MergeBufferEntry(size_t size)
+            MergeBufferEntry(size_t size, uint64_t ver)
                 : byteValids(size, false),
                   blockData(size, 0),
                   state(EntryState::MERGING),
                   retireCycle(0),
                   unretireCount(0),
-                  valid(false)
+                  version(ver)
             {}
         };
 
@@ -248,7 +249,12 @@ class LSQUnit
         Cycles retireWindow;
         unsigned maxUnretire;
 
-        std::list<MergeBufferEntry> entries;
+        std::vector<MergeBufferEntry> entries;
+        std::vector<bool> entryValid;
+        /** Index of the most recently allocated entry; invalid when >= size. */
+        size_t lastAllocatedIdx;
+        /** Tracks counts of outstanding entries per version in order. */
+        std::deque<std::pair<uint64_t, size_t>> versionCounts;
 
         LSQUnit *lsqPtr;
         bool resetRetireOnMerge;
@@ -269,34 +275,49 @@ class LSQUnit
             resetRetireOnMerge = reset_on_merge;
             resetRetireWindow = reset_window;
             maxUnretire = max_unretire;
+            entries.assign(numEntries, MergeBufferEntry(lineSize, 0));
+            entryValid.assign(numEntries, false);
+            lastAllocatedIdx = numEntries;
         }
 
         MergeBufferEntry *addStore(Cycles now, Addr addr, uint8_t *data,
                                    size_t size,
                                    typename StoreQueue::iterator store_it,
-                                   bool is_all_zero);
+                                   bool is_all_zero,
+                                   uint64_t version);
+        void invalidateEntry(size_t idx);
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
         void forceRetireAll();
+        std::optional<uint64_t> youngestVersion() const;
         void
         reset()
         {
-            entries.clear();
+            entries.assign(numEntries, MergeBufferEntry(lineSize, 0));
+            entryValid.assign(numEntries, false);
+            lastAllocatedIdx = numEntries;
+            // reset versions to 0 on reset
+            for (auto &entry : entries) {
+                entry.version = 0;
+            }
+            versionCounts.clear();
         }
-        bool canAcceptSplitStore(LSQRequest *request) const;
+        bool canAcceptSplitStore(LSQRequest *request, uint64_t version) const;
         bool canForward(Addr paddr, size_t size) const;
         bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
         bool
         isEmpty() const
         {
-            return entries.size() == 0;
+            return std::none_of(entryValid.begin(), entryValid.end(),
+                                [](bool v) { return v; });
         }
         bool
         isFull() const
         {
-            return entries.size() == numEntries;
+            return std::all_of(entryValid.begin(), entryValid.end(),
+                               [](bool v) { return v; });
         }
 
         std::string
@@ -316,6 +337,9 @@ class LSQUnit
                 entry.byteValids[offset + i] = true;
             }
         }
+
+        void recordAllocVersion(uint64_t version);
+        void recordInvalidateVersion(uint64_t version);
     };
 
   public:
@@ -343,6 +367,12 @@ class LSQUnit
 
     /** Perform sanity checks after a drain. */
     void drainSanityCheck() const;
+
+    /** Track executed loads for RAR violation detection. */
+    void trackRARExecute(const DynInstPtr &inst, LSQRequest *request,
+                         Addr block_addr);
+    /** Remove RAR tracking when load commits. */
+    void trackRARCommit(const DynInstPtr &inst);
 
     /** Takes over from another CPU's thread. */
     void takeOverFrom();
@@ -604,6 +634,9 @@ class LSQUnit
      * @param pkt Response packet from the memory sub-system
      */
     bool recvTimingResp(PacketPtr pkt);
+
+    /** Issue a prefetch for a merge buffer line. */
+    void mergeBufferPrefetch(MergeBuffer::MergeBufferEntry *entry);
 
   private:
     /** The LSQUnit thread id. */

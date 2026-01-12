@@ -44,6 +44,8 @@
 #ifndef __CPU_O3_CPU_HH__
 #define __CPU_O3_CPU_HH__
 
+#include <algorithm>
+#include <array>
 #include <iostream>
 #include <list>
 #include <queue>
@@ -409,6 +411,25 @@ class CPU : public BaseCPU
      *  being retired or squashed.
      */
     bool removeInstsThisCycle;
+
+    /** Enable speculative issue past barriers with epoch validation. */
+    const bool speculativeBarrierIssue;
+    const bool enableVersioning;
+
+    /** Per-thread last retired barrier version. */
+    std::array<uint64_t, MaxThreads> retiredBarrierVersion;
+
+  public:
+    bool speculativeBarrierIssueEnabled() const { return speculativeBarrierIssue; }
+    bool versioningEnabled() const { return enableVersioning; }
+    uint64_t getRetiredBarrierVersion(ThreadID tid) const
+    {
+        return retiredBarrierVersion[tid];
+    }
+    void updateRetiredBarrierVersion(ThreadID tid, uint64_t version)
+    {
+        retiredBarrierVersion[tid] = std::max(retiredBarrierVersion[tid], version);
+    }
 
   protected:
     /** The branch and PC address calculation stage. */
