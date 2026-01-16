@@ -1413,8 +1413,10 @@ let {{
                   case 4:
                     {
                         CR4 cr4 = newVal;
+                        // Fault if any unknown bits are set. Also,
                         // PAE can't be disabled in long mode.
-                        if (bits(newVal, 63, 11) ||
+                        if (bits(newVal, 63, 17) ||
+                            bits(newVal, 15, 11) ||
                                 (machInst.mode.mode == LongMode && !cr4.pae))
                             fault = std::make_shared<GeneralProtection>(0);
                     }
