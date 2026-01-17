@@ -853,7 +853,7 @@ class LSQ
      * to memory.
      */
     bool hasStoresToWB(ThreadID tid);
-    void forceMBDrain(ThreadID tid);
+    void forceMBDrain(ThreadID tid, uint64_t version);
 
     /** Youngest/lowest merge buffer version for the given thread, if any. */
     std::optional<uint64_t> youngestMBVersion(ThreadID tid) const;
