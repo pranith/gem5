@@ -731,6 +731,18 @@ LSQ::hasStoresToWB(ThreadID tid)
     return thread.at(tid).hasStoresToWB();
 }
 
+std::optional<uint64_t>
+LSQ::youngestMBVersion(ThreadID tid) const
+{
+    return thread.at(tid).youngestMBVersion();
+}
+
+bool
+LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+{
+    return thread.at(tid).loadBlockedByMBVersion(load_version);
+}
+
 int
 LSQ::numStoresToWB(ThreadID tid)
 {
