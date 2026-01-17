@@ -42,6 +42,7 @@
 #include "cpu/o3/commit.hh"
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -1177,6 +1178,20 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         }
         // If this point is reached and the fault inherits from the HTM fault,
         // then there is no need to raise a new fault
+    }
+
+    if (head_inst->isLoad() && inst_fault == NoFault &&
+        cpu->versioningEnabled() &&
+        iewStage->loadBlockedByMBVersion(
+            tid, head_inst->getMemOrderVersion())) {
+        auto youngest_mb_version = iewStage->youngestMBVersion(tid);
+        DPRINTF(Commit,
+                "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu until "
+                "merge buffer versions <= ver:%llu drain.\n",
+                tid, head_inst->seqNum, head_inst->getMemOrderVersion(),
+                youngest_mb_version ? *youngest_mb_version : 0);
+        iewStage->forceMBDrain(tid);
+        return false;
     }
 
     // Stores mark themselves as completed.
