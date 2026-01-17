@@ -1088,7 +1088,7 @@ LSQUnit::writebackStores()
                     (inst->isWriteBarrier() || inst->isSerializeBefore() ||
                      inst->isSerializeAfter() ||
                      request->mainReq()->isRelease())) {
-                    mergeBuffer.forceRetireAll();
+                    mergeBuffer.forceRetireVersionsBefore(store_version);
                     forcedMBRetire = true;
                 }
                 // Unable to merge, stop trying
@@ -2400,13 +2400,16 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
 }
 
 void
-LSQUnit::MergeBuffer::forceRetireAll()
+LSQUnit::MergeBuffer::forceRetireVersionsBefore(uint64_t version)
 {
     for (size_t idx = 0; idx < entries.size(); ++idx) {
         if (!entryValid[idx]) {
             continue;
         }
         auto &entry = entries[idx];
+        if (entry.version >= version) {
+            continue;
+        }
         if (entry.state == EntryState::MERGING ||
             entry.state == EntryState::RETIRED) {
             entry.state = EntryState::FORCE_RETIRED;

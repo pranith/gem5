@@ -720,9 +720,9 @@ LSQ::hasStoresToWB()
 }
 
 void
-LSQ::forceMBDrain(ThreadID tid)
+LSQ::forceMBDrain(ThreadID tid, uint64_t version)
 {
-    return thread.at(tid).forceMBDrain();
+    return thread.at(tid).forceMBDrain(version);
 }
 
 bool
