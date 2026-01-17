@@ -46,6 +46,7 @@
 #include <cstdint>
 #include <list>
 #include <map>
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -853,6 +854,12 @@ class LSQ
      */
     bool hasStoresToWB(ThreadID tid);
     void forceMBDrain(ThreadID tid);
+
+    /** Youngest/lowest merge buffer version for the given thread, if any. */
+    std::optional<uint64_t> youngestMBVersion(ThreadID tid) const;
+
+    /** Checks if a load version must wait for older merge buffer versions. */
+    bool loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const;
 
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);

@@ -499,6 +499,15 @@ class LSQUnit
         return mergeBuffer.isEmpty();
     }
 
+    /** Youngest/lowest merge buffer version currently allocated. */
+    std::optional<uint64_t> youngestMBVersion() const;
+
+    /**
+     * Returns true if a load with the given version must wait for merge
+     * buffer entries with lower versions to drain.
+     */
+    bool loadBlockedByMBVersion(uint64_t version) const;
+
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
 
