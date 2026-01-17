@@ -294,7 +294,7 @@ class LSQUnit
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
-        void forceRetireAll();
+        void forceRetireVersionsBefore(uint64_t version);
         std::optional<uint64_t> youngestVersion() const;
         void
         reset()
@@ -537,11 +537,10 @@ class LSQUnit
     /** Handles doing the retry. */
     void recvRetry();
 
-    /** Forces merge buffer drain. */
-    void
-    forceMBDrain()
+    /** Forces merge buffer drain for entries older than version. */
+    void forceMBDrain(uint64_t version)
     {
-        mergeBuffer.forceRetireAll();
+        mergeBuffer.forceRetireVersionsBefore(version);
     }
 
     /** Handles merge buffer drain completion. */
