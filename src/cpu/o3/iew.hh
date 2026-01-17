@@ -41,6 +41,7 @@
 #ifndef __CPU_O3_IEW_HH__
 #define __CPU_O3_IEW_HH__
 
+#include <optional>
 #include <queue>
 #include <set>
 
@@ -226,6 +227,20 @@ class IEW
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
+
+    /** Youngest/lowest merge buffer version for a thread, if any. */
+    std::optional<uint64_t>
+    youngestMBVersion(ThreadID tid) const
+    {
+        return ldstQueue.youngestMBVersion(tid);
+    }
+
+    /** Whether a load must wait for older merge buffer versions to drain. */
+    bool
+    loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+    {
+        return ldstQueue.loadBlockedByMBVersion(tid, load_version);
+    }
 
     /** Mark the merge buffer entries for drain */
     void

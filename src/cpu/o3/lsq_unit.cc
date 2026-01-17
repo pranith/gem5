@@ -2495,6 +2495,30 @@ LSQUnit::MergeBuffer::youngestVersion() const
     return versionCounts.front().first;
 }
 
+std::optional<uint64_t>
+LSQUnit::youngestMBVersion() const
+{
+    if (!mergeBufferEnabled) {
+        return std::nullopt;
+    }
+    return mergeBuffer.youngestVersion();
+}
+
+bool
+LSQUnit::loadBlockedByMBVersion(uint64_t version) const
+{
+    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+        return false;
+    }
+
+    auto youngest = mergeBuffer.youngestVersion();
+    if (!youngest) {
+        return false;
+    }
+
+    return version > *youngest;
+}
+
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 {
