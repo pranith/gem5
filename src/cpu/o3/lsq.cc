@@ -734,9 +734,9 @@ LSQ::hasStoresToWB()
 }
 
 void
-LSQ::forceMBDrain(ThreadID tid)
+LSQ::forceMBDrain(ThreadID tid, uint64_t version)
 {
-    thread.at(tid)->forceMBDrain();
+    thread.at(tid)->forceMBDrain(version);
 }
 
 bool
@@ -748,13 +748,13 @@ LSQ::hasStoresToWB(ThreadID tid)
 std::optional<uint64_t>
 LSQ::youngestMBVersion(ThreadID tid) const
 {
-    return thread.at(tid).youngestMBVersion();
+    return thread.at(tid)->youngestMBVersion();
 }
 
 bool
 LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
 {
-    return thread.at(tid).loadBlockedByMBVersion(load_version);
+    return thread.at(tid)->loadBlockedByMBVersion(load_version);
 }
 
 int

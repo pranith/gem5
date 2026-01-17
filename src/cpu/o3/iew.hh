@@ -244,9 +244,9 @@ class IEW
 
     /** Mark the merge buffer entries for drain */
     void
-    forceMBDrain(ThreadID tid)
+    forceMBDrain(ThreadID tid, uint64_t version)
     {
-        return ldstQueue.forceMBDrain(tid);
+        return ldstQueue.forceMBDrain(tid, version);
     }
 
     /** Check misprediction  */
