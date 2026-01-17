@@ -42,6 +42,7 @@
 #include "cpu/o3/commit.hh"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <set>
 #include <string>
@@ -1131,13 +1132,18 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
-            // Drain the merge buffer to reduce stall
-            iewStage->forceMBDrain(tid);
-            DPRINTF(Commit,
-                    "[tid:%i] [sn:%llu] "
-                    "Waiting for all stores to writeback.\n",
-                    tid, head_inst->seqNum);
+        const bool need_store_drain =
+            !cpu->versioningEnabled() && iewStage->hasStoresToWB(tid);
+        if (inst_num > 0 || need_store_drain) {
+            // Drain the merge buffer to reduce stall when versioning is off.
+            if (need_store_drain) {
+                iewStage->forceMBDrain(tid,
+                                       std::numeric_limits<uint64_t>::max());
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] "
+                        "Waiting for all stores to writeback.\n",
+                        tid, head_inst->seqNum);
+            }
             return false;
         }
 
@@ -1190,7 +1196,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "merge buffer versions <= ver:%llu drain.\n",
                 tid, head_inst->seqNum, head_inst->getMemOrderVersion(),
                 youngest_mb_version ? *youngest_mb_version : 0);
-        iewStage->forceMBDrain(tid);
+        iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
         return false;
     }
 
