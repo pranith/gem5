@@ -77,6 +77,7 @@ found an AttributeError will be raised.
     :code:`_defaults.build_dir = None` Once this module has been imported
     constants should not be modified and their base attributes are frozen.
 """
+
 import abc
 import argparse
 import copy
