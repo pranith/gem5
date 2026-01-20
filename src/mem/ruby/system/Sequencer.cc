@@ -43,7 +43,6 @@
 
 #include "base/logging.hh"
 #include "base/str.hh"
-#include "config/ruby_protocol_chi.hh"
 #include "cpu/testers/rubytest/RubyTester.hh"
 #include "debug/LLSC.hh"
 #include "debug/ProtocolTrace.hh"
@@ -1009,19 +1008,16 @@ Sequencer::makeRequest(PacketPtr pkt)
     } else if (pkt->req->isTlbiCmd()) {
         primary_type = secondary_type = tlbiCmdToRubyRequestType(pkt);
         DPRINTF(RubySequencer, "Issuing TLBI\n");
-#if defined(RUBY_PROTOCOL_CHI)
-    } else if (pkt->isAtomicOp()) {
+    } else if (pkt->isAtomicOp() &&
+               (m_ruby_system->getProtocolInfo().getName() == "CHI")) {
         if (pkt->req->isAtomicReturn()){
             DPRINTF(RubySequencer, "Issuing ATOMIC RETURN \n");
             primary_type = secondary_type =
                            RubyRequestType_ATOMIC_RETURN;
         } else {
             DPRINTF(RubySequencer, "Issuing ATOMIC NO RETURN\n");
-            primary_type = secondary_type =
-                           RubyRequestType_ATOMIC_NO_RETURN;
-
+            primary_type = secondary_type = RubyRequestType_ATOMIC_NO_RETURN;
         }
-#endif
     } else if (pkt->req->hasNoAddr()) {
         primary_type = secondary_type = RubyRequestType_hasNoAddr;
     } else {
