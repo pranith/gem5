@@ -176,6 +176,10 @@ class BaseO3CPU(BaseCPU):
     mergeBufferRetireResetCycles = Param.Cycles(
         64, "Retire window used when resetting an entry on merge"
     )
+    optimizeStoreRelease = Param.Bool(
+        False,
+        "Enable optimized store-release handling with release buffer tracking",
+    )
     LSQCheckLoads = Param.Bool(
         True,
         "Should dependency violations be checked for "
