@@ -611,6 +611,8 @@ class InstructionQueue
         // statistics::Vector dist_unissued;
         /** Stat for total number issued for each instruction type. */
         statistics::Vector2d issuedInstType;
+        /** Cycles issue was stalled due to an outstanding barrier. */
+        statistics::Scalar barrierIssueStallCycles;
 
         /** Number of instructions issued per cycle. */
         statistics::Formula issueRate;
