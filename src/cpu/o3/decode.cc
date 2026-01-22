@@ -88,8 +88,8 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
       commitToDecodeDelay(params.commitToDecodeDelay),
       fetchToDecodeDelay(params.fetchToDecodeDelay),
       decodeWidth(params.decodeWidth),
-      numThreads(params.numThreads),
       optimizeStoreRelease(params.optimizeStoreRelease),
+      numThreads(params.numThreads),
       stats(_cpu)
 {
     if (decodeWidth > MaxWidth)
@@ -737,7 +737,7 @@ Decode::decodeInsts(ThreadID tid)
             // releases only skip the bump when optimizeStoreRelease is on.
             bool bump_version =
                 inst->isWriteBarrier() || inst->isReadBarrier() ||
-                (inst->isRelease() && !optimizeStoreRelease);
+                (inst->staticInst->isRelease() && !optimizeStoreRelease);
             if (bump_version) {
                 ++memOrderVersion[tid];
 

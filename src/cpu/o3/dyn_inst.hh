@@ -1036,6 +1036,8 @@ class DynInst : public ExecContext, public RefCounted
 
     /** Load/store ordering version assigned at decode time. */
     uint64_t memOrderVersion = 0;
+    /** Tick when barrier was inserted into mem dep unit. */
+    Tick barrierInsertTick = 0;
 
     /** Reads a misc. register, including any side-effects the read
      * might have as defined by the architecture.
