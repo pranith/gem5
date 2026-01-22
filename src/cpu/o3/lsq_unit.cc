@@ -303,6 +303,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
     mergeBufferPfInFlight = 0;
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
+    optimizeStoreRelease = params.optimizeStoreRelease;
 
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
@@ -1045,10 +1046,21 @@ LSQUnit::writebackStores()
 
         assert(!storeWBIt->committed());
 
+        uint64_t store_version = inst->getMemOrderVersion();
+        bool is_release_store =
+            optimizeStoreRelease && can_use_mb &&
+            request->mainReq()->isRelease();
+
+        std::vector<bool> release_wait_bits;
+        if (is_release_store) {
+            release_wait_bits = mergeBuffer.validVector();
+        }
+
         if (can_use_mb) {
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
+            MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
 
             if (request->isSplit()) {
                 // For split stores, make sure both fragments can be merged
@@ -1058,20 +1070,20 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
-                uint64_t version = inst->getMemOrderVersion();
                 bool can_merge_both =
-                    mergeBuffer.canAcceptSplitStore(request, version);
+                    mergeBuffer.canAcceptSplitStore(request, store_version);
 
                 if (can_merge_both) {
                     mb_entry = mergeBuffer.addStore(
                         now, req0->getPaddr(),
                         reinterpret_cast<uint8_t *>(storeWBIt->data()), size0,
-                        storeWBIt, storeWBIt->isAllZeros(), version);
+                        storeWBIt, storeWBIt->isAllZeros(), store_version);
 
-                    auto *mb_entry2 = mergeBuffer.addStore(
+                    mb_entry2 = mergeBuffer.addStore(
                         now, req1->getPaddr(),
                         reinterpret_cast<uint8_t *>(storeWBIt->data()) + size0,
-                        size1, storeWBIt, storeWBIt->isAllZeros(), version);
+                        size1, storeWBIt, storeWBIt->isAllZeros(),
+                        store_version);
 
                     if (!mb_entry || !mb_entry2) {
                         panic("Only one part of a split store merged!");
@@ -1084,7 +1096,7 @@ LSQUnit::writebackStores()
                 mb_entry = mergeBuffer.addStore(
                     now, request->mainReq()->getPaddr(),
                     (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
-                    storeWBIt->isAllZeros(), inst->getMemOrderVersion());
+                    storeWBIt->isAllZeros(), store_version);
             }
 
             DPRINTF(LSQUnit,
@@ -1096,6 +1108,17 @@ LSQUnit::writebackStores()
                     (mb_entry && merged_ok) ? "accepted" : "blocked");
 
             if (mb_entry && merged_ok) {
+                if (is_release_store) {
+                    mb_entry->isRelease = true;
+                    mb_entry->waitBits = release_wait_bits;
+                    if (mb_entry2) {
+                        mb_entry2->isRelease = true;
+                        mb_entry2->waitBits = release_wait_bits;
+                    }
+                    DPRINTF(LSQUnit,
+                            "Store-release idx:%i tracked via MB entry ver:%llu\n",
+                            storeWBIt.idx(), store_version);
+                }
                 // Should never merge the same store twice.
                 assert(!storeWBIt->completed());
                 // Complete and remove this store from the SQ;
@@ -2133,6 +2156,15 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     "Found an existing MB entry for Addr:%#x ver:%llu "
                     "retiring in %lu, now:%lu\n",
                     lineAddr, entry.version, entry.retireCycle, now);
+            if (lsqPtr && lsqPtr->optimizeStoreRelease &&
+                store_it->instruction()->isRelease() &&
+                entry.isRelease) {
+                DPRINTF(LSQUnit,
+                        "Blocking merge into existing release MB entry "
+                        "Addr:%#x ver:%llu\n",
+                        lineAddr, entry.version);
+                return nullptr;
+            }
             if (entry.state == EntryState::RETIRED &&
                 entry.unretireCount < maxUnretire) {
                 entry.state = EntryState::MERGING;
@@ -2229,8 +2261,9 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
     bool merge_req0 = false;
     bool merge_req1 = false;
 
-    auto checkAddrMerge = [this, version](const Addr addr, bool &addr_exists,
-                                          bool &can_merge) {
+    auto checkAddrMerge = [this, version, request](const Addr addr,
+                                                   bool &addr_exists,
+                                                   bool &can_merge) {
         for (size_t idx = 0; idx < entries.size(); ++idx) {
             if (!entryValid[idx])
                 continue;
@@ -2245,6 +2278,15 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
                     (e.state == EntryState::RETIRED &&
                      e.unretireCount < maxUnretire)) {
                     can_merge = true;
+                }
+                // Block merging a release store into an existing release entry.
+                if (lsqPtr && lsqPtr->optimizeStoreRelease &&
+                    request->mainReq()->isRelease() && e.isRelease) {
+                    DPRINTF(LSQUnit,
+                            "Blocking merge of release store into existing "
+                            "release MB entry Addr:%#x ver:%llu\n",
+                            addr, e.version);
+                    can_merge = false;
                 }
 	    }
         }
@@ -2500,6 +2542,15 @@ LSQUnit::MergeBuffer::youngestVersion() const
 }
 
 std::optional<uint64_t>
+LSQUnit::MergeBuffer::oldestVersion() const
+{
+    if (versionCounts.empty()) {
+        return std::nullopt;
+    }
+    return versionCounts.back().first;
+}
+
+std::optional<uint64_t>
 LSQUnit::youngestMBVersion() const
 {
     if (!mergeBufferEnabled) {
@@ -2523,6 +2574,7 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version) const
     return version > *youngest;
 }
 
+
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 {
@@ -2535,6 +2587,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
         const auto &e = entries[i];
         bool ready = (e.state == EntryState::RETIRED ||
                       e.state == EntryState::FORCE_RETIRED);
+        if (ready && e.isRelease) {
+            bool deps_clear = std::none_of(
+                e.waitBits.begin(), e.waitBits.end(),
+                [](bool v) { return v; });
+            ready = deps_clear;
+        }
         if (!ready) {
             continue;
         }
@@ -2556,7 +2614,9 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 
     MergeBufferEntry &entry = entries[idx];
 
-    // Ensure we only drain the lowest-version entries (head of version queue).
+    // Ensure we only drain the lowest-version entries (head of version queue),
+    // except for store-release entries which may drain once their dependencies
+    // are cleared.
     if (!versionCounts.empty() && entry.version != versionCounts.front().first) {
         DPRINTF(LSQUnit,
                 "Deferring drain for block %#x with version ver:%llu "
@@ -2653,6 +2713,15 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
         return;
     }
 
+    // Clear dependency bits in any in-flight release entries.
+    for (auto &other : entries) {
+        if (!other.isRelease || other.waitBits.empty() ||
+            idx >= other.waitBits.size()) {
+            continue;
+        }
+        other.waitBits[idx] = false;
+    }
+
     entryValid[idx] = false;
     if (idx == lastAllocatedIdx) {
         lastAllocatedIdx = numEntries;
@@ -2667,6 +2736,8 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     entry.unretireCount = 0;
     entry.blockAddr = 0;
     entry.version = 0;
+    entry.isRelease = false;
+    entry.waitBits.clear();
 }
 
 void
@@ -2693,7 +2764,6 @@ LSQUnit::MergeBuffer::recordAllocVersion(uint64_t version)
         return;
     }
 
-    assert(false);
     auto it = std::find_if(
         versionCounts.begin(), versionCounts.end(),
         [version](const std::pair<uint64_t, size_t> &p) {
@@ -2717,12 +2787,9 @@ LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
         });
 
     if (it == versionCounts.end()) {
-        assert(false);
         return;
     }
 
-    // dealloc always happens for the lowest version
-    assert(it == versionCounts.begin());
     assert(it->second > 0);
 
     DPRINTF(LSQUnit, "Decrementing the version entry ver:%llu count %llu\n",
@@ -2734,6 +2801,19 @@ LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
                 it->first);
         versionCounts.erase(it);
     }
+}
+
+size_t
+LSQUnit::MergeBuffer::indexOf(const MergeBufferEntry *entry) const
+{
+    auto it = std::find_if(entries.begin(), entries.end(),
+                           [entry](const MergeBufferEntry &e) {
+                               return &e == entry;
+                           });
+    if (it == entries.end()) {
+        return std::numeric_limits<size_t>::max();
+    }
+    return std::distance(entries.begin(), it);
 }
 
 } // namespace o3

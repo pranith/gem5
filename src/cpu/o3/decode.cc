@@ -99,6 +99,7 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
       fetchToDecodeDelay(params.fetchToDecodeDelay),
       decodeWidth(params.decodeWidth),
       numThreads(params.numThreads),
+      optimizeStoreRelease(params.optimizeStoreRelease),
       stats(_cpu)
 {
     if (decodeWidth > MaxWidth)
@@ -742,8 +743,12 @@ Decode::decodeInsts(ThreadID tid)
 
         if (cpu->versioningEnabled()) {
             // Increment the per-thread memory version on barriers so that
-            // following memory ops can be tagged with a new epoch.
-            if (inst->isWriteBarrier() || inst->isReadBarrier()) {
+            // following memory ops can be tagged with a new epoch. Store
+            // releases only skip the bump when optimizeStoreRelease is on.
+            bool bump_version =
+                inst->isWriteBarrier() || inst->isReadBarrier() ||
+                (inst->isRelease() && !optimizeStoreRelease);
+            if (bump_version) {
                 ++memOrderVersion[tid];
 
                 DPRINTF(Decode,
