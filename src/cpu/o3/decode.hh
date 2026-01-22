@@ -279,6 +279,8 @@ class Decode
 
     /** Per-thread memory ordering version used for loads/stores. */
     std::array<uint64_t, MaxThreads> memOrderVersion;
+    /** Enable optimized store-release handling. */
+    bool optimizeStoreRelease;
 
     /** Version history keyed by sequence number to support rollback. */
     std::array<std::map<InstSeqNum, uint64_t>, MaxThreads> memOrderHistory;

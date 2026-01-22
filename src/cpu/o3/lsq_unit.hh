@@ -46,6 +46,7 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <limits>
 #include <memory>
 #include <queue>
 #include <optional>
@@ -232,6 +233,8 @@ class LSQUnit
             Cycles retireCycle;
             unsigned unretireCount;
             uint64_t version;
+            bool isRelease = false;
+            std::vector<bool> waitBits;
 
             MergeBufferEntry(size_t size, uint64_t ver)
                 : byteValids(size, false),
@@ -291,6 +294,9 @@ class LSQUnit
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
         void forceRetireVersionsBefore(uint64_t version);
         std::optional<uint64_t> youngestVersion() const;
+        std::optional<uint64_t> oldestVersion() const;
+        std::vector<bool> validVector() const { return entryValid; }
+        size_t indexOf(const MergeBufferEntry *entry) const;
         void
         reset()
         {
@@ -725,6 +731,9 @@ class LSQUnit
 
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
+
+    /** Enable optimized store-release handling. */
+    bool optimizeStoreRelease = false;
 
     /** Flag for memory model. */
     bool needsTSO;
