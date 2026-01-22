@@ -176,6 +176,9 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
       ADD_STAT(commitNonSpecStalls, statistics::units::Count::get(),
                "The number of times commit has been forced to stall to "
                "communicate backwards"),
+      ADD_STAT(commitBarrierStallCycles, statistics::units::Count::get(),
+               "Cycles commit could not retire because a barrier/non-spec "
+               "was at the head"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
@@ -912,6 +915,7 @@ Commit::commitInsts()
     DPRINTF(Commit, "Trying to commit instructions in the ROB.\n");
 
     unsigned num_committed = 0;
+    bool barrier_head_stall = false;
 
     DynInstPtr head_inst;
 
@@ -1096,9 +1100,17 @@ Commit::commitInsts()
                 DPRINTF(Commit, "Unable to commit head instruction PC:%s "
                         "[tid:%i] [sn:%llu].\n",
                         head_inst->pcState(), tid ,head_inst->seqNum);
+                if (head_inst->isReadBarrier() || head_inst->isWriteBarrier() ||
+                    head_inst->isHtmCmd() || head_inst->isNonSpeculative()) {
+                    barrier_head_stall = true;
+                }
                 break;
             }
         }
+    }
+
+    if (barrier_head_stall) {
+        ++stats.commitBarrierStallCycles;
     }
 
     DPRINTF(CommitRate, "%i\n", num_committed);

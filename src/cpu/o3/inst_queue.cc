@@ -324,6 +324,8 @@ InstructionQueue::IQStats::IQStats(CPU *cpu, const unsigned &total_width)
                "attempts to use FU when none available"),
       ADD_STAT(issuedInstType, statistics::units::Count::get(),
                "Number of instructions issued per FU type, per thread"),
+      ADD_STAT(barrierIssueStallCycles, statistics::units::Count::get(),
+               "Cycles issue was stalled because of outstanding barrier(s)"),
       ADD_STAT(issueRate,
                statistics::units::Rate<statistics::units::Count,
                                        statistics::units::Cycle>::get(),
@@ -1042,6 +1044,19 @@ InstructionQueue::scheduleReadyInsts()
         cpu->activityThisCycle();
     } else {
         DPRINTF(IQ, "Not able to schedule any instructions.\n");
+        if (!cpu->speculativeBarrierIssueEnabled()) {
+            bool barrier_block = false;
+            for (ThreadID tid = 0; tid < numThreads; ++tid) {
+                if (memDepUnit[tid].hasAnyBarrier() &&
+                    !instList[tid].empty()) {
+                    barrier_block = true;
+                    break;
+                }
+            }
+            if (barrier_block) {
+                iqStats.barrierIssueStallCycles++;
+            }
+        }
     }
 }
 

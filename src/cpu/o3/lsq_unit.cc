@@ -398,7 +398,15 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(mbUnretire, statistics::units::Count::get(),
                "Number of merge buffer entries unretired from RETIRED state"),
       ADD_STAT(mbForwards, statistics::units::Count::get(),
-               "Number of loads forwarded from merge buffer")
+               "Number of loads forwarded from merge buffer"),
+      ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
+               "Cycles store WB/dealloc stalled by a barrier at the head"),
+      ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
+               "Sum of SQ occupancy during barrier stall cycles"),
+      ADD_STAT(mbReleaseWaitCycles, statistics::units::Count::get(),
+               "Cycles release MB entries waited for outstanding bytes"),
+      ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
+               "Instructions rescheduled/replayed due to barrier in LSQ")
 {
     loadToUse
         .init(0, 299, 10)
@@ -621,6 +629,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // Mark the load for re-execution
                 ld_inst->fault = std::make_shared<ReExec>();
                 request->setStateToFault();
+                ++stats.barrierReschedulesLSQ;
             } else {
                 DPRINTF(LSQUnit, "HitExternal Snoop for addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
@@ -1029,6 +1038,8 @@ LSQUnit::writebackStores()
                     request->mainReq()->getPaddr(), inst->seqNum,
                     request->mainReq()->isLLSC() ? "SC" : "",
                     request->mainReq()->isRelease() ? "/Release" : "");
+            ++stats.barrierSqStallCycles;
+            stats.barrierSqStallOccupancy += storeQueue.size();
             break;
         }
 
@@ -1059,7 +1070,7 @@ LSQUnit::writebackStores()
                 const size_t size1 = req1->getSize();
 
                 bool can_merge_both =
-                    mergeBuffer.canAcceptSplitStore(request, store_version);
+		  mergeBuffer.canAcceptSplitStore(request, store_version);
 
                 if (can_merge_both) {
                     mb_entry = mergeBuffer.addStore(
@@ -2145,7 +2156,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     "retiring in %lu, now:%lu\n",
                     lineAddr, entry.version, entry.retireCycle, now);
             if (lsqPtr && lsqPtr->optimizeStoreRelease &&
-                store_it->instruction()->isRelease() &&
+                store_it->instruction()->staticInst->isRelease() &&
                 entry.isRelease) {
                 DPRINTF(LSQUnit,
                         "Blocking merge into existing release MB entry "
@@ -2461,6 +2472,7 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
             }
         }
     }
+
 }
 
 void
@@ -2579,7 +2591,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             bool deps_clear = std::none_of(
                 e.waitBits.begin(), e.waitBits.end(),
                 [](bool v) { return v; });
-            ready = deps_clear;
+            if (!deps_clear) {
+                ready = false;
+                if (lsq_ptr) {
+                    lsq_ptr->stats.mbReleaseWaitCycles++;
+                }
+            }
         }
         if (!ready) {
             continue;
