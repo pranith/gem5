@@ -56,6 +56,7 @@ from common import (
 from common.cores.arm import (
     HPI,
     O3_ARM_v7a,
+    neoverse_v2,
 )
 
 # Pre-defined CPU configurations. Each tuple must be ordered as : (cpu_class,
@@ -70,6 +71,12 @@ cpu_types = {
         O3_ARM_v7a.O3_ARM_v7a_ICache,
         O3_ARM_v7a.O3_ARM_v7a_DCache,
         O3_ARM_v7a.O3_ARM_v7aL2,
+    ),
+    "neoversev2": (
+        neoverse_v2.NeoverseV2,
+        neoverse_v2.L1I,
+        neoverse_v2.L1D,
+        neoverse_v2.L2,
     ),
 }
 
