@@ -128,6 +128,8 @@ class MemDepUnit
 
     /** Inserts a barrier instruction. */
     void insertBarrier(const DynInstPtr &barr_inst);
+    /** Record residency start for a barrier. */
+    void noteBarrierInsert(const DynInstPtr &barr_inst);
 
     /** Indicate that an instruction has its registers ready. */
     void regsReady(const DynInstPtr &inst);
@@ -245,6 +247,7 @@ class MemDepUnit
      */
     StoreSet depPred;
 
+  public:
     /** Sequence numbers of outstanding load barriers. */
     std::unordered_set<InstSeqNum> loadBarrierSNs;
 
@@ -259,6 +262,7 @@ class MemDepUnit
 
     /** Is there an outstanding store barrier that loads must wait on. */
     bool hasStoreBarrier() const { return !storeBarrierSNs.empty(); }
+    bool hasAnyBarrier() const { return hasLoadBarrier() || hasStoreBarrier(); }
 
     /** Inserts the SN of a barrier inst. to the list of tracked barriers */
     void insertBarrierSN(const DynInstPtr &barr_inst);
@@ -281,6 +285,16 @@ class MemDepUnit
         /** Stat for number of conflicting stores that had to wait for a
          *  store. */
         statistics::Scalar conflictingStores;
+        /** Loads stalled by an outstanding barrier (non-speculative mode). */
+        statistics::Scalar barrierLoadStalls;
+        /** Stores stalled by an outstanding barrier (non-speculative mode). */
+        statistics::Scalar barrierStoreStalls;
+        /** Cycles a barrier resides in the mem dep unit (insert->complete). */
+        statistics::Scalar barrierResidencyCycles;
+        /** Number of instructions rescheduled/replayed due to a barrier. */
+        statistics::Scalar barrierReschedules;
+        /** Number of instructions rescheduled/replayed due to barrier (LSQ). */
+        statistics::Scalar barrierReschedulesLSQ;
     } stats;
 };
 

@@ -117,7 +117,17 @@ MemDepUnit::MemDepUnitStats::MemDepUnitStats(statistics::Group *parent)
       ADD_STAT(conflictingLoads, statistics::units::Count::get(),
                "Number of conflicting loads."),
       ADD_STAT(conflictingStores, statistics::units::Count::get(),
-               "Number of conflicting stores.")
+               "Number of conflicting stores."),
+      ADD_STAT(barrierLoadStalls, statistics::units::Count::get(),
+               "Number of loads blocked by an outstanding barrier."),
+      ADD_STAT(barrierStoreStalls, statistics::units::Count::get(),
+               "Number of stores blocked by an outstanding barrier."),
+      ADD_STAT(barrierResidencyCycles, statistics::units::Count::get(),
+               "Cycles barriers reside in mem dep unit (insert to complete)"),
+      ADD_STAT(barrierReschedules, statistics::units::Count::get(),
+               "Number of instructions rescheduled/replayed due to barrier"),
+      ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
+               "Number of instructions rescheduled/replayed due to barrier (LSQ)")
 {
 }
 
@@ -188,6 +198,15 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
                                 "store barriers = %d\n",
                     loadBarrierSNs.size(), storeBarrierSNs.size());
         }
+    }
+}
+
+void
+MemDepUnit::noteBarrierInsert(const DynInstPtr &barr_inst)
+{
+    if (barr_inst->isReadBarrier() || barr_inst->isWriteBarrier() ||
+        barr_inst->isHtmCmd()) {
+        barr_inst->barrierInsertTick = curTick();
     }
 }
 
@@ -266,6 +285,14 @@ MemDepUnit::insert(const DynInstPtr &inst)
             DPRINTF(MemDepUnit, "\tinst PC %s is dependent on [sn:%lli].\n",
                 inst->pcState(), producing_store);
 
+        if (!cpu->speculativeBarrierIssueEnabled() &&
+            (hasAnyBarrier())) {
+            if (inst->isLoad())
+                stats.barrierLoadStalls++;
+            else if (inst->isStore())
+                stats.barrierStoreStalls++;
+        }
+
         if (inst->readyToIssue()) {
             inst_entry->regsReady = true;
         }
@@ -331,6 +358,8 @@ MemDepUnit::insertBarrier(const DynInstPtr &barr_inst)
 {
     ThreadID tid = barr_inst->threadNumber;
 
+    noteBarrierInsert(barr_inst);
+
     MemDepEntryPtr inst_entry = std::make_shared<MemDepEntry>(barr_inst);
 
     // Add the MemDepEntry to the hash.
@@ -386,6 +415,9 @@ void
 MemDepUnit::reschedule(const DynInstPtr &inst)
 {
     instsToReplay.push_back(inst);
+    if (hasAnyBarrier()) {
+        stats.barrierReschedules++;
+    }
 }
 
 void
@@ -445,6 +477,12 @@ MemDepUnit::completeInst(const DynInstPtr &inst)
     if (inst->isReadBarrier() || inst->isHtmCmd()) {
         assert(hasLoadBarrier());
         loadBarrierSNs.erase(barr_sn);
+    }
+    if (inst->isReadBarrier() || inst->isWriteBarrier() || inst->isHtmCmd()) {
+        if (inst->barrierInsertTick != 0) {
+            Cycles res = cpu->ticksToCycles(curTick() - inst->barrierInsertTick);
+            stats.barrierResidencyCycles += res;
+        }
     }
     if (debug::MemDepUnit) {
         const char *barrier_type = nullptr;

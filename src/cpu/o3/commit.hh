@@ -479,6 +479,8 @@ class Commit
          * to a non-speculative instruction reaching the head of the ROB.
          */
         statistics::Scalar commitNonSpecStalls;
+        /** Cycles commit could not retire because a barrier/non-spec at head. */
+        statistics::Scalar commitBarrierStallCycles;
         /** Stat for the total number of branch mispredicts that caused a
          * squash.
          */
