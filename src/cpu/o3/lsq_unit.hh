@@ -801,6 +801,14 @@ class LSQUnit
         statistics::Scalar mbUnretire;
         /** Merge buffer forwards to loads */
         statistics::Scalar mbForwards;
+        /** Number of cycles store WB/dealloc stalled by a barrier at the head. */
+        statistics::Scalar barrierSqStallCycles;
+        /** Sum of SQ occupancy during barrier-induced stall cycles. */
+        statistics::Scalar barrierSqStallOccupancy;
+        /** Cycles release MB entries waited on outstanding bytes. */
+        statistics::Scalar mbReleaseWaitCycles;
+        /** Instructions rescheduled/replayed due to barrier handling in LSQ. */
+        statistics::Scalar barrierReschedulesLSQ;
     } stats;
 
   public:
