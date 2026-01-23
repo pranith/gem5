@@ -179,6 +179,16 @@ class StaticInst : public RefCounted, public StaticInstFlags
     }
     bool isReadBarrier() const { return flags[IsReadBarrier]; }
     bool isWriteBarrier() const { return flags[IsWriteBarrier]; }
+    bool
+    isRelease() const
+    {
+        return flags[IsRelease];
+    }
+    bool
+    isAcquire() const
+    {
+        return flags[IsAcquire];
+    }
     bool isNonSpeculative() const { return flags[IsNonSpeculative]; }
     bool isQuiesce() const { return flags[IsQuiesce]; }
     bool isUnverifiable() const { return flags[IsUnverifiable]; }
