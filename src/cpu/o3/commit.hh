@@ -492,6 +492,14 @@ class Commit
         statistics::Vector amos;
         /** Total number of committed memory barriers. */
         statistics::Vector membars;
+        /** Total number of committed read barriers. */
+        statistics::Vector readMembars;
+        /** Total number of committed write barriers. */
+        statistics::Vector writeMembars;
+        /** Total number of committed acquire instructions. */
+        statistics::Vector acquireInsts;
+        /** Total number of committed release instructions. */
+        statistics::Vector releaseInsts;
         /** Committed instructions by instruction type (OpClass) */
         statistics::Vector2d committedInstType;
 
