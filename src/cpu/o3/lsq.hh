@@ -846,7 +846,7 @@ class LSQ
     std::optional<uint64_t> youngestMBVersion(ThreadID tid) const;
 
     /** Checks if a load version must wait for older merge buffer versions. */
-    bool loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const;
+    bool loadBlockedByMBVersion(ThreadID tid, uint64_t load_version);
 
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);

@@ -237,7 +237,7 @@ class IEW
 
     /** Whether a load must wait for older merge buffer versions to drain. */
     bool
-    loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+    loadBlockedByMBVersion(ThreadID tid, uint64_t load_version)
     {
         return ldstQueue.loadBlockedByMBVersion(tid, load_version);
     }
