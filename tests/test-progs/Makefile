@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -std=c11 -O2
 LDFLAGS ?= -pthread -static
 
-PROGS := acquire_release microbench thrasher store_release_bench
+PROGS := acquire_release microbench thrasher store_release_bench db_bench_suite
 
 .PHONY: all clean
 
@@ -24,3 +24,9 @@ store_release_bench: store_release_bench.c
 
 clean:
 	rm -f $(PROGS)
+	$(MAKE) -C db_lock_bench clean
+	$(MAKE) -C db_bench_suite clean
+
+.PHONY: db_bench_suite
+db_bench_suite:
+	$(MAKE) -C db_bench_suite
