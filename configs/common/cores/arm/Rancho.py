@@ -1722,7 +1722,7 @@ class Rancho_DCache(Cache):
     mshrs = 4
     tgts_per_mshr = 8
     size = "32kB"
-    assoc = 4
+    assoc = 8
     write_buffers = 4
     prefetcher = StridePrefetcher(queue_size=4, degree=4)
 
@@ -1795,12 +1795,12 @@ class Rancho(ArmO3CPU):
     forwardComSize = 8
     LQEntries = 128
     SQEntries = 128
-    useMergeBuffer = True
+    # useMergeBuffer = False
     mergeBufferEntries = 32
     mergeBufferPrefetch = True
     mbRetireWhenFullValid = True
     speculativeBarrierIssue = True
-    enableVersioning = True
+    enableVersioning = False
 
     LSQDepCheckShift = 4
     LSQCheckLoads = True

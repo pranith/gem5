@@ -96,6 +96,7 @@ def create(args):
     want_caches = True if mem_mode == "timing" else False
 
     system = devices.SimpleSeSystem(
+        # cpu=[cpu_class(cpu_id=i) for i in range(args.num_cpus)],
         mem_mode=mem_mode,
     )
 
@@ -103,7 +104,7 @@ def create(args):
     # private L1 caches and a shared L2 cache.
     system.cpu_cluster = devices.ArmCpuCluster(
         system,
-        args.num_cores,
+        args.num_cpus,
         args.cpu_freq,
         "1.2V",
         *cpu_types[args.cpu],
@@ -134,20 +135,20 @@ def create(args):
         print("Error: No commands provided to run.")
         sys.exit(1)
 
-    if len(processes) < args.num_cores:
+    if len(processes) < args.num_cpus:
         # Repeat the last process to cover all cores, similar to se.py behaviour.
         last = processes[-1]
-        for _ in range(args.num_cores - len(processes)):
+        for _ in range(args.num_cpus - len(processes)):
             processes.append(last)
         print(
-            f"info: fewer commands than cores; repeating last workload to fill {args.num_cores} cores"
+            f"info: fewer commands than cores; repeating last workload to fill {args.num_cpus} cores"
         )
-    elif len(processes) > args.num_cores:
+    elif len(processes) > args.num_cpus:
         print(
-            f"info: more commands ({len(processes)}) than cores ({args.num_cores}); "
+            f"info: more commands ({len(processes)}) than cores ({args.num_cpus}); "
             "truncating extra workloads"
         )
-        processes = processes[: args.num_cores]
+        processes = processes[: args.num_cpus]
 
     system.workload = SEWorkload.init_compatible(processes[0].executable)
 
@@ -163,10 +164,18 @@ def create(args):
     if args.merge_buffer_entries is not None:
         for cpu in system.cpu_cluster.cpus:
             cpu.mergeBufferEntries = args.merge_buffer_entries
+
     if args.merge_buffer_prefetch is not None:
         use_pf = args.merge_buffer_prefetch == "on"
         for cpu in system.cpu_cluster.cpus:
             cpu.mergeBufferPrefetch = use_pf
+
+    if args.versioning is not None:
+        enable_versioning = args.versioning == "on"
+        enable_store_release_opt = args.optimize_release == "on"
+        for cpu in system.cpu_cluster.cpus:
+            cpu.enableVersioning = enable_versioning
+            cpu.optimizeStoreRelease = enable_store_release_opt
 
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
@@ -193,7 +202,7 @@ def main():
     )
     parser.add_argument("--cpu-freq", type=str, default="3GHz")
     parser.add_argument(
-        "--num-cores", type=int, default=1, help="Number of CPU cores"
+        "--num-cpus", type=int, default=1, help="Number of CPUs"
     )
     parser.add_argument(
         "--merge-buffer",
@@ -212,6 +221,18 @@ def main():
         choices=["on", "off"],
         default=None,
         help="Enable/disable prefetch on merge buffer allocation",
+    )
+    parser.add_argument(
+        "--versioning",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable versioning",
+    )
+    parser.add_argument(
+        "--optimize-release",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable store release optimization",
     )
     parser.add_argument(
         "--mem-type",
