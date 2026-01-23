@@ -405,6 +405,8 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Sum of SQ occupancy during barrier stall cycles"),
       ADD_STAT(mbReleaseWaitCycles, statistics::units::Count::get(),
                "Cycles release MB entries waited for outstanding bytes"),
+      ADD_STAT(mbVersionLoadStallCycles, statistics::units::Count::get(),
+               "Cycles loads waited on older merge buffer versions"),
       ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
                "Instructions rescheduled/replayed due to barrier in LSQ")
 {
@@ -2560,7 +2562,7 @@ LSQUnit::youngestMBVersion() const
 }
 
 bool
-LSQUnit::loadBlockedByMBVersion(uint64_t version) const
+LSQUnit::loadBlockedByMBVersion(uint64_t version)
 {
     if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
         return false;
@@ -2571,7 +2573,12 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version) const
         return false;
     }
 
-    return version > *youngest;
+    if (version > *youngest) {
+        stats.mbVersionLoadStallCycles++;
+        return true;
+    }
+
+    return false;
 }
 
 

@@ -752,7 +752,7 @@ LSQ::youngestMBVersion(ThreadID tid) const
 }
 
 bool
-LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version)
 {
     return thread.at(tid)->loadBlockedByMBVersion(load_version);
 }
