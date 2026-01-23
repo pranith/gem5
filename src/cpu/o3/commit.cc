@@ -187,6 +187,14 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Number of atomic instructions committed"),
       ADD_STAT(membars, statistics::units::Count::get(),
                "Number of memory barriers committed"),
+      ADD_STAT(readMembars, statistics::units::Count::get(),
+               "Number of read barriers committed"),
+      ADD_STAT(writeMembars, statistics::units::Count::get(),
+               "Number of write barriers committed"),
+      ADD_STAT(acquireInsts, statistics::units::Count::get(),
+               "Number of acquire instructions committed"),
+      ADD_STAT(releaseInsts, statistics::units::Count::get(),
+               "Number of release instructions committed"),
       ADD_STAT(committedInstType, statistics::units::Count::get(),
                "Class of committed instruction"),
       ADD_STAT(commitEligibleSamples, statistics::units::Cycle::get(),
@@ -212,6 +220,22 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
         .flags(total);
 
     membars
+        .init(cpu->numThreads)
+        .flags(total);
+
+    readMembars
+        .init(cpu->numThreads)
+        .flags(total);
+
+    writeMembars
+        .init(cpu->numThreads)
+        .flags(total);
+
+    acquireInsts
+        .init(cpu->numThreads)
+        .flags(total);
+
+    releaseInsts
         .init(cpu->numThreads)
         .flags(total);
 
@@ -1434,6 +1458,19 @@ Commit::updateComInstStats(const DynInstPtr &inst)
 
     if (inst->isFullMemBarrier()) {
         stats.membars[tid]++;
+    }
+    if (inst->isReadBarrier()) {
+        stats.readMembars[tid]++;
+    }
+    if (inst->isWriteBarrier()) {
+        stats.writeMembars[tid]++;
+    }
+
+    if (inst->staticInst->isAcquire()) {
+        stats.acquireInsts[tid]++;
+    }
+    if (inst->staticInst->isRelease()) {
+        stats.releaseInsts[tid]++;
     }
 
     // Integer Instruction
