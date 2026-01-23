@@ -91,6 +91,7 @@ class ex5_big_FP(FUDesc):
         OpDesc(opClass="FloatDiv", opLat=12, pipelined=False),
         OpDesc(opClass="FloatSqrt", opLat=33, pipelined=False),
         OpDesc(opClass="FloatMult", opLat=8),
+        OpDesc(opClass="FloatMisc", opLat=3),
     ]
     count = 2
 
