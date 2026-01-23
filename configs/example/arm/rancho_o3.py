@@ -130,12 +130,24 @@ def create(args):
     # Parse the command line and get a list of Processes instances
     # that we can pass to gem5.
     processes = get_processes(args.commands_to_run)
-    if len(processes) != args.num_cores:
-        print(
-            "Error: Cannot map %d command(s) onto %d CPU(s)"
-            % (len(processes), args.num_cores)
-        )
+    if not processes:
+        print("Error: No commands provided to run.")
         sys.exit(1)
+
+    if len(processes) < args.num_cores:
+        # Repeat the last process to cover all cores, similar to se.py behaviour.
+        last = processes[-1]
+        for _ in range(args.num_cores - len(processes)):
+            processes.append(last)
+        print(
+            f"info: fewer commands than cores; repeating last workload to fill {args.num_cores} cores"
+        )
+    elif len(processes) > args.num_cores:
+        print(
+            f"info: more commands ({len(processes)}) than cores ({args.num_cores}); "
+            "truncating extra workloads"
+        )
+        processes = processes[: args.num_cores]
 
     system.workload = SEWorkload.init_compatible(processes[0].executable)
 
