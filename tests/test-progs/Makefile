@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -std=c11 -O2
 LDFLAGS ?= -pthread -static
 
-PROGS := acquire_release microbench thrasher
+PROGS := acquire_release microbench thrasher store_release_bench
 
 .PHONY: all clean
 
@@ -18,6 +18,9 @@ microbench: microbench.c
 
 thrasher: thrasher.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+store_release_bench: store_release_bench.c
+	$(CC) $(CFLAGS) -pthread -o $@ $<
 
 clean:
 	rm -f $(PROGS)
