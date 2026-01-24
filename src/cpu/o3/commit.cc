@@ -179,6 +179,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
       ADD_STAT(commitBarrierStallCycles, statistics::units::Count::get(),
                "Cycles commit could not retire because a barrier/non-spec "
                "was at the head"),
+      ADD_STAT(commitBarrierDrainStallCycles, statistics::units::Count::get(),
+               "Cycles barrier commit waited for SQ/MB to drain"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
@@ -1173,6 +1175,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         if (inst_num > 0 || need_store_drain) {
             // Drain the merge buffer to reduce stall when versioning is off.
             if (need_store_drain) {
+                ++stats.commitBarrierDrainStallCycles;
                 iewStage->forceMBDrain(tid,
                                        std::numeric_limits<uint64_t>::max());
                 DPRINTF(Commit,
