@@ -805,6 +805,8 @@ class LSQUnit
         statistics::Scalar mbForwards;
         /** Stores blocked from dealloc because merge buffer is full. */
         statistics::Scalar mbFullStoreDeallocStalls;
+        /** Older-version MB entries force retired for same block address. */
+        statistics::Scalar mbForceRetiresOlderVersion;
         /** Number of cycles store WB/dealloc stalled by a barrier at the head. */
         statistics::Scalar barrierSqStallCycles;
         /** Sum of SQ occupancy during barrier-induced stall cycles. */
