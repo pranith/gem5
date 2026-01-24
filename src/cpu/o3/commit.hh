@@ -481,6 +481,8 @@ class Commit
         statistics::Scalar commitNonSpecStalls;
         /** Cycles commit could not retire because a barrier/non-spec at head. */
         statistics::Scalar commitBarrierStallCycles;
+        /** Cycles barrier commit stalled waiting for SQ/MB to drain. */
+        statistics::Scalar commitBarrierDrainStallCycles;
         /** Stat for the total number of branch mispredicts that caused a
          * squash.
          */
