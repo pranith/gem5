@@ -954,6 +954,7 @@ void
 LSQUnit::writebackStores()
 {
     Cycles now = cpu->curCycle();
+    DPRINTF(LSQUnit, "Writing back stores in cycle:%lli\n", now);
 
     if (isStoreBlocked) {
         DPRINTF(LSQUnit, "Writing back blocked store\n");
@@ -966,9 +967,13 @@ LSQUnit::writebackStores()
             iewStage->activityThisCycle();
         }
 
-        if (((!needsTSO) || (!storeInFlight)) &&
-            lsq->cachePortAvailable(false)) {
-            mergeBuffer.drainOne(this);
+        if (!needsTSO || !storeInFlight) {
+            if (lsq->cachePortAvailable(false)) {
+                mergeBuffer.drainOne(this);
+            } else {
+                DPRINTF(LSQUnit, "Unable to drain merge buffer "
+                                 "since the cache is blocked.\n");
+            }
         }
     }
 
@@ -2516,6 +2521,9 @@ LSQUnit::MergeBuffer::forceRetireVersionsBefore(uint64_t version)
             entry.state == EntryState::RETIRED) {
             entry.state = EntryState::FORCE_RETIRED;
             entry.retireCycle = Cycles(0);
+
+            DPRINTF(LSQUnit, "Force retiring MB entry block addr:%#x idx:%d\n",
+                    entry.blockAddr, idx);
         }
     }
 }
@@ -2605,7 +2613,8 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     }
 
     if (idx == entries.size()) {
-        DPRINTF(LSQUnit, "No MB entry ready to drain.\n");
+        DPRINTF(LSQUnit, "No MB entry ready to drain now:%lli.\n",
+                lsq_ptr->cpu->curCycle());
         return false;
     }
 
@@ -2661,8 +2670,8 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 
     DPRINTF(LSQUnit,
             "Sending a memory request for merge buffer entry block addr %#x "
-            "version ver:%llu\n",
-            entry.blockAddr, entry.version);
+            "version ver:%llu now:%lli\n",
+            entry.blockAddr, entry.version, lsqPtr->cpu->curCycle());
 
     if (lsqPtr) {
         lsqPtr->stats.mbDrains++;

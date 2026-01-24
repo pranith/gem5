@@ -1184,9 +1184,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 	if (need_store_drain) {
             iewStage->forceMBDrain(tid,
                                    std::numeric_limits<uint64_t>::max());
-	}        
+        }
 
-        if (inst_num > 0 || (!cpu->versioningEnabled() && need_store_drain)) {
+        if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
             // Drain the merge buffer to reduce stall when versioning is off.
             if (need_store_drain) {
                 ++stats.commitBarrierDrainStallCycles;
@@ -1279,6 +1279,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                     "[tid:%i] [sn:%llu] "
                     "Stores outstanding, fault must wait.\n",
                     tid, head_inst->seqNum);
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
             return false;
         }
 
