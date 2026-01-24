@@ -386,6 +386,8 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of merge buffer entries unretired from RETIRED state"),
       ADD_STAT(mbForwards, statistics::units::Count::get(),
                "Number of loads forwarded from merge buffer"),
+      ADD_STAT(mbFullStoreDeallocStalls, statistics::units::Count::get(),
+               "Stores blocked from dealloc because merge buffer is full"),
       ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
                "Cycles store WB/dealloc stalled by a barrier at the head"),
       ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
@@ -1058,8 +1060,9 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
+                bool mb_full = false;
                 bool can_merge_both =
-		  mergeBuffer.canAcceptSplitStore(request, store_version);
+		  mergeBuffer.canAcceptSplitStore(request, store_version, mb_full);
 
                 if (can_merge_both) {
                     mb_entry = mergeBuffer.addStore(
@@ -1078,6 +1081,9 @@ LSQUnit::writebackStores()
                         merged_ok = false;
                     }
                 } else {
+                    if (mb_full) {
+                        stats.mbFullStoreDeallocStalls++;
+                    }
                     merged_ok = false;
                 }
             } else {
@@ -1120,6 +1126,9 @@ LSQUnit::writebackStores()
             } else {
                 // If a barrier/release store is stalled, force retire MB
                 // entries once to unblock serialization.
+                if (mergeBuffer.isFull()) {
+                    stats.mbFullStoreDeallocStalls++;
+                }
                 if (!forcedMBRetire &&
                     (inst->isWriteBarrier() || inst->isSerializeBefore() ||
                      inst->isSerializeAfter() ||
@@ -2233,8 +2242,10 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 
 bool
 LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
-                                          uint64_t version) const
+                                          uint64_t version,
+                                          bool &mb_full) const
 {
+    mb_full = false;
     auto req0 = request->req(0);
     auto req1 = request->req(1);
 
@@ -2295,6 +2306,7 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
                                       entryValid.end(), true);
 
     if (valid_entries + num_allocs > numEntries) {
+        mb_full = true;
         return false;
     }
 
