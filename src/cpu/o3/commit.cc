@@ -186,6 +186,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Loads stalled by MB versioning with matching STLF version"),
       ADD_STAT(mbVersionLoadStallBypassedStlf, statistics::units::Count::get(),
                "Loads that bypassed MB stall at ROB head due to STLF"),
+      ADD_STAT(mbVersionLoadStallCycles, statistics::units::Count::get(),
+               "Cycles commit stalled by loads waiting on older MB versions"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
@@ -1240,7 +1242,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
             stats.mbVersionLoadStallSameStlfVersion++;
         }
-        if (!head_inst->stlfForwarded() || !stlfLoadsBypassMBDrain) {
+        if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
+            stats.mbVersionLoadStallBypassedStlf++;
+	} else {
+            stats.mbVersionLoadStallCycles++;
             auto youngest_mb_version = iewStage->youngestMBVersion(tid);
             DPRINTF(
                 Commit,
@@ -1250,8 +1255,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 youngest_mb_version ? *youngest_mb_version : 0);
             iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
             return false;
-        } else {
-            stats.mbVersionLoadStallBypassedStlf++;
         }
     }
 
