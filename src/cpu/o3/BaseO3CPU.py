@@ -180,6 +180,10 @@ class BaseO3CPU(BaseCPU):
         False,
         "Enable optimized store-release handling with release buffer tracking",
     )
+    stlfLoadsBypassMBDrain = Param.Bool(
+        True,
+        "Allow STLF loads at ROB head to bypass MB version stall",
+    )
     LSQCheckLoads = Param.Bool(
         True,
         "Should dependency violations be checked for "
