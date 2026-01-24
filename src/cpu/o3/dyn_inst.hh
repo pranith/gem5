@@ -196,6 +196,7 @@ class DynInst : public ExecContext, public RefCounted
         ReqMade,
         MemOpDone,
         HtmFromTransaction,
+        StlfForwarded,
         NoCapableFU,           /// Processor does not have capability to
                                /// execute the instruction
         MaxFlags
@@ -446,6 +447,10 @@ class DynInst : public ExecContext, public RefCounted
      */
     bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
     void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
+    bool stlfForwarded() const { return instFlags[StlfForwarded]; }
+    void stlfForwarded(bool f) { instFlags[StlfForwarded] = f; }
+    uint64_t stlfVersion() const { return stlfForwardVersion; }
+    void stlfVersion(uint64_t version) { stlfForwardVersion = version; }
 
     /**
      * Returns true if the DTB address translation is being delayed due to a hw
@@ -1012,6 +1017,8 @@ class DynInst : public ExecContext, public RefCounted
 
     /** Load/store ordering version assigned at decode time. */
     uint64_t memOrderVersion = 0;
+    /** Version of the store/MB entry that forwarded data to this load. */
+    uint64_t stlfForwardVersion = 0;
     /** Tick when barrier was inserted into mem dep unit. */
     Tick barrierInsertTick = 0;
 

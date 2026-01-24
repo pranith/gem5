@@ -1820,6 +1820,9 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 PacketPtr data_pkt = new Packet(request->mainReq(),
                         MemCmd::ReadReq);
                 data_pkt->dataStatic(load_inst->memData);
+                load_inst->stlfForwarded(true);
+                load_inst->stlfVersion(
+                    store_it->instruction()->getMemOrderVersion());
 
                 // hardware transactional memory
                 // Store to load forwarding within a transaction
@@ -1953,9 +1956,11 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 load_inst->memData =
                     new uint8_t[request->mainReq()->getSize()];
             }
+            uint64_t forward_version = 0;
             if (mergeBuffer.forwardData(request->mainReq()->getPaddr(),
                                         load_inst->memData,
-                                        request->mainReq()->getSize())) {
+                                        request->mainReq()->getSize(),
+                                        forward_version)) {
 
                 DPRINTF(LSQUnit,
                         "Forwarding from merge buffer to load to "
@@ -1965,6 +1970,8 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 PacketPtr data_pkt =
                     new Packet(request->mainReq(), MemCmd::ReadReq);
                 data_pkt->dataStatic(load_inst->memData);
+                load_inst->stlfForwarded(true);
+                load_inst->stlfVersion(forward_version);
 
                 if (request->isAnyOutstandingRequest()) {
                     assert(request->_numOutstandingPackets > 0);
@@ -2414,7 +2421,8 @@ LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size) const
 }
 
 bool
-LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size) const
+LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size,
+                                  uint64_t &stlf_version) const
 {
     Addr end = paddr + size;
     bool versioned = lsqPtr && lsqPtr->cpu->versioningEnabled();
@@ -2458,6 +2466,7 @@ LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size) const
             continue;
         }
         std::memcpy(dst, &entry.blockData[offset], to_copy);
+        stlf_version = entry.version;
         return true;
     }
     return false;

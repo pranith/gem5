@@ -316,7 +316,8 @@ class LSQUnit
         }
         bool canAcceptSplitStore(LSQRequest *request, uint64_t version) const;
         bool canForward(Addr paddr, size_t size) const;
-        bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
+        bool forwardData(Addr paddr, uint8_t *dst, size_t size,
+                         uint64_t &stlf_version) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
         bool
         isEmpty() const
