@@ -156,6 +156,10 @@ def create(args):
     for cpu, workload in zip(system.cpu_cluster.cpus, processes):
         cpu.workload = workload
 
+    # enable speculative post-barrier load/store issue
+    for cpu in system.cpu_cluster.cpus:
+        cpu.speculativeBarrierIssue = True
+
     if args.merge_buffer is not None:
         use_mb = args.merge_buffer == "on"
         for cpu in system.cpu_cluster.cpus:
