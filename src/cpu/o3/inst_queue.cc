@@ -740,9 +740,11 @@ InstructionQueue::insertNonSpec(const DynInstPtr &new_inst)
 
     nonSpecInsts[new_inst->seqNum] = new_inst;
 
-    DPRINTF(IQ, "Adding non-speculative instruction [sn:%llu] PC %s "
+    DPRINTF(IQ,
+            "Adding non-speculative instruction [sn:%llu] PC %s %s "
             "to the IQ.\n",
-            new_inst->seqNum, new_inst->pcState());
+            new_inst->seqNum, new_inst->pcState(),
+            new_inst->staticInst->disassemble(new_inst->pcState().instAddr()));
 
     instList[new_inst->threadNumber].push_back(new_inst);
 
