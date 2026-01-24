@@ -329,6 +329,9 @@ class Commit
     /** IEW instruction queue interface. */
     TimeBuffer<IEWStruct> *iewQueue;
 
+    /** Allow STLF loads to bypass MB drain stalls at commit. */
+    bool stlfLoadsBypassMBDrain;
+
     /** Wire to read information from IEW queue. */
     TimeBuffer<IEWStruct>::wire fromIEW;
 
