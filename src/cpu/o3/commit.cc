@@ -1225,6 +1225,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // then there is no need to raise a new fault
     }
 
+    // The load at the head of the ROB needs to wait for older stores to drain
+    // if its version is greater than the lowest MB version
     if (head_inst->isLoad() && inst_fault == NoFault &&
         cpu->versioningEnabled() &&
         iewStage->loadBlockedByMBVersion(
