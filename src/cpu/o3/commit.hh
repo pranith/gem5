@@ -483,6 +483,8 @@ class Commit
         statistics::Scalar commitBarrierStallCycles;
         /** Cycles barrier commit stalled waiting for SQ/MB to drain. */
         statistics::Scalar commitBarrierDrainStallCycles;
+        /** Loads stalled by MB versioning with matching STLF version. */
+        statistics::Scalar mbVersionLoadStallSameStlfVersion;
         /** Stat for the total number of branch mispredicts that caused a
          * squash.
          */
