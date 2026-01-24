@@ -314,7 +314,8 @@ class LSQUnit
             }
             versionCounts.clear();
         }
-        bool canAcceptSplitStore(LSQRequest *request, uint64_t version) const;
+        bool canAcceptSplitStore(LSQRequest *request, uint64_t version,
+                                 bool &mb_full) const;
         bool canForward(Addr paddr, size_t size) const;
         bool forwardData(Addr paddr, uint8_t *dst, size_t size,
                          uint64_t &stlf_version) const;
@@ -802,6 +803,8 @@ class LSQUnit
         statistics::Scalar mbUnretire;
         /** Merge buffer forwards to loads */
         statistics::Scalar mbForwards;
+        /** Stores blocked from dealloc because merge buffer is full. */
+        statistics::Scalar mbFullStoreDeallocStalls;
         /** Number of cycles store WB/dealloc stalled by a barrier at the head. */
         statistics::Scalar barrierSqStallCycles;
         /** Sum of SQ occupancy during barrier-induced stall cycles. */
