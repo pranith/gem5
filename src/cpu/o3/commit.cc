@@ -106,6 +106,7 @@ Commit::processTrapEvent(ThreadID tid)
 Commit::Commit(CPU *_cpu, const BaseO3CPUParams &params)
     : commitPolicy(params.smtCommitPolicy),
       cpu(_cpu),
+      stlfLoadsBypassMBDrain(params.stlfLoadsBypassMBDrain),
       iewToCommitDelay(params.iewToCommitDelay),
       commitToIEWDelay(params.commitToIEWDelay),
       renameToROBDelay(params.renameToROBDelay),
@@ -1239,7 +1240,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
             stats.mbVersionLoadStallSameStlfVersion++;
         }
-        if (!head_inst->stlfForwarded()) {
+        if (!head_inst->stlfForwarded() || !stlfLoadsBypassMBDrain) {
             auto youngest_mb_version = iewStage->youngestMBVersion(tid);
             DPRINTF(
                 Commit,
