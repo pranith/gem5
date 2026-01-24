@@ -401,6 +401,8 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of loads forwarded from merge buffer"),
       ADD_STAT(mbFullStoreDeallocStalls, statistics::units::Count::get(),
                "Stores blocked from dealloc because merge buffer is full"),
+      ADD_STAT(mbForceRetiresOlderVersion, statistics::units::Count::get(),
+               "MB entries force retired due to lower version on same block"),
       ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
                "Cycles store WB/dealloc stalled by a barrier at the head"),
       ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
@@ -2148,10 +2150,24 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
         for (size_t idx = 0; idx < entries.size(); ++idx) {
             if (!entryValid[idx])
                 continue;
+
             const auto &e = entries[idx];
-            if (e.blockAddr == lineAddr && e.version == version) {
-                found_idx = idx;
-                break;
+            if (e.blockAddr == lineAddr) {
+                if (e.version == version) {
+                    found_idx = idx;
+                    break;
+                } else {
+                    assert(e.version < version);
+                    auto &old_entry = entries[idx];
+                    if (old_entry.state == EntryState::MERGING ||
+                        old_entry.state == EntryState::RETIRED) {
+                        old_entry.state = EntryState::FORCE_RETIRED;
+                        old_entry.retireCycle = Cycles(0);
+                        if (lsqPtr) {
+                            lsqPtr->stats.mbForceRetiresOlderVersion++;
+                        }
+                    }
+                }
             }
         }
 
