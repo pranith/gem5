@@ -811,8 +811,6 @@ class LSQUnit
         statistics::Scalar barrierSqStallOccupancy;
         /** Cycles release MB entries waited on outstanding bytes. */
         statistics::Scalar mbReleaseWaitCycles;
-        /** Cycles loads waited on older merge buffer versions. */
-        statistics::Scalar mbVersionLoadStallCycles;
         /** Instructions rescheduled/replayed due to barrier handling in LSQ. */
         statistics::Scalar barrierReschedulesLSQ;
     } stats;
