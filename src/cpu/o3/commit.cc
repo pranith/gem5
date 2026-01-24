@@ -183,6 +183,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Cycles barrier commit waited for SQ/MB to drain"),
       ADD_STAT(mbVersionLoadStallSameStlfVersion, statistics::units::Count::get(),
                "Loads stalled by MB versioning with matching STLF version"),
+      ADD_STAT(mbVersionLoadStallBypassedStlf, statistics::units::Count::get(),
+               "Loads that bypassed MB stall at ROB head due to STLF"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
@@ -1247,6 +1249,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 youngest_mb_version ? *youngest_mb_version : 0);
             iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
             return false;
+        } else {
+            stats.mbVersionLoadStallBypassedStlf++;
         }
     }
 
