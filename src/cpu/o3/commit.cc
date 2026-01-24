@@ -106,7 +106,6 @@ Commit::processTrapEvent(ThreadID tid)
 Commit::Commit(CPU *_cpu, const BaseO3CPUParams &params)
     : commitPolicy(params.smtCommitPolicy),
       cpu(_cpu),
-      stlfLoadsBypassMBDrain(params.stlfLoadsBypassMBDrain),
       iewToCommitDelay(params.iewToCommitDelay),
       commitToIEWDelay(params.commitToIEWDelay),
       renameToROBDelay(params.renameToROBDelay),
@@ -153,6 +152,7 @@ Commit::Commit(CPU *_cpu, const BaseO3CPUParams &params)
         htmStops[tid] = 0;
     }
     interrupt = NoFault;
+    stlfLoadsBypassMBDrain = params.stlfLoadsBypassMBDrain;
 }
 
 std::string Commit::name() const { return cpu->name() + ".commit"; }
