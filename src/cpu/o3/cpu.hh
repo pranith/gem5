@@ -587,6 +587,11 @@ class CPU : public BaseCPU
     /** The cycle that the CPU was last running, used for statistics. */
     Cycles lastRunningCycle;
 
+    /** Per-CPU heartbeat state. */
+    mutable Counter heartbeatPrevTotalInsts = 0;
+    mutable Cycles heartbeatPrevIntervalCycles = Cycles(0);
+    mutable Cycles heartbeatStartCycles = Cycles(0);
+
     /** The cycle that the CPU was last activated by a new thread*/
     Tick lastActivatedCycle;
 
