@@ -1237,14 +1237,17 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
             stats.mbVersionLoadStallSameStlfVersion++;
         }
-        auto youngest_mb_version = iewStage->youngestMBVersion(tid);
-        DPRINTF(Commit,
+        if (!head_inst->stlfForwarded()) {
+            auto youngest_mb_version = iewStage->youngestMBVersion(tid);
+            DPRINTF(
+                Commit,
                 "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu until "
                 "merge buffer versions <= ver:%llu drain.\n",
                 tid, head_inst->seqNum, head_inst->getMemOrderVersion(),
                 youngest_mb_version ? *youngest_mb_version : 0);
-        iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
-        return false;
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+            return false;
+        }
     }
 
     // Stores mark themselves as completed.
