@@ -490,6 +490,8 @@ class Commit
         statistics::Scalar mbVersionLoadStallSameStlfVersion;
         /** Loads at ROB head that skip MB stall due to STLF forwarding. */
         statistics::Scalar mbVersionLoadStallBypassedStlf;
+        /** Cycles commit stalled by loads waiting on older MB versions. */
+        statistics::Scalar mbVersionLoadStallCycles;
         /** Stat for the total number of branch mispredicts that caused a
          * squash.
          */
