@@ -373,39 +373,36 @@ CPU::CPUStats::CPUStats(CPU *cpu)
 void
 CPU::heartbeat() const
 {
-    static size_t prev_total_insts = 0;
-    static Cycles prev_interval_cycles(0);
-    static Cycles start_cycles(0);
-
     constexpr Cycles step(1000000);
 
     const auto get_interval = [&step] (Cycles cycles) -> size_t {
         return cycles / step;
     };
 
-    if (start_cycles == 0) {
+    if (heartbeatStartCycles == 0) {
         // Initialize baselines on first entry (handles checkpoints too).
-        start_cycles = curCycle();
-        prev_interval_cycles = curCycle();
-        prev_total_insts = totalInsts();
+        heartbeatStartCycles = curCycle();
+        heartbeatPrevIntervalCycles = curCycle();
+        heartbeatPrevTotalInsts = totalInsts();
         return;
     }
 
-    if (get_interval(prev_interval_cycles) == get_interval(curCycle())) {
+    if (get_interval(heartbeatPrevIntervalCycles) ==
+        get_interval(curCycle())) {
         return;
     }
 
-    Cycles elapsed = curCycle() - prev_interval_cycles;
-    Cycles tot_cycles = curCycle() - start_cycles;
+    Cycles elapsed = curCycle() - heartbeatPrevIntervalCycles;
+    Cycles tot_cycles = curCycle() - heartbeatStartCycles;
     if (elapsed == 0 || tot_cycles == 0) {
         return;
     }
 
-    float ipc = (totalInsts() - prev_total_insts) * 1.0 / elapsed;
+    float ipc = (totalInsts() - heartbeatPrevTotalInsts) * 1.0 / elapsed;
     float cipc = totalInsts() * 1.0 / tot_cycles;
 
-    prev_interval_cycles = curCycle();
-    prev_total_insts = totalInsts();
+    heartbeatPrevIntervalCycles = curCycle();
+    heartbeatPrevTotalInsts = totalInsts();
 
     // Print heartbeat.
     struct rusage ru;
