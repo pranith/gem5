@@ -236,6 +236,7 @@ class LSQUnit
             EntryState state;
             RequestPtr baseReq;
             Cycles retireCycle;
+            Cycles allocCycle;
             unsigned unretireCount;
             uint64_t version;
             bool isRelease = false;
@@ -246,6 +247,7 @@ class LSQUnit
                   blockData(size, 0),
                   state(EntryState::MERGING),
                   retireCycle(0),
+                  allocCycle(0),
                   unretireCount(0),
                   version(ver)
             {}
@@ -313,6 +315,9 @@ class LSQUnit
                 entry.version = 0;
             }
             versionCounts.clear();
+            if (lsqPtr) {
+                lsqPtr->stats.mbAvgOccupancy = 0.0;
+            }
         }
         bool canAcceptSplitStore(LSQRequest *request, uint64_t version,
                                  bool &mb_full) const;
@@ -807,6 +812,10 @@ class LSQUnit
         statistics::Scalar mbFullStoreDeallocStalls;
         /** Older-version MB entries force retired for same block address. */
         statistics::Scalar mbForceRetiresOlderVersion;
+        /** Average merge buffer occupancy (valid entries / total). */
+        statistics::Average mbAvgOccupancy;
+        /** Total cycles entries reside in the merge buffer. */
+        statistics::Scalar mbResidencyCycles;
         /** Number of cycles store WB/dealloc stalled by a barrier at the head. */
         statistics::Scalar barrierSqStallCycles;
         /** Sum of SQ occupancy during barrier-induced stall cycles. */
