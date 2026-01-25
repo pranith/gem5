@@ -403,6 +403,10 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Stores blocked from dealloc because merge buffer is full"),
       ADD_STAT(mbForceRetiresOlderVersion, statistics::units::Count::get(),
                "MB entries force retired due to lower version on same block"),
+      ADD_STAT(mbAvgOccupancy, statistics::units::Ratio::get(),
+               "Average merge buffer occupancy (UsedEntries/TotalEntries)"),
+      ADD_STAT(mbResidencyCycles, statistics::units::Count::get(),
+               "Total cycles entries reside in the merge buffer"),
       ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
                "Cycles store WB/dealloc stalled by a barrier at the head"),
       ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
@@ -419,6 +423,8 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
     lqAvgOccupancy.precision(2);
 
     sqAvgOccupancy.precision(2);
+
+    mbAvgOccupancy.precision(2);
 }
 
 void
@@ -2252,9 +2258,14 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             last_entry = &entries[free_idx];
             lastAllocatedIdx = free_idx;
             recordAllocVersion(version);
+            last_entry->allocCycle = now;
 
             if (lsqPtr) {
                 lsqPtr->stats.mbAllocations++;
+                const size_t valid_entries =
+                    std::count(entryValid.begin(), entryValid.end(), true);
+                lsqPtr->stats.mbAvgOccupancy =
+                    (double)valid_entries / (double)numEntries;
             }
             // Reset unretire count on new allocations
             last_entry->unretireCount = 0;
@@ -2768,6 +2779,10 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
         other.waitBits[idx] = false;
     }
 
+    if (lsqPtr && entryValid[idx]) {
+        lsqPtr->stats.mbResidencyCycles +=
+            (lsqPtr->cpu->curCycle() - entry.allocCycle);
+    }
     entryValid[idx] = false;
     if (idx == lastAllocatedIdx) {
         lastAllocatedIdx = numEntries;
@@ -2784,6 +2799,12 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     entry.version = 0;
     entry.isRelease = false;
     entry.waitBits.clear();
+    if (lsqPtr) {
+        const size_t valid_entries =
+            std::count(entryValid.begin(), entryValid.end(), true);
+        lsqPtr->stats.mbAvgOccupancy =
+            (double)valid_entries / (double)numEntries;
+    }
 }
 
 void
