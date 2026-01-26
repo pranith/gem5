@@ -331,6 +331,8 @@ class Commit
 
     /** Allow STLF loads to bypass MB drain stalls at commit. */
     bool stlfLoadsBypassMBDrain;
+    /** Allow AcquirePC loads at ROB head to bypass MB drain stalls. */
+    bool optimizeAcquirePC;
 
     /** Wire to read information from IEW queue. */
     TimeBuffer<IEWStruct>::wire fromIEW;
@@ -515,6 +517,13 @@ class Commit
         statistics::Vector acquireInsts;
         /** Total number of committed acquire PC instructions. */
         statistics::Vector acquirePcInsts;
+        /** Cycles commit stalled on acquire loads waiting for older releases.
+         */
+        statistics::Scalar acquireReleaseWaitStallCycles;
+        /** Times acquire loads stalled waiting for older releases. */
+        statistics::Scalar acquireReleaseWaitStalls;
+        /** Times acquire-PC loads bypassed release-wait stall. */
+        statistics::Scalar acquirePcReleaseBypassCount;
         /** Total number of committed release instructions. */
         statistics::Vector releaseInsts;
         /** Committed instructions by instruction type (OpClass) */

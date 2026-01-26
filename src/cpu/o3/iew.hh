@@ -241,6 +241,11 @@ class IEW
     {
         return ldstQueue.loadBlockedByMBVersion(tid, load_version);
     }
+    bool
+    loadBlockedByReleaseMB(ThreadID tid, uint64_t load_version)
+    {
+        return ldstQueue.loadBlockedByReleaseMB(tid, load_version);
+    }
 
     /** Mark the merge buffer entries for drain */
     void
