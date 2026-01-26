@@ -1047,21 +1047,20 @@ LSQUnit::writebackStores()
 
         assert(!storeWBIt->committed());
 
-        uint64_t store_version = inst->getMemOrderVersion();
-        bool is_release_store =
-            optimizeStoreRelease && can_use_mb &&
-            request->mainReq()->isRelease();
-
-        std::vector<bool> release_wait_bits;
-        if (is_release_store) {
-            release_wait_bits = mergeBuffer.validVector();
-        }
-
         if (can_use_mb) {
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
             MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
+            uint64_t store_version = inst->getMemOrderVersion();
+
+            bool is_release_store = optimizeStoreRelease && can_use_mb &&
+                                    request->mainReq()->isRelease();
+
+            std::vector<bool> release_wait_bits;
+            if (is_release_store) {
+                release_wait_bits = mergeBuffer.validVector();
+            }
 
             if (request->isSplit()) {
                 // For split stores, make sure both fragments can be merged
