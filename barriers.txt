@@ -1,0 +1,198 @@
+• - Decode tagging: every decoded instruction gets a mem-order version;
+    barriers bump the per-thread version before tagging the instruction
+    (src/cpu/o3/decode.cc:722-735). This is just bookkeeping; the ordering
+    effects kick in later stages.
+  - Dispatch/queueing: IEW routes barriers into the non-speculative
+    path—sets canCommit(), inserts them via
+    InstructionQueue::insertBarrier, and keeps them out of the normal IQ
+    ready flow (src/cpu/o3/iew.cc:1038-1066,
+    src/cpu/o3/inst_queue.cc:748-753).
+  - Dependency blocking: MemDepUnit tracks barrier sequence numbers;
+    insertBarrierSN records them in loadBarrierSNs/storeBarrierSNs
+    (src/cpu/o3/mem_dep_unit.cc:160-189). When a younger load/store is
+    added, the unit forces a dependency on any in-flight barriers of the
+    same type, clearing the instruction’s issue
+    eligibility until the barrier retires
+    (src/cpu/o3/mem_dep_unit.cc:210-270). This ensures younger memory ops
+    wait behind barriers.
+  - Commit/retirement: If a read/write barrier (or other non-spec op)
+    reaches the head of the ROB unexecuted, commit stalls the thread, asks
+    IEW to execute it, and waits for all older stores to write back before
+    proceeding (src/cpu/o3/commit.cc:1117-1143). Once executed, it can
+    commit like other instructions, which
+    lets younger memory ops become unblocked through the mem-dep logic.
+
+
+- Decode tagging: every decoded instruction gets a mem-order version;
+  barriers bump the per-thread version before tagging the instruction
+  (src/cpu/o3/decode.cc:722-735). This is just bookkeeping; the ordering
+  effects kick in later stages.
+  - Dispatch/queueing: IEW routes barriers into the non-speculative
+    path—sets canCommit(), inserts them via
+    InstructionQueue::insertBarrier, and keeps them out of the normal IQ
+    ready flow (src/cpu/o3/iew.cc:1038-1066,
+    src/cpu/o3/inst_queue.cc:748-753).
+  - Dependency blocking: MemDepUnit tracks barrier sequence numbers;
+    insertBarrierSN records them in loadBarrierSNs/storeBarrierSNs
+    (src/cpu/o3/mem_dep_unit.cc:160-189). When a younger load/store is
+    added, the unit forces a dependency on any in-flight barriers of the
+    same type, clearing the instruction’s issue
+    eligibility until the barrier retires
+    (src/cpu/o3/mem_dep_unit.cc:210-270). This ensures younger memory ops
+    wait behind barriers.
+  - Commit/retirement: If a read/write barrier (or other non-spec op)
+    reaches the head of the ROB unexecuted, commit stalls the thread, asks
+    IEW to execute it, and waits for all older stores to write back before
+    proceeding (src/cpu/o3/commit.cc:1117-1143). Once executed, it can
+    commit like other instructions, which
+    lets younger memory ops become unblocked through the mem-dep logic.
+
+
+  - When decode/IEW sees a read-barrier, it’s inserted into the MemDepUnit
+    as a barrier (InstructionQueue::insertBarrier →
+    MemDepUnit::insertBarrier/insertBarrierSN; see
+    src/cpu/o3/inst_queue.cc:748-753 and
+    src/cpu/o3/mem_dep_unit.cc:160-189,325-344). insertBarrierSN drops the
+    barrier’s seqNum into loadBarrierSNs.
+  - When a younger load (or atomic) is inserted, MemDepUnit::insert builds
+    its producer set. If any load barriers are outstanding, the load is
+    made dependent on them instead of issuing immediately
+    (src/cpu/o3/mem_dep_unit.cc:210-270). The load’s canIssue flag is
+    cleared and it won’t move to the ready list until
+    those barrier entries are marked ready/retired.
+  - Read barriers are non-speculative and must reach execute/commit before
+    they release younger operations (commit stalls if one is unexecuted at
+    the ROB head; src/cpu/o3/commit.cc:1117-1143). Once the barrier is
+    executed/committed, its MemDepEntry is removed, clearing the dependency
+    and allowing the blocked loads
+    to issue.
+
+  Net effect: a read barrier serializes younger loads behind it by forcing
+  them to wait in the MemDepUnit until the barrier has executed and
+  retired.
+
+
+In the O3 core a Request tagged as RELEASE is treated like a serializing
+store: during store writeback the LSQ only lets it issue when it reaches
+the head of the store queue. In src/cpu/o3/lsq_unit.cc:948-960, the
+writeback loop checks request->mainReq()->isRelease(), and if the release
+store isn’t the head entry it breaks out and waits. While stalled, the code
+also forces a one-time merge-buffer drain to unblock it
+(src/cpu/o3/lsq_unit.cc:1024-1032). The restriction is that a release
+request must be the oldest pending store (SQ head) before it can be sent to
+the cache.
+
+
+Reorder-buffer tag: Tag each decoded memory op with an epoch (your
+memOrderVersion), and have issue/LSQ disallow issuing an instruction whose
+epoch is newer than the last retired barrier epoch. That removes per-op
+mem-dep edges but adds a global epoch compare.
+
+• When checkSnoop tags a load with ReExec (sets ld_inst->fault and
+  request->setStateToFault()), the load keeps that fault through
+  completion. In writeback the fault is left intact, and at commit the head
+  instruction still has a fault, so Commit::commitHead treats it like any
+  other fault and calls generateTrapEvent
+  (see src/cpu/o3/commit.cc around the fault-handling block near lines
+  ~1215–1250). The trap uses the fault’s invoke; for ReExec that is a no-op
+  PC advance (src/sim/faults.cc:84), so the pipeline squashes and
+  re-fetches the same PC, causing the load to be issued again. That’s the
+  path that replays the load after
+  checkSnoop marks it for re-execution.
+
+Why is a load marked as fault on an external snoop?
+
+Because an external snoop invalidate may have made the previously issued
+load’s data stale. In checkSnoop, if the snoop hits a younger in-flight
+load (or all younger loads in TSO mode), the load is tagged with a ReExec
+fault and its request is marked Fault so the pipeline will squash and
+reissue it. The ReExec fault is just a replay signal: it prevents the load
+from committing with potentially invalid data and forces it to be
+re-executed after the invalidation. You can see this in
+src/cpu/o3/lsq_unit.cc around the snoop loop (~line 600) and the replay
+handling in commit (src/cpu/o3/commit.cc, fault handling block).
+
+Older store and younger load to the same address: Do not need to squash on
+cache snoop as this is a valid forwarding.
+
+
+• When the RAR buffer (which tracks recent loads for same-block snoop handling) fills:
+
+  - In LSQUnit::read (src/cpu/o3/lsq_unit.cc), if rarBuffer.size() >= rarBufferMaxEntries, the load is not issued. Instead:
+      - Set rarBlocked = true, mark the LSQ as stalled, and remember the blocking load’s index (stallingLoadIdx).
+      - Reschedule and block the mem inst (rescheduleMemInst + blockMemInst), clear its issued/address-valid flags, discard its request, and bump rescheduledLoads.
+      - If another load tries to issue while rarBlocked is set, it also gets blocked/rescheduled immediately using the saved stallingLoadIdx.
+  - Unblocking happens when space frees:
+      - On commit, trackRARCommit removes the committing load’s RAR entry and, if rarBlocked is set and the saved load entry is still valid, replays that load and clears rarBlocked/stalled/stallingLoadIdx.
+      - On squash, if the blocked load is squashed, the flags and index are cleared to avoid a lingering stall (squash).
+
+  This stops issuing loads while the RAR buffer is full and automatically replays the oldest blocked load once space is available.
+
+• Loads grab and release LQ slots in LSQUnit:
+
+  - Allocate on insert: insertLoad checks loadQueue.full(), calls loadQueue.advance_tail(), sets the entry valid, and records lqIdx/lqIt on the DynInst (src/cpu/o3/lsq_unit.cc:449-470).
+  - Held until retirement: the entry stays occupied while the load executes/replays; the DynInst carries the iterator for hazards/forwarding.
+  - Release on commit: commitLoad clears the head entry and pop_front() to free the slot and update occupancy stats (src/cpu/o3/lsq_unit.cc:868-887).
+  - Early release on squash: squash walks the tail and clears/pops any younger loads beyond the squashed sequence number, unstalling if needed (src/cpu/o3/lsq_unit.cc:1194-1220).
+
+* Stats
+
+  - Barrier residency: per-thread cycles a barrier sits in the IQ/LSQ from insert to commit (barrierInFlightCycles). This captures how long the pipeline carries the fence.
+  - Issue delay: distribution of cycles between barrier ready and actual issue (barrierIssueDelay), to see backpressure from FU/cache/TSO rules.
+  - Blocked-younger counts: number of younger instructions held behind a barrier (e.g., average/peak ready-list size while a barrier is at head, or “younger mem ops blocked by barrier” counter).
+  - Replay/reschedule due to barrier: how often younger mem ops are squashed/rescheduled because speculative barrier issue was disallowed or violated (barrierReschedules).
+  - Store-queue pressure: peak/average SQ occupancy while a barrier is at head, and cycles “storeWBIt valid but not head because of barrier” to quantify tailback.
+  - Merge-buffer impact for releases: count of release drains that had to wait on waitBits vs version, and cycles a release MB stayed in RETIRED/DRAINING states.
+  - Commit-side stalls: cycles commit could have retired but was blocked by a barrier (head-of-ROB barrier not ready), and number of back-end empty cycles attributable to barriers.
+  - By-type breakdown: separate stats for read barriers vs write barriers vs HTM fences vs releases to pinpoint expensive classes.
+
+* Benchmarks
+  - PARSEC: fluidanimate, streamcluster, swaptions, blackscholes (pthread barriers each timestep).
+  - SPLASH-2 / SPLASH-3: barnes, radiosity, fft, lu, ocean (global barriers every iteration).
+  - NAS Parallel Benchmarks: CG, FT, MG, BT (MPI/Pthreads barriers in iterative solvers).
+  - Concurrency microbenchmarks: pthread barrier loops, producer/consumer with periodic pthread_barrier_wait, spin-lock handoff with release/acquire and memory fences.
+  - Server-ish with sync: memcached/redis-like worker pools with periodic sync, or a simple threadpool benchmark with per-epoch barriers.
+
+• Read/Write barriers are treated as non‑speculative by gating them in the IQ and only allowing them to execute when they reach the ROB head and ordering constraints are satisfied.
+
+  Key flow:
+
+  - Dispatch: barriers are inserted as non‑spec ops and not added to normal IQ issue.
+    src/cpu/o3/iew.cc:1040-1068 (insertBarrier, setCanCommit, add_to_iq=false)
+  - IQ handling: insertBarrier() registers the barrier in the mem‑dep unit and stores it in the non‑spec list.
+    src/cpu/o3/inst_queue.cc:738-763
+  - Execution is triggered only at commit head: when a barrier reaches ROB head and is not executed, commitHead() stalls and sends nonSpecSeqNum to IEW; IEW then schedules that non‑spec instruction to execute.
+    src/cpu/o3/commit.cc:1157-1219
+    src/cpu/o3/inst_queue.cc:1047-1076 (scheduleNonSpec)
+  - Ordering enforced by draining stores/MB: commit will stall if stores are pending; it may force MB drain to make the barrier safe, then only allow barrier execution/commit when drained.
+    src/cpu/o3/commit.cc:1169-1207
+  - Memory dependency unit: loads/stores can be blocked by outstanding barriers unless speculative‑barrier issue is enabled.
+    src/cpu/o3/inst_queue.cc:1031-1045
+    src/cpu/o3/mem_dep_unit.cc:231-315
+
+
+Relevant stats:
+
+  - acquireInsts
+  - barrierHeadNotExecuted
+  - barrierIssueStallCycles
+  - barrierLoadStalls
+  - barrierReschedules
+  - barrierReschedulesLSQ
+  - barrierResidencyCycles
+  - barrierSqStallCycles
+  - barrierSqStallOccupancy
+  - barrierStoreStalls
+  - commitBarrierDrainStallCycles
+  - commitBarrierStallCycles
+  - mbAvgOccupancy
+  - mbFullStoreDeallocStalls
+  - mbHeadDrainStallCycles
+  - mbReleaseWaitCycles
+  - mbResidencyCycles
+  - mbVersionLoadStallBypassedStlf
+  - mbVersionLoadStallCycles
+  - mbVersionLoadStallSameStlfVersion
+  - readMembars
+  - releaseInsts
+  - writeMembars
