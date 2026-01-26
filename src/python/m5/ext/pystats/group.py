@@ -75,10 +75,10 @@ class Group(AbstractStat):
         if type:
             self.type = type
 
+        self.name = name
+
         self.time_conversion = time_conversion
         self.values = kwargs
-
-        self.name = name
 
     def children(
         self,
@@ -98,6 +98,26 @@ class Group(AbstractStat):
 
     def accept(self, visitor):
         return visitor.visit_group(self)
+
+    def __getitem__(self, key: str) -> "AbstractStat":
+        return self.values[key]
+
+    def __getattr__(self, name):
+        try:
+            return self.values[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        # Let normal attributes be handled normally
+        if (
+            name.startswith("_")
+            or name == "values"
+            or "values" not in self.__dict__
+        ):
+            super().__setattr__(name, value)
+        else:
+            self.values[name] = value
 
 
 class SimObjectGroup(Group):
@@ -124,22 +144,14 @@ class SimObjectVectorGroup(Group):
         kwargs["value"] = children
         super().__init__(type="SimObjectVector", **kwargs)
 
-    def __getitem__(self, index: Union[int, str, float]) -> AbstractStat:
-        if not isinstance(index, int):
-            raise KeyError(
-                f"Index {index} not found in int. Cannot index Array with "
-                "non-int"
-            )
-        return self.values["value"][index]
-
     def __iter__(self):
-        return iter(self.values["value"])
+        return iter(self.values)
 
     def __len__(self):
-        return len(self.values["value"])
+        return len(self.values)
 
     def __getitem__(self, item: int):
-        return self.values["value"][item]
+        return self.values[item]
 
     def __contains__(self, item):
         if isinstance(item, int):
@@ -151,7 +163,7 @@ class SimObjectVectorGroup(Group):
         recursive: bool = False,
     ) -> List["AbstractStat"]:
         to_return = []
-        for child in self.values["value"]:
+        for child in self.values:
             to_return = to_return + child.children(
                 predicate=predicate, recursive=recursive
             )

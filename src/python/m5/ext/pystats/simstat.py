@@ -70,4 +70,9 @@ class SimStat(Group):
         self.creation_time = creation_time
         self.simulated_begin_time = simulated_begin_time
         self.simulated_end_time = simulated_end_time
-        super().__init__(time_conversion=time_conversion, name=name, **kwargs)
+        super().__init__(
+            time_conversion=time_conversion,
+            type="SimObject",
+            name=name,
+            **kwargs,
+        )

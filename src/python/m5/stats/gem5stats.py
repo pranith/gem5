@@ -219,7 +219,7 @@ class CsvOutputVisitor(Visitor):
             "simulated_end_time": element.simulated_end_time,
         }
 
-        for key, value in element.values["values"].items():
+        for key, value in element.values.items():
             assert self._acceptable_type(value), "Unexpected value type"
             values[key] = value.accept(self)
 
@@ -389,7 +389,7 @@ class JsonOutputVistor(Visitor):
             "simulated_end_time": element.simulated_end_time,
         }
 
-        for key, value in element.values["values"].items():
+        for key, value in element.values.items():
             assert self._acceptable_type(value), "Unexpected value type"
             values[key] = value.accept(self)
 
@@ -733,7 +733,7 @@ def get_simstat(
             else:
                 _prepare_stats(r)
 
-        stats = _process_simobject_stats(r).__dict__
+        stats = _process_simobject_stats(r).values
         stats["name"] = r.get_name() if r.get_name() else "root"
         stats_map[stats["name"]] = stats
 
