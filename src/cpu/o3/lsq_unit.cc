@@ -413,6 +413,12 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Sum of SQ occupancy during barrier stall cycles"),
       ADD_STAT(mbReleaseWaitCycles, statistics::units::Count::get(),
                "Cycles release MB entries waited for outstanding bytes"),
+      ADD_STAT(mbReleaseOlderThanLoadHits, statistics::units::Count::get(),
+               "Times a load found older release MB entries"),
+      ADD_STAT(mbReleaseAvgOutstanding, statistics::units::Ratio::get(),
+               "Average release MB entries outstanding"),
+      ADD_STAT(mbReleaseMaxOutstanding, statistics::units::Count::get(),
+               "Max release MB entries outstanding"),
       ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
                "Instructions rescheduled/replayed due to barrier in LSQ")
 {
@@ -425,6 +431,7 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
     sqAvgOccupancy.precision(2);
 
     mbAvgOccupancy.precision(2);
+    mbReleaseAvgOutstanding.precision(2);
 }
 
 void
@@ -1079,8 +1086,9 @@ LSQUnit::writebackStores()
             MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
             uint64_t store_version = inst->getMemOrderVersion();
 
-            bool is_release_store = optimizeStoreRelease && can_use_mb &&
-                                    request->mainReq()->isRelease();
+            bool is_release_req = request->mainReq()->isRelease();
+            bool is_release_store =
+                optimizeStoreRelease && can_use_mb && is_release_req;
 
             std::vector<bool> release_wait_bits;
             if (is_release_store) {
@@ -1137,12 +1145,16 @@ LSQUnit::writebackStores()
                     (mb_entry && merged_ok) ? "accepted" : "blocked");
 
             if (mb_entry && merged_ok) {
-                if (is_release_store) {
+                if (is_release_req) {
                     mb_entry->isRelease = true;
-                    mb_entry->waitBits = release_wait_bits;
+                    if (is_release_store) {
+                        mb_entry->waitBits = release_wait_bits;
+                    }
                     if (mb_entry2) {
                         mb_entry2->isRelease = true;
-                        mb_entry2->waitBits = release_wait_bits;
+                        if (is_release_store) {
+                            mb_entry2->waitBits = release_wait_bits;
+                        }
                     }
                     DPRINTF(LSQUnit,
                             "Store-release idx:%i tracked via MB entry ver:%llu\n",
@@ -2645,6 +2657,44 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version)
     return false;
 }
 
+bool
+LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
+{
+    size_t release_count = 0;
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        const auto &entry = entries[idx];
+        if (entry.isRelease) {
+            release_count++;
+        }
+        if (entry.isRelease) {
+            if (lsqPtr) {
+                lsqPtr->stats.mbReleaseOlderThanLoadHits++;
+            }
+            return true;
+        }
+    }
+    if (lsqPtr) {
+        lsqPtr->stats.mbReleaseAvgOutstanding =
+            (double)release_count / (double)entries.size();
+        if (release_count > lsqPtr->stats.mbReleaseMaxOutstanding.value()) {
+            lsqPtr->stats.mbReleaseMaxOutstanding = release_count;
+        }
+    }
+    return false;
+}
+
+bool
+LSQUnit::loadBlockedByReleaseMB(uint64_t version)
+{
+    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+        return false;
+    }
+
+    return mergeBuffer.hasReleaseOlderThan(version);
+}
 
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)

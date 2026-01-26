@@ -180,6 +180,10 @@ class BaseO3CPU(BaseCPU):
         False,
         "Enable optimized store-release handling with release buffer tracking",
     )
+    optimizeAcquirePC = Param.Bool(
+        False,
+        "Allow AcquirePC loads at ROB head to commit without draining MB",
+    )
     stlfLoadsBypassMBDrain = Param.Bool(
         True,
         "Allow STLF loads at ROB head to bypass MB version stall",
