@@ -2728,6 +2728,7 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
         other.waitBits[idx] = false;
     }
 
+    auto &entry = entries[idx];
     if (lsqPtr && entryValid[idx]) {
         lsqPtr->stats.mbResidencyCycles +=
             (lsqPtr->cpu->curCycle() - entry.allocCycle);
@@ -2736,7 +2737,6 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     if (idx == lastAllocatedIdx) {
         lastAllocatedIdx = numEntries;
     }
-    auto &entry = entries[idx];
     recordInvalidateVersion(entry.version);
     entry.baseReq = nullptr;
     entry.byteValids.assign(lineSize, false);
