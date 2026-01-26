@@ -188,6 +188,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Loads that bypassed MB stall at ROB head due to STLF"),
       ADD_STAT(mbVersionLoadStallCycles, statistics::units::Count::get(),
                "Cycles commit stalled by loads waiting on older MB versions"),
+      ADD_STAT(mbHeadDrainStallCycles, statistics::units::Count::get(),
+               "Cycles ROB head stalled waiting for MB drain (any cause)"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
@@ -1177,14 +1179,18 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        const bool need_store_drain =
-            !cpu->versioningEnabled() && iewStage->hasStoresToWB(tid);
-        if (inst_num > 0 || need_store_drain) {
+        const bool need_store_drain = iewStage->hasStoresToWB(tid);
+
+	if (need_store_drain) {
+            iewStage->forceMBDrain(tid,
+                                   std::numeric_limits<uint64_t>::max());
+	}        
+
+        if (inst_num > 0 || (!cpu->versioningEnabled() && need_store_drain)) {
             // Drain the merge buffer to reduce stall when versioning is off.
             if (need_store_drain) {
                 ++stats.commitBarrierDrainStallCycles;
-                iewStage->forceMBDrain(tid,
-                                       std::numeric_limits<uint64_t>::max());
+                ++stats.mbHeadDrainStallCycles;
                 DPRINTF(Commit,
                         "[tid:%i] [sn:%llu] "
                         "Waiting for all stores to writeback.\n",
@@ -1246,6 +1252,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             stats.mbVersionLoadStallBypassedStlf++;
 	} else {
             stats.mbVersionLoadStallCycles++;
+            stats.mbHeadDrainStallCycles++;
             auto youngest_mb_version = iewStage->youngestMBVersion(tid);
             DPRINTF(
                 Commit,
