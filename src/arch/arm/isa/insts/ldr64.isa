@@ -99,7 +99,8 @@ let {{
             if self.flavor in ("acquire_pc"):
                 self.instFlags.extend(["IsWriteBarrier",
                                        "IsReadBarrier",
-                                       "IsAcquire"])
+                                       "IsAcquire",
+                                       "IsAcquirePC"])
                 self.memFlags.append("Request::ACQUIRE_PC")
 
             if self.flavor in ("acex", "exclusive", "exp", "acexp"):

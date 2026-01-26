@@ -184,7 +184,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Cycles barrier commit waited for SQ/MB to drain"),
       ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
                "Times a barrier is at ROB head but not executed"),
-      ADD_STAT(mbVersionLoadStallSameStlfVersion, statistics::units::Count::get(),
+      ADD_STAT(mbVersionLoadStallSameStlfVersion,
+               statistics::units::Count::get(),
                "Loads stalled by MB versioning with matching STLF version"),
       ADD_STAT(mbVersionLoadStallBypassedStlf, statistics::units::Count::get(),
                "Loads that bypassed MB stall at ROB head due to STLF"),
@@ -206,6 +207,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Number of write barriers committed"),
       ADD_STAT(acquireInsts, statistics::units::Count::get(),
                "Number of acquire instructions committed"),
+      ADD_STAT(acquirePcInsts, statistics::units::Count::get(),
+               "Number of acquire PC instructions committed"),
       ADD_STAT(releaseInsts, statistics::units::Count::get(),
                "Number of release instructions committed"),
       ADD_STAT(committedInstType, statistics::units::Count::get(),
@@ -247,6 +250,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
     acquireInsts
         .init(cpu->numThreads)
         .flags(total);
+
+    acquirePcInsts.init(cpu->numThreads).flags(total);
 
     releaseInsts
         .init(cpu->numThreads)
@@ -1504,6 +1509,9 @@ Commit::updateComInstStats(const DynInstPtr &inst)
 
     if (inst->staticInst->isAcquire()) {
         stats.acquireInsts[tid]++;
+    }
+    if (inst->staticInst->isAcquirePC()) {
+        stats.acquirePcInsts[tid]++;
     }
     if (inst->staticInst->isRelease()) {
         stats.releaseInsts[tid]++;

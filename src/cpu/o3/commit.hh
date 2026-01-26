@@ -513,6 +513,8 @@ class Commit
         statistics::Vector writeMembars;
         /** Total number of committed acquire instructions. */
         statistics::Vector acquireInsts;
+        /** Total number of committed acquire PC instructions. */
+        statistics::Vector acquirePcInsts;
         /** Total number of committed release instructions. */
         statistics::Vector releaseInsts;
         /** Committed instructions by instruction type (OpClass) */
