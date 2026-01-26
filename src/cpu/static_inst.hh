@@ -189,6 +189,11 @@ class StaticInst : public RefCounted, public StaticInstFlags
     {
         return flags[IsAcquire];
     }
+    bool
+    isAcquirePC() const
+    {
+        return flags[IsAcquirePC];
+    }
     bool isNonSpeculative() const { return flags[IsNonSpeculative]; }
     bool isQuiesce() const { return flags[IsQuiesce]; }
     bool isUnverifiable() const { return flags[IsUnverifiable]; }
