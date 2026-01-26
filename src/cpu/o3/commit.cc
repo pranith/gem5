@@ -182,6 +182,8 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "was at the head"),
       ADD_STAT(commitBarrierDrainStallCycles, statistics::units::Count::get(),
                "Cycles barrier commit waited for SQ/MB to drain"),
+      ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
+               "Times a barrier is at ROB head but not executed"),
       ADD_STAT(mbVersionLoadStallSameStlfVersion, statistics::units::Count::get(),
                "Loads stalled by MB versioning with matching STLF version"),
       ADD_STAT(mbVersionLoadStallBypassedStlf, statistics::units::Count::get(),
@@ -1184,6 +1186,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 	if (need_store_drain) {
             iewStage->forceMBDrain(tid,
                                    std::numeric_limits<uint64_t>::max());
+        }
+
+        if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
+            ++stats.barrierHeadNotExecuted;
         }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
