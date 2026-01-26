@@ -173,26 +173,33 @@ cache snoop as this is a valid forwarding.
 
 Relevant stats:
 
-  - acquireInsts
-  - barrierHeadNotExecuted
-  - barrierIssueStallCycles
-  - barrierLoadStalls
-  - barrierReschedules
-  - barrierReschedulesLSQ
-  - barrierResidencyCycles
-  - barrierSqStallCycles
-  - barrierSqStallOccupancy
-  - barrierStoreStalls
-  - commitBarrierDrainStallCycles
-  - commitBarrierStallCycles
-  - mbAvgOccupancy
-  - mbFullStoreDeallocStalls
-  - mbHeadDrainStallCycles
-  - mbReleaseWaitCycles
-  - mbResidencyCycles
-  - mbVersionLoadStallBypassedStlf
-  - mbVersionLoadStallCycles
-  - mbVersionLoadStallSameStlfVersion
-  - readMembars
-  - releaseInsts
-  - writeMembars
+  - acquireInsts: acquire instructions committed.
+  - acquirePcInsts: AcquirePC instructions committed.
+  - acquireReleaseWaitStallCycles: commit stall cycles where an acquire load waited on older release MB entries.
+  - acquireReleaseWaitStalls: number of acquire loads stalled waiting on older release MB entries.
+  - acquirePcReleaseBypassCount: AcquirePC loads that bypassed release-wait stalls.
+  - barrierHeadNotExecuted: times a barrier reached ROB head but was not executed yet.
+  - barrierIssueStallCycles: cycles issue stalled due to outstanding barriers.
+  - barrierLoadStalls: loads blocked by an outstanding barrier (MemDep).
+  - barrierReschedules: instructions rescheduled/replayed due to a barrier (MemDep).
+  - barrierReschedulesLSQ: instructions rescheduled/replayed due to a barrier in LSQ.
+  - barrierResidencyCycles: cycles barriers reside in MemDep from insert to complete.
+  - barrierSqStallCycles: cycles store WB/dealloc stalled by a barrier at SQ head.
+  - barrierSqStallOccupancy: SQ occupancy accumulated during barrier SQ stalls.
+  - barrierStoreStalls: stores blocked by an outstanding barrier (MemDep).
+  - commitBarrierDrainStallCycles: commit stall cycles waiting for SQ/MB drain for a barrier.
+  - commitBarrierStallCycles: commit stall cycles because a barrier/non-spec op is at ROB head.
+  - mbAvgOccupancy: average merge-buffer occupancy.
+  - mbFullStoreDeallocStalls: stores blocked from dealloc because MB is full.
+  - mbHeadDrainStallCycles: commit stall cycles waiting for MB drain (any cause).
+  - mbReleaseOlderThanLoadHits: loads that found older release MB entries present.
+  - mbReleaseAvgOutstanding: average number of release MB entries outstanding.
+  - mbReleaseMaxOutstanding: max number of release MB entries outstanding.
+  - mbReleaseWaitCycles: cycles release MB entries waited for outstanding bytes.
+  - mbResidencyCycles: total cycles entries reside in the merge buffer.
+  - mbVersionLoadStallBypassedStlf: loads that bypassed MB version stall due to STLF.
+  - mbVersionLoadStallCycles: commit stall cycles for loads waiting on older MB versions.
+  - mbVersionLoadStallSameStlfVersion: loads stalled by MB versioning with matching STLF version.
+  - readMembars: read barriers committed.
+  - releaseInsts: release instructions committed.
+  - writeMembars: write barriers committed.
