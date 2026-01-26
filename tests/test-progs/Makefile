@@ -1,7 +1,7 @@
 # Simple makefile to build the standalone test programs in this directory.
 
 CC ?= gcc
-CFLAGS ?= -std=c11 -O2
+CFLAGS ?= -std=c11 -O2 -march=armv8.3-a
 LDFLAGS ?= -pthread -static
 
 PROGS := acquire_release microbench thrasher store_release_bench \
