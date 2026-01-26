@@ -337,6 +337,7 @@ class LSQUnit
             return std::all_of(entryValid.begin(), entryValid.end(),
                                [](bool v) { return v; });
         }
+        bool hasReleaseOlderThan(uint64_t version) const;
 
         std::string
         name() const
@@ -522,6 +523,8 @@ class LSQUnit
      * buffer entries with lower versions to drain.
      */
     bool loadBlockedByMBVersion(uint64_t version);
+    /** Returns true if a load must wait for older release MB entries. */
+    bool loadBlockedByReleaseMB(uint64_t version);
 
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
@@ -822,7 +825,13 @@ class LSQUnit
         statistics::Scalar barrierSqStallOccupancy;
         /** Cycles release MB entries waited on outstanding bytes. */
         statistics::Scalar mbReleaseWaitCycles;
-        /** Instructions rescheduled/replayed due to barrier handling in LSQ. */
+        /** Times a load found older release MB entries. */
+        statistics::Scalar mbReleaseOlderThanLoadHits;
+        /** Average number of release MB entries outstanding. */
+        statistics::Scalar mbReleaseAvgOutstanding;
+        /** Max number of release MB entries outstanding. */
+        statistics::Scalar mbReleaseMaxOutstanding;
+        /** Insts rescheduled/replayed due to barrier handling in LSQ. */
         statistics::Scalar barrierReschedulesLSQ;
     } stats;
 
