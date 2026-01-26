@@ -177,9 +177,11 @@ def create(args):
     if args.versioning is not None:
         enable_versioning = args.versioning == "on"
         enable_store_release_opt = args.optimize_release == "on"
+        enable_acquire_pc_opt = args.optimize_acquire_pc == "on"
         for cpu in system.cpu_cluster.cpus:
             cpu.enableVersioning = enable_versioning
             cpu.optimizeStoreRelease = enable_store_release_opt
+            cpu.optimizeAcquirePC = enable_acquire_pc_opt
 
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
@@ -237,6 +239,12 @@ def main():
         choices=["on", "off"],
         default=None,
         help="Enable/disable store release optimization",
+    )
+    parser.add_argument(
+        "--optimize-acquire-pc",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable acquire-PC optimization",
     )
     parser.add_argument(
         "--mem-type",
