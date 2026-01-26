@@ -486,6 +486,8 @@ class Commit
         statistics::Scalar commitBarrierStallCycles;
         /** Cycles barrier commit stalled waiting for SQ/MB to drain. */
         statistics::Scalar commitBarrierDrainStallCycles;
+        /** Times a barrier is at ROB head but not executed yet. */
+        statistics::Scalar barrierHeadNotExecuted;
         /** Loads stalled by MB versioning with matching STLF version. */
         statistics::Scalar mbVersionLoadStallSameStlfVersion;
         /** Loads at ROB head that skip MB stall due to STLF forwarding. */
