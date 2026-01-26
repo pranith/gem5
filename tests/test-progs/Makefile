@@ -5,7 +5,7 @@ CFLAGS ?= -std=c11 -O2 -march=armv8.3-a
 LDFLAGS ?= -pthread -static
 
 PROGS := acquire_release microbench thrasher store_release_bench \
-	mb_barrier_store rcpc_bench
+	mb_barrier_store rcpc_bench acquire_pc_bench
 DIRS  := db_bench_suite
 
 .PHONY: all clean
@@ -28,6 +28,9 @@ mb_barrier_store: mb_barrier_store.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 rcpc_bench: rcpc_bench.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+acquire_pc_bench: acquire_pc_bench.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 clean:
