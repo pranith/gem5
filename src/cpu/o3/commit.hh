@@ -492,6 +492,8 @@ class Commit
         statistics::Scalar mbVersionLoadStallBypassedStlf;
         /** Cycles commit stalled by loads waiting on older MB versions. */
         statistics::Scalar mbVersionLoadStallCycles;
+        /** Cycles ROB head stalled waiting for MB drain (any cause). */
+        statistics::Scalar mbHeadDrainStallCycles;
         /** Stat for the total number of branch mispredicts that caused a
          * squash.
          */
