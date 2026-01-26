@@ -4,7 +4,8 @@ CC ?= gcc
 CFLAGS ?= -std=c11 -O2
 LDFLAGS ?= -pthread -static
 
-PROGS := acquire_release microbench thrasher store_release_bench mb_barrier_store
+PROGS := acquire_release microbench thrasher store_release_bench \
+	mb_barrier_store rcpc_bench
 DIRS  := db_bench_suite
 
 .PHONY: all clean
@@ -24,6 +25,9 @@ store_release_bench: store_release_bench.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 mb_barrier_store: mb_barrier_store.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+rcpc_bench: rcpc_bench.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 clean:
