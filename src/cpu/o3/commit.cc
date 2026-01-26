@@ -153,6 +153,7 @@ Commit::Commit(CPU *_cpu, const BaseO3CPUParams &params)
     }
     interrupt = NoFault;
     stlfLoadsBypassMBDrain = params.stlfLoadsBypassMBDrain;
+    optimizeAcquirePC = params.optimizeAcquirePC;
 }
 
 std::string Commit::name() const { return cpu->name() + ".commit"; }
@@ -209,6 +210,12 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Number of acquire instructions committed"),
       ADD_STAT(acquirePcInsts, statistics::units::Count::get(),
                "Number of acquire PC instructions committed"),
+      ADD_STAT(acquireReleaseWaitStallCycles, statistics::units::Count::get(),
+               "Cycles commit stalled on acquire waiting for older releases"),
+      ADD_STAT(acquireReleaseWaitStalls, statistics::units::Count::get(),
+               "Times acquire loads stalled waiting for older releases"),
+      ADD_STAT(acquirePcReleaseBypassCount, statistics::units::Count::get(),
+               "Times acquire-PC loads bypassed release-wait stall"),
       ADD_STAT(releaseInsts, statistics::units::Count::get(),
                "Number of release instructions committed"),
       ADD_STAT(committedInstType, statistics::units::Count::get(),
@@ -252,6 +259,12 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
         .flags(total);
 
     acquirePcInsts.init(cpu->numThreads).flags(total);
+
+    acquireReleaseWaitStallCycles.flags(total);
+
+    acquireReleaseWaitStalls.flags(total);
+
+    acquirePcReleaseBypassCount.flags(total);
 
     releaseInsts
         .init(cpu->numThreads)
@@ -1186,9 +1199,15 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        const bool need_store_drain = iewStage->hasStoresToWB(tid);
+        bool need_store_drain = iewStage->hasStoresToWB(tid);
+        const bool bypass_mb_drain = optimizeAcquirePC &&
+                                     head_inst->isLoad() &&
+                                     head_inst->staticInst->isAcquirePC();
+        if (bypass_mb_drain) {
+            need_store_drain = false;
+        }
 
-	if (need_store_drain) {
+        if (need_store_drain) {
             iewStage->forceMBDrain(tid,
                                    std::numeric_limits<uint64_t>::max());
         }
@@ -1251,10 +1270,32 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     // The load at the head of the ROB needs to wait for older stores to drain
     // if its version is greater than the lowest MB version
-    if (head_inst->isLoad() && inst_fault == NoFault &&
+    if (head_inst->staticInst->isAcquire() && head_inst->isLoad() &&
+        inst_fault == NoFault && cpu->versioningEnabled()) {
+        const bool bypass_release_wait =
+            head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
+        const bool release_blocked = iewStage->loadBlockedByReleaseMB(
+            tid, head_inst->getMemOrderVersion());
+        if (!bypass_release_wait && release_blocked) {
+            stats.acquireReleaseWaitStalls++;
+            stats.acquireReleaseWaitStallCycles++;
+            stats.mbHeadDrainStallCycles++;
+            DPRINTF(Commit,
+                    "Stalling commit of acquire load [tid:%i] [sn:%llu] "
+                    "ver:%llu until older release MB entries drain.\n",
+                    tid, head_inst->seqNum, head_inst->getMemOrderVersion());
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+            return false;
+        } else if (bypass_release_wait && release_blocked) {
+            stats.acquirePcReleaseBypassCount++;
+        }
+    }
+
+    if (!(head_inst->isReadBarrier() || head_inst->isWriteBarrier()) &&
+        head_inst->isLoad() && inst_fault == NoFault &&
         cpu->versioningEnabled() &&
-        iewStage->loadBlockedByMBVersion(
-            tid, head_inst->getMemOrderVersion())) {
+        iewStage->loadBlockedByMBVersion(tid,
+                                         head_inst->getMemOrderVersion())) {
         if (head_inst->stlfForwarded() &&
             head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
             stats.mbVersionLoadStallSameStlfVersion++;
