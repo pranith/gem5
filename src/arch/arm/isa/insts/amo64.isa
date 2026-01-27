@@ -94,9 +94,9 @@ let {{
             if self.flavor in ("release", "acquire_release", "acquire"):
                 self.instFlags.extend(["IsReadBarrier", "IsWriteBarrier"])
             if self.flavor in ("release", "acquire_release"):
-                self.instFlags.append("IsWriteBarrier")
+                self.instFlags.append("IsRelease")
             if self.flavor in ("acquire_release", "acquire"):
-                self.instFlags.append("IsReadBarrier")
+                self.instFlags.append("IsAcquire")
             if ret_op:
                 self.memFlags.append('Request::ATOMIC_RETURN_OP')
             else:
