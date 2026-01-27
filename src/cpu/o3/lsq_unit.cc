@@ -112,6 +112,20 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         return true;
     } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
                    pkt->senderState)) {
+        if (mb_state->entry && mb_state->entry->isAtomic) {
+            LSQRequest *req = mb_state->entry->atomicReq;
+            if (req && !req->isReleased()) {
+                DynInstPtr inst = req->instruction();
+                writeback(inst, pkt);
+                req->writebackDone();
+                completeStore(inst->sqIt);
+                if (storeQueue.empty()) {
+                    storeWBIt = storeQueue.end();
+                } else {
+                    storeWBIt = storeQueue.begin();
+                }
+            }
+        }
         mergeBuffer.handleDrainResp(mb_state->entry, this);
         delete mb_state;
         delete pkt;
@@ -1049,12 +1063,17 @@ LSQUnit::writebackStores()
 
         DynInstPtr inst = storeWBIt->instruction();
         LSQRequest *request = storeWBIt->request();
+        bool is_atomic_req = request->mainReq()->isAtomic();
 
-        bool can_use_mb =
+        bool can_use_mb = mergeBufferEnabled &&
+                          !request->mainReq()->isLocalAccess() &&
+                          !request->mainReq()->isLLSC() && !is_atomic_req;
+
+        bool can_use_mb_atomic =
             mergeBufferEnabled && !request->mainReq()->isLocalAccess() &&
-            !request->mainReq()->isLLSC() && !request->mainReq()->isAtomic();
+            !request->mainReq()->isLLSC() && is_atomic_req;
 
-        if (!can_use_mb && isStoreBlocked) {
+        if (!can_use_mb && !can_use_mb_atomic && isStoreBlocked) {
             DPRINTF(LSQUnit, "Unable to write back any more stores, cache"
                              " is blocked!\n");
             break;
@@ -1079,7 +1098,53 @@ LSQUnit::writebackStores()
 
         assert(!storeWBIt->committed());
 
-        if (can_use_mb) {
+        if (can_use_mb_atomic) {
+            MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
+            uint64_t store_version = inst->getMemOrderVersion();
+
+            std::vector<bool> release_wait_bits;
+            if (optimizeStoreRelease && request->mainReq()->isRelease()) {
+                release_wait_bits = mergeBuffer.validVector();
+            }
+
+            mb_entry =
+                mergeBuffer.addAtomic(now, request, storeWBIt, store_version);
+
+            DPRINTF(LSQUnit,
+                    "Merge for atomic store idx:%i PC:%s "
+                    "to Addr:%#x [sn:%lli] %s\n",
+                    storeWBIt.idx(), inst->pcState(),
+                    request->mainReq()->getPaddr(), inst->seqNum,
+                    mb_entry ? "accepted" : "blocked");
+
+            if (mb_entry) {
+                if (request->mainReq()->isRelease()) {
+                    mb_entry->isRelease = true;
+                    if (optimizeStoreRelease) {
+                        mb_entry->waitBits = release_wait_bits;
+                    }
+                    DPRINTF(LSQUnit,
+                            "Atomic store-release idx:%i tracked via MB entry "
+                            "ver:%llu\n",
+                            storeWBIt.idx(), store_version);
+                }
+
+                // Avoid re-sending while the atomic drains via the MB.
+                storeWBIt->canWB() = false;
+            } else {
+                if (mergeBuffer.isFull()) {
+                    stats.mbFullStoreDeallocStalls++;
+                }
+                if (!forcedMBRetire &&
+                    (inst->isWriteBarrier() || inst->isSerializeBefore() ||
+                     inst->isSerializeAfter() ||
+                     request->mainReq()->isRelease())) {
+                    mergeBuffer.forceRetireVersionsBefore(store_version);
+                    forcedMBRetire = true;
+                }
+                break;
+            }
+        } else if (can_use_mb) {
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
@@ -2185,6 +2250,13 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 
             const auto &e = entries[idx];
             if (e.blockAddr == lineAddr) {
+                if (e.isAtomic) {
+                    DPRINTF(LSQUnit,
+                            "Blocking merge into atomic MB entry Addr:%#x "
+                            "ver:%llu\n",
+                            lineAddr, e.version);
+                    return nullptr;
+                }
                 if (e.version == version) {
                     found_idx = idx;
                     break;
@@ -2315,6 +2387,61 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
     return last_entry;
 }
 
+LSQUnit::MergeBuffer::MergeBufferEntry *
+LSQUnit::MergeBuffer::addAtomic(Cycles now, LSQRequest *request,
+                                typename StoreQueue::iterator store_it,
+                                uint64_t version)
+{
+    if (request->isSplit()) {
+        return nullptr;
+    }
+
+    size_t free_idx = entryValid.size();
+    for (size_t idx = 0; idx < entryValid.size(); ++idx) {
+        if (!entryValid[idx]) {
+            free_idx = idx;
+            break;
+        }
+    }
+    if (free_idx == entryValid.size()) {
+        return nullptr;
+    }
+
+    const Addr paddr = request->mainReq()->getPaddr();
+    const Addr lineAddr = paddr & ~(lineSize - 1);
+
+    MergeBufferEntry newEntry(lineSize, version);
+    newEntry.blockAddr = lineAddr;
+    newEntry.baseReq =
+        std::make_shared<Request>(*(store_it->request()->mainReq()));
+    newEntry.state = EntryState::RETIRED;
+    newEntry.retireCycle = now;
+    newEntry.allocCycle = now;
+    newEntry.unretireCount = 0;
+    newEntry.isAtomic = true;
+    newEntry.atomicReq = store_it->request();
+
+    entries[free_idx] = std::move(newEntry);
+    entryValid[free_idx] = true;
+    lastAllocatedIdx = free_idx;
+    recordAllocVersion(version);
+
+    if (lsqPtr) {
+        lsqPtr->stats.mbAllocations++;
+        const size_t valid_entries =
+            std::count(entryValid.begin(), entryValid.end(), true);
+        lsqPtr->stats.mbAvgOccupancy =
+            (double)valid_entries / (double)numEntries;
+    }
+
+    DPRINTF(LSQUnit,
+            "Allocating a new atomic MB entry for Addr:%#x ver:%llu "
+            "now:%lu\n",
+            lineAddr, version, now);
+
+    return &entries[free_idx];
+}
+
 bool
 LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
                                           uint64_t version,
@@ -2343,7 +2470,13 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
             if (e.blockAddr != addr)
                 continue;
 
-	    if (e.version == version) {
+            if (e.isAtomic) {
+                addr_exists = true;
+                can_merge = false;
+                continue;
+            }
+
+            if (e.version == version) {
                 addr_exists = true;
 
                 if (e.state == EntryState::MERGING ||
@@ -2360,7 +2493,7 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
                             addr, e.version);
                     can_merge = false;
                 }
-	    }
+            }
         }
     };
 
@@ -2397,6 +2530,9 @@ LSQUnit::MergeBuffer::canForward(Addr paddr, size_t size) const
             continue;
         }
         const auto &entry = entries[idx];
+        if (entry.isAtomic) {
+            continue;
+        }
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
@@ -2430,6 +2566,9 @@ LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size) const
             continue;
         }
         const auto &entry = entries[idx];
+        if (entry.isAtomic) {
+            continue;
+        }
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
@@ -2486,6 +2625,9 @@ LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size,
             continue;
         }
         const auto &entry = entries[idx];
+        if (entry.isAtomic) {
+            continue;
+        }
         Addr blk_start = entry.blockAddr;
         Addr blk_end = entry.blockAddr + lineSize;
         if (end <= blk_start || paddr >= blk_end) {
@@ -2755,6 +2897,42 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     assert(entry.baseReq);
     RequestPtr base = entry.baseReq;
 
+    if (entry.isAtomic) {
+        RequestPtr atomic_req = std::make_shared<Request>(*base);
+        PacketPtr pkt = Packet::createWrite(atomic_req);
+        if (atomic_req->getSize() > 0) {
+            uint8_t *buf = new uint8_t[atomic_req->getSize()];
+            std::memset(buf, 0, atomic_req->getSize());
+            pkt->dataDynamic(buf);
+        }
+        pkt->senderState = new MergeBufferDrainSenderState(&entry, lsq_ptr);
+
+        if (!lsq_ptr->trySendPacket(false, pkt)) {
+            if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
+                    pkt->senderState)) {
+                delete mb_state;
+            }
+            delete pkt;
+            return false;
+        }
+
+        DPRINTF(LSQUnit,
+                "Sending an atomic MB drain request for addr %#x "
+                "version ver:%llu now:%lli\n",
+                base->getPaddr(), entry.version, lsqPtr->cpu->curCycle());
+
+        if (lsqPtr) {
+            lsqPtr->stats.mbDrains++;
+        }
+
+        if (lsq_ptr->needsTSO) {
+            lsq_ptr->storeInFlight = true;
+        }
+
+        entry.state = EntryState::DRAINING;
+        return true;
+    }
+
     Request::Flags flags = base->getFlags();
     RequestorID rid = base->requestorId();
     RequestPtr merged_req =
@@ -2868,6 +3046,8 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     entry.blockAddr = 0;
     entry.version = 0;
     entry.isRelease = false;
+    entry.isAtomic = false;
+    entry.atomicReq = nullptr;
     entry.waitBits.clear();
     if (lsqPtr) {
         const size_t valid_entries =
