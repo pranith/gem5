@@ -156,32 +156,33 @@ def create(args):
     for cpu, workload in zip(system.cpu_cluster.cpus, processes):
         cpu.workload = workload
 
-    # enable speculative post-barrier load/store issue
-    for cpu in system.cpu_cluster.cpus:
-        cpu.speculativeBarrierIssue = True
-
-    if args.merge_buffer is not None:
-        use_mb = args.merge_buffer == "on"
+    if cpu_class is not AtomicSimpleCPU:
+        # enable speculative post-barrier load/store issue
         for cpu in system.cpu_cluster.cpus:
-            cpu.useMergeBuffer = use_mb
+            cpu.speculativeBarrierIssue = False
 
-    if args.merge_buffer_entries is not None:
-        for cpu in system.cpu_cluster.cpus:
-            cpu.mergeBufferEntries = args.merge_buffer_entries
+        if args.merge_buffer is not None:
+            use_mb = args.merge_buffer == "on"
+            for cpu in system.cpu_cluster.cpus:
+                cpu.useMergeBuffer = use_mb
 
-    if args.merge_buffer_prefetch is not None:
-        use_pf = args.merge_buffer_prefetch == "on"
-        for cpu in system.cpu_cluster.cpus:
-            cpu.mergeBufferPrefetch = use_pf
+        if args.merge_buffer_entries is not None:
+            for cpu in system.cpu_cluster.cpus:
+                cpu.mergeBufferEntries = args.merge_buffer_entries
 
-    if args.versioning is not None:
-        enable_versioning = args.versioning == "on"
-        enable_store_release_opt = args.optimize_release == "on"
-        enable_acquire_pc_opt = args.optimize_acquire_pc == "on"
-        for cpu in system.cpu_cluster.cpus:
-            cpu.enableVersioning = enable_versioning
-            cpu.optimizeStoreRelease = enable_store_release_opt
-            cpu.optimizeAcquirePC = enable_acquire_pc_opt
+        if args.merge_buffer_prefetch is not None:
+            use_pf = args.merge_buffer_prefetch == "on"
+            for cpu in system.cpu_cluster.cpus:
+                cpu.mergeBufferPrefetch = use_pf
+
+        if args.versioning is not None:
+            enable_versioning = args.versioning == "on"
+            enable_store_release_opt = args.optimize_release == "on"
+            enable_acquire_pc_opt = args.optimize_acquire_pc == "on"
+            for cpu in system.cpu_cluster.cpus:
+                cpu.enableVersioning = enable_versioning
+                cpu.optimizeStoreRelease = enable_store_release_opt
+                cpu.optimizeAcquirePC = enable_acquire_pc_opt
 
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
