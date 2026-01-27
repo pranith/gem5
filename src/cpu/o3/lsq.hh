@@ -849,6 +849,9 @@ class LSQ
     bool loadBlockedByMBVersion(ThreadID tid, uint64_t load_version);
     /** Checks if a load must wait for older release merge buffer entries. */
     bool loadBlockedByReleaseMB(ThreadID tid, uint64_t load_version);
+    /** Checks if a load must wait for older release store queue entries. */
+    bool loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
+                                InstSeqNum load_seq);
 
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);
