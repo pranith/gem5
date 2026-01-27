@@ -1271,11 +1271,14 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     // The load at the head of the ROB needs to wait for older stores to drain
     // if its version is greater than the lowest MB version
     if (head_inst->staticInst->isAcquire() && head_inst->isLoad() &&
-        inst_fault == NoFault && cpu->versioningEnabled()) {
+        inst_fault == NoFault) {
         const bool bypass_release_wait =
             head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
-        const bool release_blocked = iewStage->loadBlockedByReleaseMB(
-            tid, head_inst->getMemOrderVersion());
+        const bool release_blocked =
+            iewStage->loadBlockedByReleaseMB(
+                tid, head_inst->getMemOrderVersion()) ||
+            iewStage->loadBlockedByReleaseSQ(
+                tid, head_inst->getMemOrderVersion(), head_inst->seqNum);
         if (!bypass_release_wait && release_blocked) {
             stats.acquireReleaseWaitStalls++;
             stats.acquireReleaseWaitStallCycles++;

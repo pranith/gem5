@@ -41,6 +41,9 @@
 
 #include "cpu/o3/lsq_unit.hh"
 
+#include <algorithm>
+#include <cstring>
+
 #include "arch/generic/debugfaults.hh"
 #include "base/str.hh"
 #include "cpu/checker/cpu.hh"
@@ -59,6 +62,20 @@ namespace gem5
 
 namespace o3
 {
+
+namespace
+{
+uint64_t
+extractValue(const uint8_t *data, size_t size)
+{
+    uint64_t value = 0;
+    if (data && size) {
+        const size_t copy_size = std::min<size_t>(size, sizeof(value));
+        std::memcpy(&value, data, copy_size);
+    }
+    return value;
+}
+} // anonymous namespace
 
 LSQUnit::WritebackEvent::WritebackEvent(const DynInstPtr &_inst,
         PacketPtr _pkt, LSQUnit *lsq_ptr)
@@ -256,6 +273,16 @@ LSQUnit::completeDataAccess(PacketPtr pkt)
             if (pkt->htmTransactionFailedInCache()) {
                 request->mainPacket()->setHtmTransactionFailedInCache(
                     pkt->getHtmTransactionFailedInCacheRC() );
+            }
+
+            if (inst->isLoad() && pkt->isRead()) {
+                const uint64_t value =
+                    extractValue(pkt->getConstPtr<uint8_t>(), pkt->getSize());
+                DPRINTF(LSQUnit,
+                        "Load value from cache [sn:%lli] PC %s addr %#x "
+                        "size:%u value:%#llx\n",
+                        inst->seqNum, inst->pcState(), pkt->getAddr(),
+                        pkt->getSize(), (unsigned long long)value);
             }
 
             writeback(inst, request->mainPacket());
@@ -640,6 +667,18 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // need to be squashed to prevent possible load reordering.
                 force_squash = true;
             }
+            if (mergeBufferEnabled &&
+                loadBlockedByReleaseMB(ld_inst->getMemOrderVersion())) {
+                // pending store release in merge buffer
+                // squash this load and re-execute
+                force_squash = true;
+            }
+            if (loadBlockedByReleaseSQ(ld_inst->getMemOrderVersion(),
+                                       ld_inst->seqNum)) {
+                // pending store release in store queue
+                // squash this load and re-execute
+                force_squash = true;
+            }
             if (ld_inst->possibleLoadViolation() || force_squash) {
                 DPRINTF(LSQUnit, "Conflicting load at addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
@@ -689,11 +728,22 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
             continue;
         }
 
+        bool ld_acquire_violation = false;
+        if ( // cpu->speculativeBarrierIssueEnabled() &&
+            (inst->staticInst->isRelease() || inst->staticInst->isAcquire()) &&
+            ld_inst->staticInst->isAcquire() && ld_inst->isExecuted()) {
+            ld_acquire_violation = true;
+            ld_inst->possibleLoadViolation(true);
+        }
+
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
             (ld_inst->effAddr + ld_inst->effSize - 1) >> depCheckShift;
 
-        if (inst_eff_addr2 >= ld_eff_addr1 && inst_eff_addr1 <= ld_eff_addr2) {
+        bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
+                            (inst_eff_addr1 <= ld_eff_addr2);
+
+        if (addr_overlap || ld_acquire_violation) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -1886,6 +1936,15 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 DPRINTF(LSQUnit, "Forwarding from store idx %i to load to "
                         "addr %#x\n", store_it._idx,
                         request->mainReq()->getVaddr());
+                const uint64_t fwd_value = extractValue(
+                    load_inst->memData, request->mainReq()->getSize());
+                DPRINTF(LSQUnit,
+                        "Load value from SQ [sn:%lli] PC %s addr %#x "
+                        "size:%u value:%#llx\n",
+                        load_inst->seqNum, load_inst->pcState(),
+                        request->mainReq()->getVaddr(),
+                        request->mainReq()->getSize(),
+                        (unsigned long long)fwd_value);
 
                 PacketPtr data_pkt = new Packet(request->mainReq(),
                         MemCmd::ReadReq);
@@ -2036,6 +2095,15 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                         "Forwarding from merge buffer to load to "
                         "addr %#x\n",
                         request->mainReq()->getVaddr());
+                const uint64_t mb_value = extractValue(
+                    load_inst->memData, request->mainReq()->getSize());
+                DPRINTF(LSQUnit,
+                        "Load value from MB [sn:%lli] PC %s addr %#x "
+                        "size:%u value:%#llx\n",
+                        load_inst->seqNum, load_inst->pcState(),
+                        request->mainReq()->getVaddr(),
+                        request->mainReq()->getSize(),
+                        (unsigned long long)mb_value);
 
                 PacketPtr data_pkt =
                     new Packet(request->mainReq(), MemCmd::ReadReq);
@@ -2731,6 +2799,7 @@ bool
 LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
 {
     size_t release_count = 0;
+    bool versioned = lsqPtr && lsqPtr->cpu->versioningEnabled();
     for (size_t idx = 0; idx < entries.size(); ++idx) {
         if (!entryValid[idx]) {
             continue;
@@ -2739,31 +2808,48 @@ LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
         if (entry.isRelease) {
             release_count++;
         }
-        if (entry.isRelease) {
+        if (entry.isRelease && (!versioned || entry.version < version)) {
             if (lsqPtr) {
                 lsqPtr->stats.mbReleaseOlderThanLoadHits++;
             }
             return true;
         }
     }
-    if (lsqPtr) {
-        lsqPtr->stats.mbReleaseAvgOutstanding =
-            (double)release_count / (double)entries.size();
-        if (release_count > lsqPtr->stats.mbReleaseMaxOutstanding.value()) {
-            lsqPtr->stats.mbReleaseMaxOutstanding = release_count;
-        }
-    }
+
     return false;
 }
 
 bool
 LSQUnit::loadBlockedByReleaseMB(uint64_t version)
 {
-    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+    if (!mergeBufferEnabled) {
         return false;
     }
 
     return mergeBuffer.hasReleaseOlderThan(version);
+}
+
+bool
+LSQUnit::loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const
+{
+    bool versioned = cpu->versioningEnabled();
+    for (const auto &entry : storeQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+        const auto &inst = entry.instruction();
+        if (!inst || !inst->staticInst || !inst->staticInst->isRelease()) {
+            continue;
+        }
+        if (inst->seqNum >= load_seq) {
+            continue;
+        }
+        if (!versioned || inst->getMemOrderVersion() < version) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool
