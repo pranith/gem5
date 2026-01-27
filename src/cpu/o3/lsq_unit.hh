@@ -240,6 +240,8 @@ class LSQUnit
             unsigned unretireCount;
             uint64_t version;
             bool isRelease = false;
+            bool isAtomic = false;
+            LSQRequest *atomicReq = nullptr;
             std::vector<bool> waitBits;
 
             MergeBufferEntry(size_t size, uint64_t ver)
@@ -295,6 +297,9 @@ class LSQUnit
                                    typename StoreQueue::iterator store_it,
                                    bool is_all_zero,
                                    uint64_t version);
+        MergeBufferEntry *addAtomic(Cycles now, LSQRequest *request,
+                                    typename StoreQueue::iterator store_it,
+                                    uint64_t version);
         void invalidateEntry(size_t idx);
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
