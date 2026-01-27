@@ -247,6 +247,13 @@ class IEW
         return ldstQueue.loadBlockedByReleaseMB(tid, load_version);
     }
 
+    bool
+    loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
+                           InstSeqNum load_seq)
+    {
+        return ldstQueue.loadBlockedByReleaseSQ(tid, load_version, load_seq);
+    }
+
     /** Mark the merge buffer entries for drain */
     void
     forceMBDrain(ThreadID tid, uint64_t version)

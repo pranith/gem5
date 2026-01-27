@@ -530,6 +530,8 @@ class LSQUnit
     bool loadBlockedByMBVersion(uint64_t version);
     /** Returns true if a load must wait for older release MB entries. */
     bool loadBlockedByReleaseMB(uint64_t version);
+    /** Returns true if a load must wait for older release SQ entries. */
+    bool loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const;
 
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
@@ -561,7 +563,9 @@ class LSQUnit
     /** Forces merge buffer drain for entries older than version. */
     void forceMBDrain(uint64_t version)
     {
-        mergeBuffer.forceRetireVersionsBefore(version);
+        const uint64_t force_before =
+            cpu->versioningEnabled() ? version : ~uint64_t(0);
+        mergeBuffer.forceRetireVersionsBefore(force_before);
     }
 
     /** Handles merge buffer drain completion. */
