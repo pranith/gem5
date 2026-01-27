@@ -749,6 +749,13 @@ LSQ::loadBlockedByReleaseMB(ThreadID tid, uint64_t load_version)
     return thread.at(tid).loadBlockedByReleaseMB(load_version);
 }
 
+bool
+LSQ::loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
+                            InstSeqNum load_seq)
+{
+    return thread.at(tid).loadBlockedByReleaseSQ(load_version, load_seq);
+}
+
 int
 LSQ::numStoresToWB(ThreadID tid)
 {
