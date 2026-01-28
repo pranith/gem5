@@ -261,6 +261,13 @@ class IEW
         return ldstQueue.forceMBDrain(tid, version);
     }
 
+    /** Mark loads that saw external snoops for re-execution. */
+    unsigned
+    markLoadsHitExternalSnoop(ThreadID tid, InstSeqNum barrier_sn)
+    {
+        return ldstQueue.markLoadsHitExternalSnoop(tid, barrier_sn);
+    }
+
     /** Check misprediction  */
     void checkMisprediction(const DynInstPtr &inst);
 
