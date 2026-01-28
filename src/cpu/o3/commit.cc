@@ -210,8 +210,6 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Number of acquire instructions committed"),
       ADD_STAT(acquirePcInsts, statistics::units::Count::get(),
                "Number of acquire PC instructions committed"),
-      ADD_STAT(acquireReleaseWaitStallCycles, statistics::units::Count::get(),
-               "Cycles commit stalled on acquire waiting for older releases"),
       ADD_STAT(acquireReleaseWaitStalls, statistics::units::Count::get(),
                "Times acquire loads stalled waiting for older releases"),
       ADD_STAT(acquirePcReleaseBypassCount, statistics::units::Count::get(),
@@ -259,8 +257,6 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
         .flags(total);
 
     acquirePcInsts.init(cpu->numThreads).flags(total);
-
-    acquireReleaseWaitStallCycles.flags(total);
 
     acquireReleaseWaitStalls.flags(total);
 
@@ -1281,7 +1277,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 tid, head_inst->getMemOrderVersion(), head_inst->seqNum);
         if (!bypass_release_wait && release_blocked) {
             stats.acquireReleaseWaitStalls++;
-            stats.acquireReleaseWaitStallCycles++;
             stats.mbHeadDrainStallCycles++;
             DPRINTF(Commit,
                     "Stalling commit of acquire load [tid:%i] [sn:%llu] "
