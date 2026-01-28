@@ -517,9 +517,6 @@ class Commit
         statistics::Vector acquireInsts;
         /** Total number of committed acquire PC instructions. */
         statistics::Vector acquirePcInsts;
-        /** Cycles commit stalled on acquire loads waiting for older releases.
-         */
-        statistics::Scalar acquireReleaseWaitStallCycles;
         /** Times acquire loads stalled waiting for older releases. */
         statistics::Scalar acquireReleaseWaitStalls;
         /** Times acquire-PC loads bypassed release-wait stall. */
