@@ -1391,6 +1391,18 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         return false;
     }
 
+    if (cpu->speculativeBarrierIssueEnabled() && !cpu->versioningEnabled() &&
+        (head_inst->isReadBarrier() || head_inst->isWriteBarrier())) {
+        const unsigned marked =
+            iewStage->markLoadsHitExternalSnoop(tid, head_inst->seqNum);
+        if (marked) {
+            DPRINTF(Commit,
+                    "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
+                    "due to external snoops at barrier commit\n",
+                    tid, head_inst->seqNum, marked);
+        }
+    }
+
     updateComInstStats(head_inst);
 
     DPRINTF(
