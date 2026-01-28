@@ -249,6 +249,9 @@ LSQUnit::completeDataAccess(PacketPtr pkt)
             std::make_shared<GenericHtmFailureFault>(
                 inst->getHtmTransactionUid(),
                 fail_reason);
+            DPRINTF(LSQUnit,
+                    "Setting fault %s for inst [sn:%lli] at addr %#x\n",
+                    inst->fault->name(), inst->seqNum, pkt->getAddr());
 
             DPRINTF(HtmCpu,
                 "load notification of HTM transaction failure "
@@ -649,7 +652,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
 
     bool force_squash = false;
 
-    while (++iter != loadQueue.end()) {
+    for (; iter != loadQueue.end(); ++iter) {
         ld_inst = iter->instruction();
         assert(ld_inst);
         request = iter->request();
@@ -667,11 +670,18 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // need to be squashed to prevent possible load reordering.
                 force_squash = true;
             }
-            if (mergeBufferEnabled &&
-                loadBlockedByReleaseMB(ld_inst->getMemOrderVersion())) {
-                // pending store release in merge buffer
-                // squash this load and re-execute
-                force_squash = true;
+            if (mergeBufferEnabled) {
+                if (loadBlockedByReleaseMB(ld_inst->getMemOrderVersion())) {
+                    // pending store release in merge buffer
+                    // squash this load and re-execute
+                    force_squash = true;
+                }
+                if (loadBlockedByOlderMBVersion(
+                        ld_inst->getMemOrderVersion())) {
+                    // pending older version store in merge buffer
+                    // squash this load and re-execute
+                    force_squash = true;
+                }
             }
             if (loadBlockedByReleaseSQ(ld_inst->getMemOrderVersion(),
                                        ld_inst->seqNum)) {
@@ -685,6 +695,8 @@ LSQUnit::checkSnoop(PacketPtr pkt)
 
                 // Mark the load for re-execution
                 ld_inst->fault = std::make_shared<ReExec>();
+                DPRINTF(LSQUnit, "Setting fault %s for load [sn:%lli]\n",
+                        ld_inst->fault->name(), ld_inst->seqNum);
                 request->setStateToFault();
                 ++stats.barrierReschedulesLSQ;
             } else {
@@ -710,8 +722,8 @@ LSQUnit::checkSnoop(PacketPtr pkt)
 }
 
 Fault
-LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
-        const DynInstPtr& inst)
+LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
+                         const DynInstPtr &inst)
 {
     Addr inst_eff_addr1 = inst->effAddr >> depCheckShift;
     Addr inst_eff_addr2 = (inst->effAddr + inst->effSize - 1) >> depCheckShift;
@@ -728,8 +740,15 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
             continue;
         }
 
+        auto inst_mem_version = inst->getMemOrderVersion();
+        auto ld_mem_version = ld_inst->getMemOrderVersion();
+        // if a younger load bypassed an older store with older version,
+        // mark this load as a potential violation on snoop
+        bool possible_hazard = inst_mem_version != ld_mem_version;
+
+        // Acquire/Release are sequentially consistent
         bool ld_acquire_violation = false;
-        if ( // cpu->speculativeBarrierIssueEnabled() &&
+        if ( // TODO: cpu->speculativeBarrierIssueEnabled() &&
             (inst->staticInst->isRelease() || inst->staticInst->isAcquire()) &&
             ld_inst->staticInst->isAcquire() && ld_inst->isExecuted()) {
             ld_acquire_violation = true;
@@ -743,7 +762,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
         bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
                             (inst_eff_addr1 <= ld_eff_addr2);
 
-        if (addr_overlap || ld_acquire_violation) {
+        if (addr_overlap || ld_acquire_violation || possible_hazard) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -758,6 +777,10 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
 
                         ++stats.memOrderViolation;
 
+                        DPRINTF(LSQUnit,
+                                "Setting fault M5PanicFault for inst "
+                                "[sn:%lli] due to load/load violation\n",
+                                inst->seqNum);
                         return std::make_shared<GenericISA::M5PanicFault>(
                             "Detected fault with inst [sn:%lli] and "
                             "[sn:%lli] at address %#x\n",
@@ -765,8 +788,6 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
                     }
                 }
 
-                auto inst_mem_version = inst->getMemOrderVersion();
-                auto ld_mem_version = ld_inst->getMemOrderVersion();
                 // If this load and a younger load have the same version and
                 // the younger load did not see an invalidation snoop yet, we
                 // don't need to mark the younger load as a possible violation
@@ -796,6 +817,10 @@ LSQUnit::checkViolations(typename LoadQueue::iterator& loadIt,
 
                 ++stats.memOrderViolation;
 
+                DPRINTF(LSQUnit,
+                        "Setting fault M5PanicFault for inst "
+                        "[sn:%lli] due to store violation\n",
+                        inst->seqNum);
                 return std::make_shared<GenericISA::M5PanicFault>(
                     "Detected fault with "
                     "inst [sn:%lli] and [sn:%lli] at address %#x\n",
@@ -828,6 +853,10 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
     }
 
     load_fault = inst->initiateAcc();
+    if (load_fault != NoFault) {
+        DPRINTF(LSQUnit, "Load [sn:%lli] got fault %s from initiateAcc\n",
+                inst->seqNum, load_fault->name());
+    }
 
     if (load_fault == NoFault && !inst->readMemAccPredicate()) {
         assert(inst->readPredicate());
@@ -905,6 +934,10 @@ LSQUnit::executeStore(const DynInstPtr &store_inst)
     typename LoadQueue::iterator loadIt = store_inst->lqIt;
 
     Fault store_fault = store_inst->initiateAcc();
+    if (store_fault != NoFault) {
+        DPRINTF(LSQUnit, "Store [sn:%lli] got fault %s from initiateAcc\n",
+                store_inst->seqNum, store_fault->name());
+    }
 
     if (store_inst->isTranslationDelayed() &&
         store_fault == NoFault)
@@ -1540,6 +1573,8 @@ LSQUnit::writeback(const DynInstPtr &inst, PacketPtr pkt)
             // Complete access to copy data to proper place.
             inst->completeAcc(pkt);
         } else {
+            DPRINTF(LSQUnit, "Writeback sees fault %s for inst [sn:%lli]\n",
+                    inst->fault->name(), inst->seqNum);
             // If the instruction has an outstanding fault, we cannot complete
             // the access as this discards the current fault.
 
@@ -2793,6 +2828,21 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version)
     }
 
     return false;
+}
+
+bool
+LSQUnit::loadBlockedByOlderMBVersion(uint64_t version)
+{
+    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+        return false;
+    }
+
+    auto youngest = mergeBuffer.youngestVersion();
+    if (!youngest) {
+        return false;
+    }
+
+    return version > *youngest;
 }
 
 bool
