@@ -159,7 +159,7 @@ def create(args):
     if cpu_class is not AtomicSimpleCPU:
         # enable speculative post-barrier load/store issue
         for cpu in system.cpu_cluster.cpus:
-            cpu.speculativeBarrierIssue = False
+            cpu.speculativeBarrierIssue = True
 
         if args.merge_buffer is not None:
             use_mb = args.merge_buffer == "on"

@@ -528,6 +528,11 @@ class LSQUnit
      * buffer entries with lower versions to drain.
      */
     bool loadBlockedByMBVersion(uint64_t version);
+    /**
+     * Returns true if there is an older (lower version) merge buffer entry
+     * that has not drained yet.
+     */
+    bool loadBlockedByOlderMBVersion(uint64_t version);
     /** Returns true if a load must wait for older release MB entries. */
     bool loadBlockedByReleaseMB(uint64_t version);
     /** Returns true if a load must wait for older release SQ entries. */
