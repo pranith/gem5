@@ -141,7 +141,7 @@ class DRAMSysDDR3_1600(DRAMSysMem):
     def __init__(self):
         super().__init__(
             configuration=(
-                DEFAULT_DRAMSYS_DIRECTORY / "configs/ddr3-gem5-se.json"
+                DEFAULT_DRAMSYS_DIRECTORY / "configs/ddr3-example.json"
             ).as_posix(),
             size="1GiB",
         )
