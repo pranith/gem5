@@ -676,8 +676,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                     // squash this load and re-execute
                     force_squash = true;
                 }
-                if (loadBlockedByOlderMBVersion(
-                        ld_inst->getMemOrderVersion())) {
+                if (loadBlockedByMBVersion(ld_inst->getMemOrderVersion())) {
                     // pending older version store in merge buffer
                     // squash this load and re-execute
                     force_squash = true;
@@ -2910,21 +2909,6 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version)
     }
 
     return false;
-}
-
-bool
-LSQUnit::loadBlockedByOlderMBVersion(uint64_t version)
-{
-    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
-        return false;
-    }
-
-    auto youngest = mergeBuffer.youngestVersion();
-    if (!youngest) {
-        return false;
-    }
-
-    return version > *youngest;
 }
 
 bool
