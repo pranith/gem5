@@ -721,6 +721,88 @@ LSQUnit::checkSnoop(PacketPtr pkt)
     return;
 }
 
+unsigned
+LSQUnit::markLoadsHitExternalSnoop(const InstSeqNum &barrier_sn)
+{
+    if (loadQueue.empty()) {
+        return 0;
+    }
+
+    unsigned marked = 0;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->seqNum <= barrier_sn || ld_inst->isSquashed()) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            continue;
+        }
+
+        if (ld_inst->fault == NoFault) {
+            DPRINTF(LSQUnit,
+                    "Marking load for re-exec due to external snoop "
+                    "[sn:%lli] barrier [sn:%lli]\n",
+                    ld_inst->seqNum, barrier_sn);
+            ld_inst->fault = std::make_shared<ReExec>();
+            if (entry.hasRequest()) {
+                entry.request()->setStateToFault();
+            }
+            ++stats.barrierReschedulesLSQ;
+            ++marked;
+        }
+    }
+
+    return marked;
+}
+
+unsigned
+LSQUnit::markLoadsHitExternalSnoopAll()
+{
+    if (loadQueue.empty()) {
+        return 0;
+    }
+
+    unsigned marked = 0;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->isSquashed()) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            continue;
+        }
+
+        if (ld_inst->fault == NoFault) {
+            DPRINTF(LSQUnit,
+                    "Marking load for re-exec due to external snoop "
+                    "[sn:%lli]\n",
+                    ld_inst->seqNum);
+            ld_inst->fault = std::make_shared<ReExec>();
+            if (entry.hasRequest()) {
+                entry.request()->setStateToFault();
+            }
+            ++stats.barrierReschedulesLSQ;
+            ++marked;
+        }
+    }
+
+    return marked;
+}
+
 Fault
 LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                          const DynInstPtr &inst)
@@ -3181,6 +3263,15 @@ LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
         DPRINTF(LSQUnit, "Deallocating the version entry ver:%llu\n",
                 it->first);
         versionCounts.erase(it);
+        if (lsqPtr && lsqPtr->cpu->versioningEnabled()) {
+            const unsigned marked = lsqPtr->markLoadsHitExternalSnoopAll();
+            if (marked) {
+                DPRINTF(LSQUnit,
+                        "Marked %u load(s) for re-exec due to external "
+                        "snoops at version drain\n",
+                        marked);
+            }
+        }
     }
 }
 

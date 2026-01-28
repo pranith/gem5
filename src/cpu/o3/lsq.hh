@@ -733,6 +733,8 @@ class LSQ
      * Commits stores up until the given sequence number for a specific thread.
      */
     void commitStores(InstSeqNum &youngest_inst, ThreadID tid);
+    /** Mark loads that saw external snoops for re-execution. */
+    unsigned markLoadsHitExternalSnoop(ThreadID tid, InstSeqNum barrier_sn);
 
     /**
      * Attempts to write back stores until all cache ports are used or the
