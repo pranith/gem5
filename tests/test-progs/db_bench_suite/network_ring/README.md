@@ -7,4 +7,4 @@ acquire semantics while advancing the head pointer.
 
 Examples
 --------
-./network_ring_bench 4 200000 4096
+./network_ring_bench 2 200000 4096

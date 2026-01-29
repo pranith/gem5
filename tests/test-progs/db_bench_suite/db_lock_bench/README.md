@@ -24,6 +24,6 @@ Parameters
 Examples
 --------
 - Baseline lock-heavy run:
-  tests/test-progs/db_lock_bench/lock_manager_bench 8 200000 12 65536 0
+  tests/test-progs/db_lock_bench/db_lock_bench 2 200000 12 65536 0
 - Add periodic epoch barriers:
-  tests/test-progs/db_lock_bench/lock_manager_bench 8 200000 12 65536 1000
+  tests/test-progs/db_lock_bench/db_lock_bench 2 200000 12 65536 1000

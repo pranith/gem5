@@ -7,4 +7,4 @@ contended hot pages and regular accesses on cold pages.
 
 Examples
 --------
-./buffer_pool_latch_bench 8 300000 65536 15
+./buffer_pool_latch_bench 2 300000 65536 15
