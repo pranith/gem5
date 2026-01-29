@@ -1266,52 +1266,55 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     // The load at the head of the ROB needs to wait for older stores to drain
     // if its version is greater than the lowest MB version
-    if (head_inst->staticInst->isAcquire() && head_inst->isLoad() &&
-        inst_fault == NoFault) {
-        const bool bypass_release_wait =
-            head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
-        const bool release_blocked =
-            iewStage->loadBlockedByReleaseMB(
-                tid, head_inst->getMemOrderVersion()) ||
-            iewStage->loadBlockedByReleaseSQ(
-                tid, head_inst->getMemOrderVersion(), head_inst->seqNum);
-        if (!bypass_release_wait && release_blocked) {
-            stats.acquireReleaseWaitStalls++;
-            stats.mbHeadDrainStallCycles++;
-            DPRINTF(Commit,
-                    "Stalling commit of acquire load [tid:%i] [sn:%llu] "
-                    "ver:%llu until older release MB entries drain.\n",
-                    tid, head_inst->seqNum, head_inst->getMemOrderVersion());
-            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
-            return false;
-        } else if (bypass_release_wait && release_blocked) {
-            stats.acquirePcReleaseBypassCount++;
+    if (head_inst->isLoad() && inst_fault == NoFault) {
+        if (head_inst->staticInst->isAcquire()) {
+            // AcquirePC loads don't need to wait for stores to drain
+            const bool bypass_release_wait =
+                head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
+            const bool load_blocked =
+                iewStage->loadBlockedByReleaseMB(
+                    tid, head_inst->getMemOrderVersion()) ||
+                iewStage->loadBlockedByReleaseSQ(
+                    tid, head_inst->getMemOrderVersion(), head_inst->seqNum);
+            if (!bypass_release_wait && load_blocked) {
+                stats.acquireReleaseWaitStalls++;
+                stats.mbHeadDrainStallCycles++;
+                DPRINTF(Commit,
+                        "Stalling commit of acquire load [tid:%i] [sn:%llu] "
+                        "ver:%llu until older release MB entries drain.\n",
+                        tid, head_inst->seqNum,
+                        head_inst->getMemOrderVersion());
+                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+                return false;
+            } else if (bypass_release_wait && load_blocked) {
+                stats.acquirePcReleaseBypassCount++;
+            }
         }
-    }
 
-    if (!(head_inst->isReadBarrier() || head_inst->isWriteBarrier()) &&
-        head_inst->isLoad() && inst_fault == NoFault &&
-        cpu->versioningEnabled() &&
-        iewStage->loadBlockedByMBVersion(tid,
-                                         head_inst->getMemOrderVersion())) {
-        if (head_inst->stlfForwarded() &&
-            head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
-            stats.mbVersionLoadStallSameStlfVersion++;
-        }
-        if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
-            stats.mbVersionLoadStallBypassedStlf++;
-	} else {
-            stats.mbVersionLoadStallCycles++;
-            stats.mbHeadDrainStallCycles++;
-            auto youngest_mb_version = iewStage->youngestMBVersion(tid);
-            DPRINTF(
-                Commit,
-                "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu until "
-                "merge buffer versions <= ver:%llu drain.\n",
-                tid, head_inst->seqNum, head_inst->getMemOrderVersion(),
-                youngest_mb_version ? *youngest_mb_version : 0);
-            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
-            return false;
+        if (!(head_inst->isReadBarrier() || head_inst->isWriteBarrier()) &&
+            cpu->versioningEnabled() &&
+            iewStage->loadBlockedByMBVersion(
+                tid, head_inst->getMemOrderVersion())) {
+            if (head_inst->stlfForwarded() &&
+                head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
+                stats.mbVersionLoadStallSameStlfVersion++;
+            }
+            if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
+                stats.mbVersionLoadStallBypassedStlf++;
+            } else {
+                stats.mbVersionLoadStallCycles++;
+                stats.mbHeadDrainStallCycles++;
+                auto youngest_mb_version = iewStage->youngestMBVersion(tid);
+                DPRINTF(Commit,
+                        "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu "
+                        "until "
+                        "merge buffer versions <= ver:%llu drain.\n",
+                        tid, head_inst->seqNum,
+                        head_inst->getMemOrderVersion(),
+                        youngest_mb_version ? *youngest_mb_version : 0);
+                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+                return false;
+            }
         }
     }
 

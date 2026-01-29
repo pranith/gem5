@@ -45,6 +45,8 @@
 
 #include <sys/resource.h>
 
+#include <string>
+
 #include "cpu/activity.hh"
 #include "cpu/checker/cpu.hh"
 #include "cpu/checker/thread_context.hh"
@@ -398,7 +400,8 @@ CPU::heartbeat() const
         return;
     }
 
-    float ipc = (totalInsts() - heartbeatPrevTotalInsts) * 1.0 / elapsed;
+    const Counter inst_delta = totalInsts() - heartbeatPrevTotalInsts;
+    float ipc = inst_delta * 1.0 / elapsed;
     float cipc = totalInsts() * 1.0 / tot_cycles;
 
     heartbeatPrevIntervalCycles = curCycle();
@@ -414,6 +417,39 @@ CPU::heartbeat() const
     DPRINTF(Heartbeat, "curCycles=%u Heartbeat O3CPU maxrss=%uMiB "
                        "totalInsts=%u IPC=%.2f CIPC=%.2f\n",
             curCycle(), mb, totalInsts(), ipc, cipc);
+
+    if (inst_delta == 0) {
+        const DynInstPtr *head_inst = nullptr;
+        ThreadID head_tid = 0;
+        for (ThreadID tid = 0; tid < numThreads; ++tid) {
+            if (rob.isEmpty(tid)) {
+                continue;
+            }
+
+            const DynInstPtr &inst = rob.readHeadInst(tid);
+            if (!head_inst || inst->seqNum < (*head_inst)->seqNum) {
+                head_inst = &inst;
+                head_tid = tid;
+            }
+        }
+
+        if (head_inst) {
+            const char *disasm = "unknown";
+            std::string disasm_str;
+            if ((*head_inst)->staticInst) {
+                disasm_str = (*head_inst)
+                                 ->staticInst->disassemble(
+                                     (*head_inst)->pcState().instAddr());
+                disasm = disasm_str.c_str();
+            }
+            panic("IPC 0 in heartbeat. Head ROB inst [tid:%i] [sn:%llu] "
+                  "PC %s %s\n",
+                  head_tid, (*head_inst)->seqNum, (*head_inst)->pcState(),
+                  disasm);
+        } else {
+            panic("IPC 0 in heartbeat and ROB is empty across threads.\n");
+        }
+    }
 }
 
 void

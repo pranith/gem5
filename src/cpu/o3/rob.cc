@@ -479,11 +479,11 @@ ROB::squash(InstSeqNum squash_num, ThreadID tid)
     }
 }
 
-const DynInstPtr&
-ROB::readHeadInst(ThreadID tid)
+const DynInstPtr &
+ROB::readHeadInst(ThreadID tid) const
 {
     if (threadEntries[tid] != 0) {
-        InstIt head_thread = instList[tid].begin();
+        InstConstIt head_thread = instList[tid].begin();
 
         assert((*head_thread)->isInROB());
 
