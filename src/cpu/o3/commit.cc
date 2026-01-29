@@ -1392,7 +1392,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     if (cpu->speculativeBarrierIssueEnabled() && !cpu->versioningEnabled() &&
         (head_inst->isReadBarrier() || head_inst->isWriteBarrier())) {
         const unsigned marked =
-            iewStage->markLoadsHitExternalSnoop(tid, head_inst->seqNum);
+            iewStage->markLoadsHitExternalSnoopAfter(tid, head_inst->seqNum);
         if (marked) {
             DPRINTF(Commit,
                     "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "

@@ -734,7 +734,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
 }
 
 unsigned
-LSQUnit::markLoadsHitExternalSnoop(const InstSeqNum &barrier_sn)
+LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
 {
     if (loadQueue.empty()) {
         return 0;
@@ -775,7 +775,7 @@ LSQUnit::markLoadsHitExternalSnoop(const InstSeqNum &barrier_sn)
 }
 
 unsigned
-LSQUnit::markLoadsHitExternalSnoopAll()
+LSQUnit::markLoadsHitExternalSnoop(uint64_t version)
 {
     if (loadQueue.empty()) {
         return 0;
@@ -794,6 +794,14 @@ LSQUnit::markLoadsHitExternalSnoopAll()
             continue;
         }
 
+        if (ld_inst->getMemOrderVersion() <= version) {
+            continue;
+        }
+
+        if (ld_inst->isExecuted()) {
+            ld_inst->possibleLoadViolation(true);
+        }
+
         if (!ld_inst->hitExternalSnoop()) {
             continue;
         }
@@ -801,8 +809,8 @@ LSQUnit::markLoadsHitExternalSnoopAll()
         if (ld_inst->fault == NoFault) {
             DPRINTF(LSQUnit,
                     "Marking load for re-exec due to external snoop "
-                    "[sn:%lli]\n",
-                    ld_inst->seqNum);
+                    "[sn:%lli] ver:%llu > %llu\n",
+                    ld_inst->seqNum, ld_inst->getMemOrderVersion(), version);
             ld_inst->fault = std::make_shared<ReExec>();
             if (entry.hasRequest()) {
                 entry.request()->setStateToFault();
@@ -3377,7 +3385,7 @@ LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
                 it->first);
         versionCounts.erase(it);
         if (lsqPtr && lsqPtr->cpu->versioningEnabled()) {
-            const unsigned marked = lsqPtr->markLoadsHitExternalSnoopAll();
+            const unsigned marked = lsqPtr->markLoadsHitExternalSnoop(version);
             if (marked) {
                 DPRINTF(LSQUnit,
                         "Marked %u load(s) for re-exec due to external "

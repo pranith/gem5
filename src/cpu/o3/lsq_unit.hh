@@ -420,10 +420,12 @@ class LSQUnit
      * of the intermediate invalidate.
      */
     void checkSnoop(PacketPtr pkt);
-    /** Mark loads that saw external snoops for re-execution. */
-    unsigned markLoadsHitExternalSnoop(const InstSeqNum &barrier_sn);
-    /** Mark loads that saw external snoops for re-execution (all ages). */
-    unsigned markLoadsHitExternalSnoopAll();
+    /** Mark loads that saw external snoops for re-execution after a barrier.
+     */
+    unsigned markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+    /** Mark loads that saw external snoops for re-execution after a version.
+     */
+    unsigned markLoadsHitExternalSnoop(uint64_t version);
 
     /** Executes a load instruction. */
     Fault executeLoad(const DynInstPtr &inst);

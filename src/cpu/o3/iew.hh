@@ -263,9 +263,15 @@ class IEW
 
     /** Mark loads that saw external snoops for re-execution. */
     unsigned
-    markLoadsHitExternalSnoop(ThreadID tid, InstSeqNum barrier_sn)
+    markLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
     {
-        return ldstQueue.markLoadsHitExternalSnoop(tid, barrier_sn);
+        return ldstQueue.markLoadsHitExternalSnoopAfter(tid, barrier_sn);
+    }
+
+    unsigned
+    markLoadsHitExternalSnoop(ThreadID tid, uint64_t version)
+    {
+        return ldstQueue.markLoadsHitExternalSnoop(tid, version);
     }
 
     /** Check misprediction  */
