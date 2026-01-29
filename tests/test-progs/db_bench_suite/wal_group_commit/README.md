@@ -7,4 +7,4 @@ around publishing log records and the barrier-like commit synchronization.
 
 Examples
 --------
-./wal_group_commit_bench 8 200000 8 1048576
+./wal_group_commit_bench 2 200000 8 1048576
