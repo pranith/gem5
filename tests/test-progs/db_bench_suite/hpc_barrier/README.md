@@ -7,4 +7,4 @@ around phase transitions.
 
 Examples
 --------
-./hpc_barrier_bench 8 50000 32 65536
+./hpc_barrier_bench 2 50000 32 65536
