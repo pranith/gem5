@@ -73,6 +73,7 @@ class ROB
   public:
     typedef std::pair<RegIndex, RegIndex> UnmapInfo;
     typedef typename std::list<DynInstPtr>::iterator InstIt;
+    typedef typename std::list<DynInstPtr>::const_iterator InstConstIt;
 
     /** Possible ROB statuses. */
     enum Status
@@ -126,7 +127,7 @@ class ROB
      *  the ROB.
      *  @return Pointer to the DynInst that is at the head of the ROB.
      */
-    const DynInstPtr &readHeadInst(ThreadID tid);
+    const DynInstPtr &readHeadInst(ThreadID tid) const;
 
     /** Returns a pointer to the instruction with the given sequence if it is
      *  in the ROB.
