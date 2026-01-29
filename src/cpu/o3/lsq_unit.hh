@@ -308,6 +308,7 @@ class LSQUnit
         std::optional<uint64_t> youngestVersion() const;
         std::optional<uint64_t> oldestVersion() const;
         std::vector<bool> validVector() const { return entryValid; }
+        void dumpWaitBits() const;
         size_t indexOf(const MergeBufferEntry *entry) const;
         void
         reset()

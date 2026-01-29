@@ -1258,6 +1258,17 @@ LSQUnit::writebackStores()
             if (optimizeStoreRelease && request->mainReq()->isRelease()) {
                 release_wait_bits = mergeBuffer.validVector();
             }
+            auto clear_self_wait_bit =
+                [this](MergeBuffer::MergeBufferEntry *entry) {
+                    if (!entry || entry->waitBits.empty()) {
+                        return;
+                    }
+                    const size_t idx = mergeBuffer.indexOf(entry);
+                    if (idx != std::numeric_limits<size_t>::max() &&
+                        idx < entry->waitBits.size()) {
+                        entry->waitBits[idx] = false;
+                    }
+                };
 
             mb_entry =
                 mergeBuffer.addAtomic(now, request, storeWBIt, store_version);
@@ -1274,6 +1285,7 @@ LSQUnit::writebackStores()
                     mb_entry->isRelease = true;
                     if (optimizeStoreRelease) {
                         mb_entry->waitBits = release_wait_bits;
+                        clear_self_wait_bit(mb_entry);
                     }
                     DPRINTF(LSQUnit,
                             "Atomic store-release idx:%i tracked via MB entry "
@@ -1311,6 +1323,17 @@ LSQUnit::writebackStores()
             if (is_release_store) {
                 release_wait_bits = mergeBuffer.validVector();
             }
+            auto clear_self_wait_bit =
+                [this](MergeBuffer::MergeBufferEntry *entry) {
+                    if (!entry || entry->waitBits.empty()) {
+                        return;
+                    }
+                    const size_t idx = mergeBuffer.indexOf(entry);
+                    if (idx != std::numeric_limits<size_t>::max() &&
+                        idx < entry->waitBits.size()) {
+                        entry->waitBits[idx] = false;
+                    }
+                };
 
             if (request->isSplit()) {
                 // For split stores, make sure both fragments can be merged
@@ -1366,11 +1389,13 @@ LSQUnit::writebackStores()
                     mb_entry->isRelease = true;
                     if (is_release_store) {
                         mb_entry->waitBits = release_wait_bits;
+                        clear_self_wait_bit(mb_entry);
                     }
                     if (mb_entry2) {
                         mb_entry2->isRelease = true;
                         if (is_release_store) {
                             mb_entry2->waitBits = release_wait_bits;
+                            clear_self_wait_bit(mb_entry2);
                         }
                     }
                     DPRINTF(LSQUnit,
@@ -3068,6 +3093,7 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     if (idx == entries.size()) {
         DPRINTF(LSQUnit, "No MB entry ready to drain now:%lli.\n",
                 lsq_ptr->cpu->curCycle());
+        // dumpWaitBits();
         return false;
     }
 
@@ -3172,6 +3198,49 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 
     entry.state = EntryState::DRAINING;
     return true;
+}
+
+void
+LSQUnit::MergeBuffer::dumpWaitBits() const
+{
+    auto stateStr = [](EntryState state) -> const char * {
+        switch (state) {
+            case EntryState::MERGING:
+                return "MERGING";
+            case EntryState::RETIRED:
+                return "RETIRED";
+            case EntryState::DRAINING:
+                return "DRAINING";
+            case EntryState::FORCE_RETIRED:
+                return "FORCE_RETIRED";
+        }
+        return "UNKNOWN";
+    };
+
+    std::string valid_bits;
+    valid_bits.reserve(entryValid.size());
+    for (bool v : entryValid) {
+        valid_bits.push_back(v ? '1' : '0');
+    }
+    DPRINTF(LSQUnit, "MB valid vector: %s\n",
+            valid_bits.empty() ? "-" : valid_bits.c_str());
+
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        const auto &e = entries[idx];
+        std::string bits;
+        bits.reserve(e.waitBits.size());
+        for (bool b : e.waitBits) {
+            bits.push_back(b ? '1' : '0');
+        }
+
+        DPRINTF(LSQUnit, "MB[%llu] ver:%llu state:%s release:%d waitBits:%s\n",
+                (unsigned long long)idx, (unsigned long long)e.version,
+                stateStr(e.state), e.isRelease,
+                bits.empty() ? "-" : bits.c_str());
+    }
 }
 
 void
