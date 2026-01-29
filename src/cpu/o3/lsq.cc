@@ -310,9 +310,15 @@ LSQ::commitStores(InstSeqNum &youngest_inst, ThreadID tid)
 }
 
 unsigned
-LSQ::markLoadsHitExternalSnoop(ThreadID tid, InstSeqNum barrier_sn)
+LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
 {
-    return thread.at(tid).markLoadsHitExternalSnoop(barrier_sn);
+    return thread.at(tid).markLoadsHitExternalSnoopAfter(barrier_sn);
+}
+
+unsigned
+LSQ::markLoadsHitExternalSnoop(ThreadID tid, uint64_t version)
+{
+    return thread.at(tid).markLoadsHitExternalSnoop(version);
 }
 
 void

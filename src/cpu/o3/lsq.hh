@@ -734,7 +734,9 @@ class LSQ
      */
     void commitStores(InstSeqNum &youngest_inst, ThreadID tid);
     /** Mark loads that saw external snoops for re-execution. */
-    unsigned markLoadsHitExternalSnoop(ThreadID tid, InstSeqNum barrier_sn);
+    unsigned markLoadsHitExternalSnoopAfter(ThreadID tid,
+                                            InstSeqNum barrier_sn);
+    unsigned markLoadsHitExternalSnoop(ThreadID tid, uint64_t version);
 
     /**
      * Attempts to write back stores until all cache ports are used or the
