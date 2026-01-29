@@ -7,4 +7,4 @@ barrier-like synchronization under contention.
 
 Examples
 --------
-./storage_allocator_bench 8 200000 65536 32 64
+./storage_allocator_bench 2 200000 65536 32 64
