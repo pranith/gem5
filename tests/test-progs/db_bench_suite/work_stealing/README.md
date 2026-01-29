@@ -7,4 +7,4 @@ adds contention and synchronization overhead.
 
 Examples
 --------
-./work_stealing_bench 8 200000 4096
+./work_stealing_bench 2 200000 4096

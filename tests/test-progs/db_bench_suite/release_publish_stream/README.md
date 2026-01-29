@@ -7,4 +7,4 @@ makes the data visible to a consumer.
 
 Examples
 --------
-./release_publish_stream_bench 4 200000 4096 256 1048576
+./release_publish_stream_bench 2 200000 4096 256 1048576
