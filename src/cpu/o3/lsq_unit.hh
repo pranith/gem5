@@ -593,6 +593,9 @@ class LSQUnit
     /** Handles completing the send of a store to memory. */
     void storePostSend();
 
+    void sendLockedRMWAbort(LSQRequest *request);
+    void retryLockedRMWAborts();
+
   public:
     /** Attempts to send a packet to the cache.
      * Check if there are ports available. Return true if
@@ -621,6 +624,9 @@ class LSQUnit
 
     /** Pointer to the dcache port.  Used only for sending. */
     RequestPort *dcachePort;
+
+    /** Pending LockedRMW abort packets awaiting a cache retry. */
+    std::deque<PacketPtr> pendingLockedRMWAbortPkts;
 
     /** Writeback event, specifically for when stores forward data to loads. */
     class WritebackEvent : public Event

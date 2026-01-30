@@ -177,6 +177,8 @@ MemCmd::commandInfo[] =
     /* LockedRMWWriteResp */
     { {IsWrite, IsLockedRMW, NeedsWritable, IsResponse},
             InvalidCmd, "LockedRMWWriteResp" },
+    /* LockedRMWReadAbortReq */
+    { {IsRequest}, InvalidCmd, "LockedRMWReadAbortReq" },
     /* SwapReq -- for Swap ldstub type operations */
     { {IsRead, IsWrite, NeedsWritable, IsRequest, HasData, NeedsResponse},
         SwapResp, "SwapReq" },
