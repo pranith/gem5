@@ -66,11 +66,17 @@ void setDebugStartSeqNum(uint64_t seq_num);
 /** Return the current decode-triggered seqNum (0 when disabled) */
 uint64_t getDebugStartSeqNum();
 
+/** Set the CPU id to match for decode-triggered tracing (-1 means any CPU). */
+void setDebugStartCpu(int cpu_id);
+
+/** Return the CPU id for decode-triggered tracing (-1 means any CPU). */
+int getDebugStartCpu();
+
 /**
  * Check whether a given seqNum should enable tracing. Returns true once,
  * clearing the trigger after it fires.
  */
-bool consumeDebugStartSeqNum(uint64_t seq_num);
+bool consumeDebugStartSeqNum(uint64_t seq_num, int cpu_id);
 
 } // namespace gem5
 

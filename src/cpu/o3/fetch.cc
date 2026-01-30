@@ -1028,7 +1028,7 @@ Fetch::buildInst(ThreadID tid, StaticInstPtr staticInst,
     DPRINTF(Fetch, "[tid:%i] Instruction is [sn:%lli]: PC:%s %s\n", tid, seq,
             this_pc, instruction->staticInst->disassemble(this_pc.instAddr()));
 
-    if (gem5::consumeDebugStartSeqNum(seq)) {
+    if (gem5::consumeDebugStartSeqNum(seq, cpu->cpuId())) {
         trace::enable();
         inform("%s: enabled debug tracing at decode for [tid:%i] [sn:%llu] "
                "PC %s",
