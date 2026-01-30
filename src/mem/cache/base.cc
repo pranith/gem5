@@ -457,6 +457,24 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     // the delay provided by the crossbar
     Tick forward_time = clockEdge(forwardLatency) + pkt->headerDelay;
 
+    if (pkt->cmd == MemCmd::LockedRMWReadAbortReq) {
+        Addr blk_addr = pkt->getBlockAddr(blkSize);
+        MSHR *mshr = mshrQueue.findMatch(blk_addr, pkt->isSecure());
+        if (mshr && mshr->hasLockedRMWReadTarget()) {
+            CacheBlk *blk = tags->findBlock({pkt->getAddr(), pkt->isSecure()});
+            if (blk && blk->isValid()) {
+                blk->setCoherenceBits(CacheBlk::ReadableBit);
+                blk->setCoherenceBits(CacheBlk::WritableBit);
+            }
+            PacketPtr resp_pkt =
+                new Packet(pkt->req, MemCmd::LockedRMWWriteResp);
+            resp_pkt->senderState = mshr;
+            recvTimingResp(resp_pkt);
+        }
+        delete pkt;
+        return;
+    }
+
     if (pkt->cmd == MemCmd::LockedRMWWriteReq) {
         // For LockedRMW accesses, we mark the block inaccessible after the
         // read (see below), to make sure no one gets in before the write.

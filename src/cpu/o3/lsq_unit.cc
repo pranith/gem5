@@ -1569,6 +1569,9 @@ LSQUnit::squash(const InstSeqNum &squashed_num)
             DPRINTF(HtmCpu, ">> htmStarts (%d) : htmStops-- (%d)\n",
               htmStarts, htmStops);
         }
+        if (loadQueue.back().hasRequest()) {
+            sendLockedRMWAbort(loadQueue.back().request());
+        }
         // Clear the smart pointer to make sure it is decremented.
         loadQueue.back().instruction()->setSquashed();
         loadQueue.back().clear();
@@ -1908,9 +1911,46 @@ LSQUnit::checkStaleTranslations() const
 void
 LSQUnit::recvRetry()
 {
+    retryLockedRMWAborts();
+    if (!pendingLockedRMWAbortPkts.empty()) {
+        return;
+    }
     if (isStoreBlocked) {
         DPRINTF(LSQUnit, "Receiving retry: blocked store\n");
         writebackBlockedStore();
+    }
+}
+
+void
+LSQUnit::sendLockedRMWAbort(LSQRequest *request)
+{
+    if (!request) {
+        return;
+    }
+
+    RequestPtr main_req = request->mainReq();
+    if (!main_req || !main_req->isLockedRMW()) {
+        return;
+    }
+
+    RequestPtr abort_req = std::make_shared<Request>(*main_req);
+    PacketPtr pkt = new Packet(abort_req, MemCmd::LockedRMWReadAbortReq);
+    pkt->senderState = nullptr;
+
+    if (!trySendPacket(false, pkt)) {
+        pendingLockedRMWAbortPkts.push_back(pkt);
+    }
+}
+
+void
+LSQUnit::retryLockedRMWAborts()
+{
+    while (!pendingLockedRMWAbortPkts.empty()) {
+        PacketPtr pkt = pendingLockedRMWAbortPkts.front();
+        if (!trySendPacket(false, pkt)) {
+            return;
+        }
+        pendingLockedRMWAbortPkts.pop_front();
     }
 }
 
