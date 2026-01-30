@@ -1507,6 +1507,14 @@ LSQUnit::writebackStores()
                         "will retry later\n",
                         inst->seqNum);
             }
+        } else {
+            // Cache not available (or TSO store in-flight); stop trying this
+            // entry this cycle to avoid spinning on the same store.
+            DPRINTF(LSQUnit,
+                    "Unable to write back store idx:%i PC:%s "
+                    "(cache not available or store in-flight)\n",
+                    storeWBIt.idx(), storeWBIt->instruction()->pcState());
+            break;
         }
         assert(storesToWB >= 0);
     }
@@ -3214,6 +3222,10 @@ LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
     if (it != entries.end()) {
         size_t idx = std::distance(entries.begin(), it);
         invalidateEntry(idx);
+    }
+
+    if (lsq_ptr->needsTSO) {
+        lsq_ptr->storeInFlight = false;
     }
 }
 
