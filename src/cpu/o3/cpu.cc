@@ -442,12 +442,15 @@ CPU::heartbeat() const
                                      (*head_inst)->pcState().instAddr());
                 disasm = disasm_str.c_str();
             }
-            panic("IPC 0 in heartbeat. Head ROB inst [tid:%i] [sn:%llu] "
+            panic("IPC 0 in heartbeat. CPU %i head ROB inst [tid:%i] [sn:%llu] "
                   "PC %s %s\n",
-                  head_tid, (*head_inst)->seqNum, (*head_inst)->pcState(),
+                  cpuId(), head_tid, (*head_inst)->seqNum,
+                  (*head_inst)->pcState(),
                   disasm);
         } else {
-            panic("IPC 0 in heartbeat and ROB is empty across threads.\n");
+            panic("IPC 0 in heartbeat on CPU %i and ROB is empty across "
+                  "threads.\n",
+                  cpuId());
         }
     }
 }
