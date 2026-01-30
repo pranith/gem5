@@ -34,6 +34,7 @@ from _m5.debug import (
     allFlags,
     getAllFlagsVersion,
     schedBreak,
+    setDebugStartCpu,
     setDebugStartSeqNum,
 )
 
