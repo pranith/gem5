@@ -109,7 +109,11 @@ schedStatEvent(bool dump, bool reset, Tick when, Tick repeat)
     // dumped so as to ensure that this event happens only after the next
     // sync amongst the event queues.  Asingle event queue simulation
     // should remain unaffected.
-    dumpEvent = new StatEvent(when + simQuantum, dump, reset, repeat);
+    Tick schedule_when = when + simQuantum;
+    if (schedule_when <= curTick()) {
+        schedule_when = curTick() + 1;
+    }
+    dumpEvent = new StatEvent(schedule_when, dump, reset, repeat);
 }
 
 void
