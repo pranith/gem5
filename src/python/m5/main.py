@@ -296,6 +296,12 @@ def parse_options():
         help="Enable debug output once the instruction with SEQNUM is decoded",
     )
     option(
+        "--debug-start-cpu",
+        metavar="CPU",
+        type="int",
+        help="CPU id to monitor for --debug-start-sn (default: 0)",
+    )
+    option(
         "--debug-end",
         metavar="TICK",
         type="int",
@@ -631,6 +637,10 @@ def main():
 
     if options.debug_start_sn:
         _check_tracing()
+        if options.debug_start_cpu is None:
+            debug.setDebugStartCpu(0)
+        else:
+            debug.setDebugStartCpu(int(options.debug_start_cpu))
         debug.setDebugStartSeqNum(int(options.debug_start_sn))
 
     if options.debug_end:
