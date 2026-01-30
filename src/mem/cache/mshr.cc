@@ -545,6 +545,20 @@ MSHR::extractServiceableTargets(PacketPtr pkt)
 {
     TargetList ready_targets;
     ready_targets.init(blkAddr, blkSize);
+    auto drainSnoopTargets = [&](TargetList::iterator start_it) {
+        // Allow deferred snoops to be serviced even if a LockedRMWReadReq
+        // is at the head. This avoids deadlock with post-downgrade handling.
+        auto it = start_it;
+        while (it != targets.end()) {
+            if (it->source == Target::FromSnoop) {
+                ready_targets.push_back(*it);
+                it = targets.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+
     // If the downstream MSHR got an invalidation request then we only
     // service the first of the FromCPU targets and any other
     // non-FromCPU target. This way the remaining FromCPU targets
@@ -568,6 +582,9 @@ MSHR::extractServiceableTargets(PacketPtr pkt)
                     it = targets.erase(it);
                 }
             }
+        } else {
+            // Still allow deferred snoops past the locked read.
+            drainSnoopTargets(std::next(it));
         }
         ready_targets.populateFlags();
     } else {
@@ -578,6 +595,7 @@ MSHR::extractServiceableTargets(PacketPtr pkt)
                 // Leave the Locked RMW Read until the corresponding Locked
                 // Write comes in. Also don't service any later targets as the
                 // line is now "locked".
+                drainSnoopTargets(std::next(it));
                 break;
             }
             it = targets.erase(it);
