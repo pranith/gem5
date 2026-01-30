@@ -115,6 +115,7 @@ eventqDump()
 namespace
 {
 std::atomic<uint64_t> debugStartSeqNum{0};
+std::atomic<int> debugStartCpu{-1};
 } // namespace
 
 void
@@ -129,12 +130,27 @@ getDebugStartSeqNum()
     return debugStartSeqNum.load(std::memory_order_relaxed);
 }
 
+void
+setDebugStartCpu(int cpu_id)
+{
+    debugStartCpu.store(cpu_id, std::memory_order_relaxed);
+}
+
+int
+getDebugStartCpu()
+{
+    return debugStartCpu.load(std::memory_order_relaxed);
+}
+
 bool
-consumeDebugStartSeqNum(uint64_t seq_num)
+consumeDebugStartSeqNum(uint64_t seq_num, int cpu_id)
 {
     const uint64_t target = debugStartSeqNum.load(std::memory_order_relaxed);
-    if (target && seq_num == target) {
+    const int target_cpu = debugStartCpu.load(std::memory_order_relaxed);
+    if (target && seq_num == target &&
+        (target_cpu < 0 || cpu_id == target_cpu)) {
         debugStartSeqNum.store(0, std::memory_order_relaxed);
+        debugStartCpu.store(-1, std::memory_order_relaxed);
         return true;
     }
     return false;
