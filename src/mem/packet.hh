@@ -117,6 +117,7 @@ class MemCmd
         LockedRMWReadResp,
         LockedRMWWriteReq,
         LockedRMWWriteResp,
+        LockedRMWReadAbortReq,
         SwapReq,
         SwapResp,
         // MessageReq and MessageResp are deprecated.
