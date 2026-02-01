@@ -120,6 +120,15 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
             LSQRequest *req = mb_state->entry->atomicReq;
             if (req && !req->isReleased()) {
                 DynInstPtr inst = req->instruction();
+                if (pkt && pkt->getSize() > 0) {
+                    const uint64_t val = extractValue(
+                        pkt->getConstPtr<uint8_t>(), pkt->getSize());
+                    DPRINTF(LSQUnit,
+                            "Atomic drain resp writeback [sn:%llu] PC %s "
+                            "val:%#x size:%u addr:%#x\n",
+                            inst->seqNum, inst->pcState(), val, pkt->getSize(),
+                            pkt->getAddr());
+                }
                 writeback(inst, pkt);
                 req->writebackDone();
                 completeStore(inst->sqIt);
@@ -740,6 +749,12 @@ LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
             continue;
         }
 
+        // Unlike in checkViolations, we can use isExecuted() here because
+        // the store actually completed updating the cache by this time.
+        if (!ld_inst->isExecuted()) {
+            continue;
+        }
+
         if (!ld_inst->hitExternalSnoop()) {
             continue;
         }
@@ -785,8 +800,10 @@ LSQUnit::markLoadsHitExternalSnoop(uint64_t version)
             continue;
         }
 
-        if (ld_inst->isExecuted()) {
-            ld_inst->possibleLoadViolation(true);
+        // Unlike in checkViolations, we can use isExecuted() here because
+        // the store actually completed updating the cache by this time.
+        if (!ld_inst->isExecuted()) {
+            continue;
         }
 
         if (!ld_inst->hitExternalSnoop()) {
@@ -881,17 +898,18 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                 // the younger load did not see an invalidation snoop yet, we
                 // don't need to mark the younger load as a possible violation
                 // in a weak memory model
-                if (!needsTSO && cpu->versioningEnabled() &&
-                    inst_mem_version >= ld_mem_version) {
-                    ++loadIt;
-                    continue;
-                }
+                // if (!needsTSO && cpu->versioningEnabled() &&
+                //    inst_mem_version >= ld_mem_version) {
+                //    ++loadIt;
+                //    continue;
+                //}
                 // Otherwise, mark the load has a possible load violation and
                 // if we see a snoop before it's commited, we need to squash
-                ld_inst->possibleLoadViolation(true);
-                DPRINTF(LSQUnit, "Found possible load violation at addr: %#x"
-                        " between instructions [sn:%lli] and [sn:%lli]\n",
-                        inst_eff_addr1, inst->seqNum, ld_inst->seqNum);
+                // ld_inst->possibleLoadViolation(true);
+                // DPRINTF(LSQUnit, "Found possible load violation at addr:
+                // %#x"
+                //        " between instructions [sn:%lli] and [sn:%lli]\n",
+                //        inst_eff_addr1, inst->seqNum, ld_inst->seqNum);
             } else {
                 // A load/store incorrectly passed this store.
                 // Check if we already have a violator, or if it's newer
@@ -916,9 +934,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                     inst->seqNum, ld_inst->seqNum, ld_eff_addr1);
             }
         }
-
         ++loadIt;
     }
+
     return NoFault;
 }
 
@@ -1216,11 +1234,7 @@ LSQUnit::writebackStores()
                           !request->mainReq()->isLocalAccess() &&
                           !request->mainReq()->isLLSC() && !is_atomic_req;
 
-        bool can_use_mb_atomic =
-            mergeBufferEnabled && !request->mainReq()->isLocalAccess() &&
-            !request->mainReq()->isLLSC() && is_atomic_req;
-
-        if (!can_use_mb && !can_use_mb_atomic && isStoreBlocked) {
+        if (!can_use_mb && isStoreBlocked) {
             DPRINTF(LSQUnit, "Unable to write back any more stores, cache"
                              " is blocked!\n");
             break;
@@ -1245,65 +1259,7 @@ LSQUnit::writebackStores()
 
         assert(!storeWBIt->committed());
 
-        if (can_use_mb_atomic) {
-            MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
-            uint64_t store_version = inst->getMemOrderVersion();
-
-            std::vector<bool> release_wait_bits;
-            if (optimizeStoreRelease && request->mainReq()->isRelease()) {
-                release_wait_bits = mergeBuffer.validVector();
-            }
-            auto clear_self_wait_bit =
-                [this](MergeBuffer::MergeBufferEntry *entry) {
-                    if (!entry || entry->waitBits.empty()) {
-                        return;
-                    }
-                    const size_t idx = mergeBuffer.indexOf(entry);
-                    if (idx != std::numeric_limits<size_t>::max() &&
-                        idx < entry->waitBits.size()) {
-                        entry->waitBits[idx] = false;
-                    }
-                };
-
-            mb_entry =
-                mergeBuffer.addAtomic(now, request, storeWBIt, store_version);
-
-            DPRINTF(LSQUnit,
-                    "Merge for atomic store idx:%i PC:%s "
-                    "to Addr:%#x [sn:%lli] %s\n",
-                    storeWBIt.idx(), inst->pcState(),
-                    request->mainReq()->getPaddr(), inst->seqNum,
-                    mb_entry ? "accepted" : "blocked");
-
-            if (mb_entry) {
-                if (request->mainReq()->isRelease()) {
-                    mb_entry->isRelease = true;
-                    if (optimizeStoreRelease) {
-                        mb_entry->waitBits = release_wait_bits;
-                        clear_self_wait_bit(mb_entry);
-                    }
-                    DPRINTF(LSQUnit,
-                            "Atomic store-release idx:%i tracked via MB entry "
-                            "ver:%llu\n",
-                            storeWBIt.idx(), store_version);
-                }
-
-                // Avoid re-sending while the atomic drains via the MB.
-                storeWBIt->canWB() = false;
-            } else {
-                if (mergeBuffer.isFull()) {
-                    stats.mbFullStoreDeallocStalls++;
-                }
-                if (!forcedMBRetire &&
-                    (inst->isWriteBarrier() || inst->isSerializeBefore() ||
-                     inst->isSerializeAfter() ||
-                     request->mainReq()->isRelease())) {
-                    mergeBuffer.forceRetireVersionsBefore(store_version);
-                    forcedMBRetire = true;
-                }
-                break;
-            }
-        } else if (can_use_mb) {
+        if (can_use_mb) {
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
