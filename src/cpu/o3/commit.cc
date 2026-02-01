@@ -1264,57 +1264,82 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // then there is no need to raise a new fault
     }
 
-    // The load at the head of the ROB needs to wait for older stores to drain
-    // if its version is greater than the lowest MB version
-    if (head_inst->isLoad() && inst_fault == NoFault) {
-        if (head_inst->staticInst->isAcquire()) {
-            // AcquirePC loads don't need to wait for stores to drain
-            const bool bypass_release_wait =
-                head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
-            const bool load_blocked =
-                iewStage->loadBlockedByReleaseMB(
-                    tid, head_inst->getMemOrderVersion()) ||
-                iewStage->loadBlockedByReleaseSQ(
-                    tid, head_inst->getMemOrderVersion(), head_inst->seqNum);
-            if (!bypass_release_wait && load_blocked) {
-                stats.acquireReleaseWaitStalls++;
-                stats.mbHeadDrainStallCycles++;
-                DPRINTF(Commit,
+    if (cpu->versioningEnabled()) {
+        // The load at the head of the ROB needs to wait for older stores to
+        // drain if its version is greater than the lowest MB version
+        if (head_inst->isLoad() && inst_fault == NoFault) {
+            if (head_inst->staticInst->isAcquire()) {
+                // AcquirePC loads don't need to wait for stores to drain
+                const bool bypass_release_wait =
+                    head_inst->staticInst->isAcquirePC() && optimizeAcquirePC;
+
+                // Check if there is an older release instruction in the SQ
+                // or the MB. RCpc serializes acquires/release barriers
+                const bool load_blocked =
+                    iewStage->loadBlockedByReleaseMB(
+                        tid, head_inst->getMemOrderVersion()) ||
+                    iewStage->loadBlockedByReleaseSQ(
+                        tid, head_inst->getMemOrderVersion(),
+                        head_inst->seqNum);
+
+                if (!bypass_release_wait && load_blocked) {
+                    stats.acquireReleaseWaitStalls++;
+                    stats.mbHeadDrainStallCycles++;
+                    DPRINTF(
+                        Commit,
                         "Stalling commit of acquire load [tid:%i] [sn:%llu] "
                         "ver:%llu until older release MB entries drain.\n",
                         tid, head_inst->seqNum,
                         head_inst->getMemOrderVersion());
-                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
-                return false;
-            } else if (bypass_release_wait && load_blocked) {
-                stats.acquirePcReleaseBypassCount++;
+                    iewStage->forceMBDrain(tid,
+                                           head_inst->getMemOrderVersion());
+                    return false;
+                } else if (bypass_release_wait && load_blocked) {
+                    stats.acquirePcReleaseBypassCount++;
+                }
             }
-        }
 
-        if (!(head_inst->isReadBarrier() || head_inst->isWriteBarrier()) &&
-            cpu->versioningEnabled() &&
-            iewStage->loadBlockedByMBVersion(
-                tid, head_inst->getMemOrderVersion())) {
-            if (head_inst->stlfForwarded() &&
-                head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
-                stats.mbVersionLoadStallSameStlfVersion++;
-            }
-            if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
-                stats.mbVersionLoadStallBypassedStlf++;
-            } else {
-                stats.mbVersionLoadStallCycles++;
-                stats.mbHeadDrainStallCycles++;
-                auto youngest_mb_version = iewStage->youngestMBVersion(tid);
-                DPRINTF(Commit,
+            // Make the load wait for stores with lower version to drain
+            if (iewStage->loadBlockedByMBVersion(
+                    tid, head_inst->getMemOrderVersion())) {
+                if (head_inst->stlfForwarded() &&
+                    head_inst->stlfVersion() ==
+                        head_inst->getMemOrderVersion()) {
+                    stats.mbVersionLoadStallSameStlfVersion++;
+                }
+                if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
+                    stats.mbVersionLoadStallBypassedStlf++;
+                } else {
+                    stats.mbVersionLoadStallCycles++;
+                    stats.mbHeadDrainStallCycles++;
+                    auto youngest_mb_version =
+                        iewStage->youngestMBVersion(tid);
+                    DPRINTF(
+                        Commit,
                         "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu "
                         "until "
                         "merge buffer versions <= ver:%llu drain.\n",
                         tid, head_inst->seqNum,
                         head_inst->getMemOrderVersion(),
                         youngest_mb_version ? *youngest_mb_version : 0);
-                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
-                return false;
+                    iewStage->forceMBDrain(tid,
+                                           head_inst->getMemOrderVersion());
+                    return false;
+                }
             }
+        }
+    } else if (cpu->speculativeBarrierIssueEnabled() &&
+               head_inst->isReadBarrier() &&
+               !head_inst->staticInst->isRelease()) {
+        // A read barrier that is not release will squash and re-execute
+        // younger loads that see a snoop.
+        const unsigned marked =
+            iewStage->markLoadsHitExternalSnoopAfter(tid, head_inst->seqNum);
+        if (marked) {
+            DPRINTF(Commit,
+                    "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
+                    "due to external snoops at barrier commit\n",
+                    tid, head_inst->seqNum, marked);
         }
     }
 
@@ -1358,8 +1383,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // prevents external agents from changing any specific state
         // that the trap need.
         cpu->trap(inst_fault, tid,
-                  head_inst->notAnInst() ? nullStaticInstPtr :
-                      head_inst->staticInst);
+                  head_inst->notAnInst() ? nullStaticInstPtr
+                                         : head_inst->staticInst);
 
         // Exit state update mode to avoid accidental updating.
         thread[tid]->noSquashFromTC = false;
@@ -1387,18 +1412,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         // Generate trap squash event.
         generateTrapEvent(tid, inst_fault);
         return false;
-    }
-
-    if (cpu->speculativeBarrierIssueEnabled() && !cpu->versioningEnabled() &&
-        (head_inst->isReadBarrier() || head_inst->isWriteBarrier())) {
-        const unsigned marked =
-            iewStage->markLoadsHitExternalSnoopAfter(tid, head_inst->seqNum);
-        if (marked) {
-            DPRINTF(Commit,
-                    "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
-                    "due to external snoops at barrier commit\n",
-                    tid, head_inst->seqNum, marked);
-        }
     }
 
     updateComInstStats(head_inst);
