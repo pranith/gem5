@@ -239,6 +239,7 @@ class LSQUnit
             Cycles allocCycle;
             unsigned unretireCount;
             uint64_t version;
+            InstSeqNum seqNum = 0;
             bool isRelease = false;
             bool isAtomic = false;
             LSQRequest *atomicReq = nullptr;
@@ -251,7 +252,8 @@ class LSQUnit
                   retireCycle(0),
                   allocCycle(0),
                   unretireCount(0),
-                  version(ver)
+                  version(ver),
+                  seqNum(0)
             {}
         };
 
@@ -423,6 +425,8 @@ class LSQUnit
     /** Mark loads that saw external snoops for re-execution after a barrier.
      */
     unsigned markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
     /** Mark loads that saw external snoops for re-execution after a version.
      */
     unsigned markLoadsHitExternalSnoop(uint64_t version);
@@ -768,6 +772,8 @@ class LSQUnit
 
     /** Enable optimized store-release handling. */
     bool optimizeStoreRelease = false;
+    /** Allow AcquirePC loads to bypass some release-handling checks. */
+    bool optimizeAcquirePC = false;
 
     /** Flag for memory model. */
     bool needsTSO;
