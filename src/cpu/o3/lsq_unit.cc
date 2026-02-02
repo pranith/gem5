@@ -835,15 +835,6 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         // mark this load as a potential violation on snoop
         bool possible_hazard = inst_mem_version != ld_mem_version;
 
-        // Acquire/Release are sequentially consistent
-        bool ld_acquire_violation = false;
-        if ( // TODO: cpu->speculativeBarrierIssueEnabled() &&
-            (inst->staticInst->isRelease() || inst->staticInst->isAcquire()) &&
-            ld_inst->staticInst->isAcquire() && ld_inst->isExecuted()) {
-            ld_acquire_violation = true;
-            ld_inst->possibleLoadViolation(true);
-        }
-
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
             (ld_inst->effAddr + ld_inst->effSize - 1) >> depCheckShift;
@@ -851,7 +842,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
                             (inst_eff_addr1 <= ld_eff_addr2);
 
-        if (addr_overlap || ld_acquire_violation || possible_hazard) {
+        if (addr_overlap || possible_hazard) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -877,10 +868,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                     }
                 }
 
-                // If this load and a younger load have the same version and
-                // the younger load did not see an invalidation snoop yet, we
-                // don't need to mark the younger load as a possible violation
-                // in a weak memory model
+                // If the younger load did not see an invalidation snoop yet,
+                // we don't need to mark the younger load as a possible
+                // violation in a weak memory model
                 if (!needsTSO) {
                     ++loadIt;
                     continue;
