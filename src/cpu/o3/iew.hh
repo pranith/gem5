@@ -269,6 +269,13 @@ class IEW
     }
 
     unsigned
+    markAcquireLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
+    {
+        return ldstQueue.markAcquireLoadsHitExternalSnoopAfter(tid,
+                                                               barrier_sn);
+    }
+
+    unsigned
     markLoadsHitExternalSnoop(ThreadID tid, uint64_t version)
     {
         return ldstQueue.markLoadsHitExternalSnoop(tid, version);
