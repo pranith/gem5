@@ -679,24 +679,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // need to be squashed to prevent possible load reordering.
                 force_squash = true;
             }
-            if (mergeBufferEnabled) {
-                if (loadBlockedByReleaseMB(ld_inst->getMemOrderVersion())) {
-                    // pending store release in merge buffer
-                    // squash this load and re-execute
-                    force_squash = true;
-                }
-                if (loadBlockedByMBVersion(ld_inst->getMemOrderVersion())) {
-                    // pending older version store in merge buffer
-                    // squash this load and re-execute
-                    force_squash = true;
-                }
-            }
-            if (loadBlockedByReleaseSQ(ld_inst->getMemOrderVersion(),
-                                       ld_inst->seqNum)) {
-                // pending store release in store queue
-                // squash this load and re-execute
-                force_squash = true;
-            }
+
             if (ld_inst->possibleLoadViolation() || force_squash) {
                 DPRINTF(LSQUnit, "Conflicting load at addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
