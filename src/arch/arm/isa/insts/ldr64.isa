@@ -96,7 +96,7 @@ let {{
                                        "IsAcquire"])
                 self.memFlags.append("Request::ACQUIRE")
 
-            if self.flavor in ("acquire_pc"):
+            if self.flavor == "acquire_pc":
                 self.instFlags.extend(["IsWriteBarrier",
                                        "IsReadBarrier",
                                        "IsAcquire",
@@ -513,10 +513,10 @@ let {{
     LoadEx64("ldxrh", "LDXRH64", size=2, flavor="exclusive").emit()
     LoadEx64("ldxrb", "LDXRB64", size=1, flavor="exclusive").emit()
 
-    LoadRaw64("ldapr", "LDAPRX64", size=8, flavor="acquire").emit()
-    LoadRaw64("ldapr", "LDAPRW64", size=4, flavor="acquire").emit()
-    LoadRaw64("ldaprh", "LDAPRH64", size=2, flavor="acquire").emit()
-    LoadRaw64("ldaprb", "LDAPRB64", size=1, flavor="acquire").emit()
+    LoadRaw64("ldapr", "LDAPRX64", size=8, flavor="acquire_pc").emit()
+    LoadRaw64("ldapr", "LDAPRW64", size=4, flavor="acquire_pc").emit()
+    LoadRaw64("ldaprh", "LDAPRH64", size=2, flavor="acquire_pc").emit()
+    LoadRaw64("ldaprb", "LDAPRB64", size=1, flavor="acquire_pc").emit()
 
     class LoadImmU64(LoadImm64):
         decConstBase = 'LoadStoreImmU64'
