@@ -125,9 +125,7 @@ MemDepUnit::MemDepUnitStats::MemDepUnitStats(statistics::Group *parent)
       ADD_STAT(barrierResidencyCycles, statistics::units::Count::get(),
                "Cycles barriers reside in mem dep unit (insert to complete)"),
       ADD_STAT(barrierReschedules, statistics::units::Count::get(),
-               "Number of instructions rescheduled/replayed due to barrier"),
-      ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
-               "Number of instructions rescheduled/replayed due to barrier (LSQ)")
+               "Number of instructions rescheduled/replayed due to barrier")
 {
 }
 

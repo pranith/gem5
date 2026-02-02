@@ -293,8 +293,6 @@ class MemDepUnit
         statistics::Scalar barrierResidencyCycles;
         /** Number of instructions rescheduled/replayed due to a barrier. */
         statistics::Scalar barrierReschedules;
-        /** Number of instructions rescheduled/replayed due to barrier (LSQ). */
-        statistics::Scalar barrierReschedulesLSQ;
     } stats;
 };
 
