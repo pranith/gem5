@@ -330,6 +330,12 @@ LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
 }
 
 unsigned
+LSQ::markAcquireLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
+{
+    return thread.at(tid).markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
+}
+
+unsigned
 LSQ::markLoadsHitExternalSnoop(ThreadID tid, uint64_t version)
 {
     return thread.at(tid).markLoadsHitExternalSnoop(version);

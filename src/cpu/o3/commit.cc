@@ -1192,8 +1192,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
         bool need_store_drain = iewStage->hasStoresToWB(tid);
 
-        // Acquire and AcquirePC can bypass store drain
-        const bool bypass_mb_drain = head_inst->staticInst->isAcquire();
+        // AcquirePC can bypass store drain. Acquire RC needs to wait for
+        // possible store release in the MB to drain.
+        const bool bypass_mb_drain = head_inst->staticInst->isAcquirePC();
 
         if (bypass_mb_drain) {
             need_store_drain = false;
@@ -1317,16 +1318,32 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
     }
 
     if (cpu->speculativeBarrierIssueEnabled() && inst_fault == NoFault &&
-        head_inst->isReadBarrier() && !head_inst->staticInst->isRelease()) {
-        // A read barrier that is not release will squash and re-execute
-        // younger loads that saw a snoop.
-        const unsigned marked =
-            iewStage->markLoadsHitExternalSnoopAfter(tid, head_inst->seqNum);
-        if (marked) {
-            DPRINTF(Commit,
-                    "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
-                    "due to external snoops at barrier commit\n",
-                    tid, head_inst->seqNum, marked);
+        head_inst->isReadBarrier()) {
+
+        if (!head_inst->staticInst->isRelease()) {
+            // A read barrier that is not release will squash and re-execute
+            // younger loads that saw a snoop.
+            const unsigned marked = iewStage->markLoadsHitExternalSnoopAfter(
+                tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
+                        "due to external snoops at barrier commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
+        } else {
+            // A RCsc release barrier will check only acquire snooped loads to
+            // squash
+            const unsigned marked =
+                iewStage->markAcquireLoadsHitExternalSnoopAfter(
+                    tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u acquire load(s) for "
+                        "re-exec due to external snoops at release barrier "
+                        "commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
         }
     }
 
