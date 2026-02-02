@@ -732,7 +732,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                         handleLockedSnoopHit(ld_inst.get());
                 }
 
-                // If a older load checks this and it's true
+                // If an older barrier or load checks this and it's true
                 // then we might have missed the snoop
                 // in which case we need to invalidate to be sure
                 ld_inst->hitExternalSnoop(true);
@@ -763,7 +763,7 @@ LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
         }
 
         // Unlike in checkViolations, we can use isExecuted() here because
-        // the store actually completed updating the cache by this time.
+        // the stores actually completed updating the cache by this time.
         if (!ld_inst->isExecuted()) {
             continue;
         }
@@ -3021,7 +3021,7 @@ LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
         if (entry.isRelease) {
             release_count++;
         }
-        if (entry.isRelease && (!versioned || entry.version < version)) {
+        if (entry.isRelease && (!versioned || entry.version <= version)) {
             if (lsqPtr) {
                 lsqPtr->stats.mbReleaseOlderThanLoadHits++;
             }
@@ -3057,7 +3057,7 @@ LSQUnit::loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const
         if (inst->seqNum >= load_seq) {
             continue;
         }
-        if (!versioned || inst->getMemOrderVersion() < version) {
+        if (!versioned || inst->getMemOrderVersion() <= version) {
             return true;
         }
     }
@@ -3352,6 +3352,8 @@ LSQUnit::MergeBuffer::recordAllocVersion(uint64_t version)
             DPRINTF(LSQUnit, "Inserting a new version entry ver:%llu\n",
                     version);
             versionCounts.emplace_back(version, 1);
+            // No new merges to old entries are possible
+            forceRetireVersionsBefore(version);
         }
         return;
     }
