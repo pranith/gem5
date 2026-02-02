@@ -162,6 +162,21 @@ LSQUnit::handleMBDrain(MergeBuffer::MergeBufferEntry *entry)
         return;
     }
 
+    if (entry->isRelease) {
+        DPRINTF(LSQUnit,
+                "MB drain handling release entry block addr:%#x ver:%llu "
+                "sn:%lli\n",
+                entry->blockAddr, entry->version, entry->seqNum);
+
+        const auto marked = markAcquireLoadsHitExternalSnoopAfter(0);
+        if (marked) {
+            DPRINTF(LSQUnit,
+                    "Marked %u acquire loads for replay after release "
+                    "MB drain [sn:%lli]\n",
+                    marked, entry->seqNum);
+        }
+    }
+
     if (isStalled() && entry->blockAddr == stallingMBAddr) {
         DPRINTF(LSQUnit,
                 "Unstalling, stalling load [sn:%lli] "
@@ -344,6 +359,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mergeBufferPfInFlight = 0;
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
     optimizeStoreRelease = params.optimizeStoreRelease;
+    optimizeAcquirePC = params.optimizeAcquirePC;
 
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
@@ -762,6 +778,73 @@ LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
         if (ld_inst->fault == NoFault) {
             DPRINTF(LSQUnit,
                     "Marking load for re-exec due to external snoop "
+                    "[sn:%lli] barrier [sn:%lli]\n",
+                    ld_inst->seqNum, barrier_sn);
+            ld_inst->fault = std::make_shared<ReExec>();
+            if (entry.hasRequest()) {
+                entry.request()->setStateToFault();
+            }
+            ++stats.barrierReschedulesLSQ;
+            ++marked;
+        }
+    }
+
+    return marked;
+}
+
+unsigned
+LSQUnit::markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
+{
+    if (loadQueue.empty()) {
+        return 0;
+    }
+
+    unsigned marked = 0;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->seqNum <= barrier_sn || ld_inst->isSquashed()) {
+            continue;
+        }
+
+        if (!ld_inst->staticInst->isAcquire()) {
+            continue;
+        }
+
+        if (ld_inst->staticInst->isAcquirePC() && optimizeAcquirePC) {
+            DPRINTF(LSQUnit,
+                    "Skipping acquire-PC load in scan [sn:%lli] PC:%s %s\n",
+                    ld_inst->seqNum, ld_inst->pcState(),
+                    ld_inst->staticInst->getName());
+            continue;
+        }
+
+        DPRINTF(LSQUnit,
+                "Acquire scan [sn:%lli] PC:%s exec:%d snoop:%d "
+                "fault:%s squashed:%d\n",
+                ld_inst->seqNum, ld_inst->pcState(), ld_inst->isExecuted(),
+                ld_inst->hitExternalSnoop(),
+                ld_inst->fault ? ld_inst->fault->name() : "NoFault",
+                ld_inst->isSquashed());
+
+        // Unlike in checkViolations, we can use isExecuted() here because
+        // the stores actually completed updating the cache by this time.
+        if (!ld_inst->isExecuted()) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            continue;
+        }
+
+        if (ld_inst->fault == NoFault) {
+            DPRINTF(LSQUnit,
+                    "Marking acquire load for re-exec due to external snoop "
                     "[sn:%lli] barrier [sn:%lli]\n",
                     ld_inst->seqNum, barrier_sn);
             ld_inst->fault = std::make_shared<ReExec>();
@@ -1325,6 +1408,12 @@ LSQUnit::writebackStores()
                     (mb_entry && merged_ok) ? "accepted" : "blocked");
 
             if (mb_entry && merged_ok) {
+                DPRINTF(LSQUnit,
+                        "MB merge store idx:%i sn:%lli addr:%#x "
+                        "req_release:%d entry_release_before:%d\n",
+                        storeWBIt.idx(), inst->seqNum,
+                        request->mainReq()->getPaddr(),
+                        request->mainReq()->isRelease(), mb_entry->isRelease);
                 if (is_release_req) {
                     mb_entry->isRelease = true;
                     if (is_release_store) {
@@ -1341,6 +1430,12 @@ LSQUnit::writebackStores()
                     DPRINTF(LSQUnit,
                             "Store-release idx:%i tracked via MB entry ver:%llu\n",
                             storeWBIt.idx(), store_version);
+                    DPRINTF(LSQUnit,
+                            "MB merge store idx:%i sn:%lli addr:%#x "
+                            "entry_release_after:%d\n",
+                            storeWBIt.idx(), inst->seqNum,
+                            request->mainReq()->getPaddr(),
+                            mb_entry->isRelease);
                 }
                 // Should never merge the same store twice.
                 assert(!storeWBIt->completed());
@@ -2498,6 +2593,10 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
 
             updateEntry(entry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
+            if (entry.seqNum == 0 ||
+                store_it->instruction()->seqNum < entry.seqNum) {
+                entry.seqNum = store_it->instruction()->seqNum;
+            }
 
             if (!entry.baseReq) {
                 entry.baseReq = std::make_shared<Request>(
@@ -2523,6 +2622,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             }
             MergeBufferEntry newEntry(lineSize, version);
             newEntry.blockAddr = lineAddr;
+            newEntry.seqNum = store_it->instruction()->seqNum;
             newEntry.retireCycle = now + retireWindow;
             newEntry.baseReq =
                 std::make_shared<Request>(*(store_it->request()->mainReq()));
@@ -2588,6 +2688,7 @@ LSQUnit::MergeBuffer::addAtomic(Cycles now, LSQRequest *request,
 
     MergeBufferEntry newEntry(lineSize, version);
     newEntry.blockAddr = lineAddr;
+    newEntry.seqNum = store_it->instruction()->seqNum;
     newEntry.baseReq =
         std::make_shared<Request>(*(store_it->request()->mainReq()));
     newEntry.state = EntryState::RETIRED;

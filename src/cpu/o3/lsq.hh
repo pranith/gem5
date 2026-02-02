@@ -736,6 +736,8 @@ class LSQ
     /** Mark loads that saw external snoops for re-execution. */
     unsigned markLoadsHitExternalSnoopAfter(ThreadID tid,
                                             InstSeqNum barrier_sn);
+    unsigned markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                                   InstSeqNum barrier_sn);
     unsigned markLoadsHitExternalSnoop(ThreadID tid, uint64_t version);
 
     /**
