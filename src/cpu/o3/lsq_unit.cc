@@ -881,18 +881,17 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                 // the younger load did not see an invalidation snoop yet, we
                 // don't need to mark the younger load as a possible violation
                 // in a weak memory model
-                // if (!needsTSO && cpu->versioningEnabled() &&
-                //    inst_mem_version >= ld_mem_version) {
-                //    ++loadIt;
-                //    continue;
-                //}
+                if (!needsTSO) {
+                    ++loadIt;
+                    continue;
+                }
                 // Otherwise, mark the load has a possible load violation and
                 // if we see a snoop before it's commited, we need to squash
-                // ld_inst->possibleLoadViolation(true);
-                // DPRINTF(LSQUnit, "Found possible load violation at addr:
-                // %#x"
-                //        " between instructions [sn:%lli] and [sn:%lli]\n",
-                //        inst_eff_addr1, inst->seqNum, ld_inst->seqNum);
+                ld_inst->possibleLoadViolation(true);
+                DPRINTF(LSQUnit,
+                        "Found possible load violation at addr:%#x"
+                        " between instructions [sn:%lli] and [sn:%lli]\n",
+                        inst_eff_addr1, inst->seqNum, ld_inst->seqNum);
             } else {
                 // A load/store incorrectly passed this store.
                 // Check if we already have a violator, or if it's newer
