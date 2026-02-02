@@ -737,17 +737,15 @@ Decode::decodeInsts(ThreadID tid)
             inst->setCanIssue();
         }
 
-        // This current instruction is valid, so add it into the decode
-        // queue.  The next instruction may not be valid, so check to
-        // see if branches were predicted correctly.
-
         if (cpu->versioningEnabled()) {
             // Increment the per-thread memory version on barriers so that
             // following memory ops can be tagged with a new epoch. Store
             // releases only skip the bump when optimizeStoreRelease is on.
             bool bump_version =
-                inst->isWriteBarrier() || inst->isReadBarrier() ||
-                (inst->staticInst->isRelease() && !optimizeStoreRelease);
+                (inst->isWriteBarrier() || inst->isReadBarrier()) &&
+                (!(inst->staticInst->isAcquire() ||
+                   (inst->staticInst->isRelease() && optimizeStoreRelease)));
+
             if (bump_version) {
                 ++memOrderVersion[tid];
 
@@ -762,6 +760,10 @@ Decode::decodeInsts(ThreadID tid)
 
             inst->setMemOrderVersion(memOrderVersion[tid]);
         }
+
+        // This current instruction is valid, so add it into the decode
+        // queue.  The next instruction may not be valid, so check to
+        // see if branches were predicted correctly.
 
         toRename->insts[toRenameIndex] = inst;
 
