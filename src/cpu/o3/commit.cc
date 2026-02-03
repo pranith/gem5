@@ -1202,6 +1202,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
         if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
             ++stats.barrierHeadNotExecuted;
+            iewStage->forceMBDrain(tid, head_inst->seqNum);
         }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
@@ -1213,7 +1214,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         "[tid:%i] [sn:%llu] "
                         "Waiting for all stores to writeback.\n",
                         tid, head_inst->seqNum);
-                iewStage->forceMBDrain(tid, head_inst->seqNum);
             }
             return false;
         }
@@ -1280,6 +1280,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         "ver:%llu until older release MB entries drain.\n",
                         tid, head_inst->seqNum,
                         head_inst->getMemOrderVersion());
+                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
                 return false;
             } else if (bypass_release_wait && load_blocked) {
                 stats.acquirePcReleaseBypassCount++;
@@ -1311,6 +1312,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         head_inst->getMemOrderVersion(),
                         youngest_mb_version ? *youngest_mb_version : 0);
 
+                    iewStage->forceMBDrain(tid, head_inst->seqNum);
                     return false;
                 }
             }
@@ -1332,7 +1334,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         tid, head_inst->seqNum, marked);
             }
         } else {
-            // A RCsc release barrier will check only acquire snooped loads to
+            // A RCsc release barrier will check only snooped acquire loads to
             // squash
             const unsigned marked =
                 iewStage->markAcquireLoadsHitExternalSnoopAfter(
