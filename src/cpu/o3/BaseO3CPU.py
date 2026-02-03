@@ -149,7 +149,7 @@ class BaseO3CPU(BaseCPU):
         32, "Number of entries in " "the merge buffer"
     )
     mergeBufferPrefetch = Param.Bool(
-        False,
+        True,
         "Prefetch cache line on merge buffer allocation to speed up drains",
     )
     storeDeallocateWidth = Param.Unsigned(
