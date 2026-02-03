@@ -112,7 +112,7 @@ cache_hierarchy = NoCache()
 memory = SingleChannelDDR3_1600(size="4GB")
 
 processor = SimpleProcessor(
-    cpu_type=CPUTypes.TIMING,
+    cpu_type=CPUTypes.ATOMIC,
     isa=ISA.ARM,
     # SimPoints only works with one core
     num_cores=1,
