@@ -196,6 +196,16 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Cycles ROB head stalled waiting for MB drain (any cause)"),
       ADD_STAT(branchMispredicts, statistics::units::Count::get(),
                "The number of times a branch was mispredicted"),
+      ADD_STAT(robSquashFromTrap, statistics::units::Count::get(),
+               "ROB squashes caused by traps"),
+      ADD_STAT(robSquashFromTC, statistics::units::Count::get(),
+               "ROB squashes caused by TC squash requests"),
+      ADD_STAT(robSquashFromSquashAfter, statistics::units::Count::get(),
+               "ROB squashes caused by squash-after requests"),
+      ADD_STAT(robSquashFromIEWMispredict, statistics::units::Count::get(),
+               "ROB squashes caused by branch mispredicts from IEW"),
+      ADD_STAT(robSquashFromIEWOrderViolation, statistics::units::Count::get(),
+               "ROB squashes caused by ordering/other violations from IEW"),
       ADD_STAT(numCommittedDist, statistics::units::Count::get(),
                "Number of insts commited each cycle"),
       ADD_STAT(amos, statistics::units::Count::get(),
@@ -594,6 +604,7 @@ void
 Commit::squashFromTrap(ThreadID tid)
 {
     squashAll(tid);
+    stats.robSquashFromTrap++;
 
     DPRINTF(Commit, "Squashing from trap, restarting at PC %s\n", *pc[tid]);
 
@@ -612,6 +623,7 @@ void
 Commit::squashFromTC(ThreadID tid)
 {
     squashAll(tid);
+    stats.robSquashFromTC++;
 
     DPRINTF(Commit, "Squashing from TC, restarting at PC %s\n", *pc[tid]);
 
@@ -631,6 +643,7 @@ Commit::squashFromSquashAfter(ThreadID tid)
             "restarting at PC %s\n", *pc[tid]);
 
     squashAll(tid);
+    stats.robSquashFromSquashAfter++;
     // Make sure to inform the fetch stage of which instruction caused
     // the squash. It'll try to re-fetch an instruction executing in
     // microcode unless this is set.
@@ -850,10 +863,12 @@ Commit::commit()
                     tid,
                     fromIEW->mispredictInst[tid]->pcState().instAddr(),
                     fromIEW->squashedSeqNum[tid]);
+                stats.robSquashFromIEWMispredict++;
             } else {
                 DPRINTF(Commit,
                     "[tid:%i] Squashing due to order violation [sn:%llu]\n",
                     tid, fromIEW->squashedSeqNum[tid]);
+                stats.robSquashFromIEWOrderViolation++;
             }
 
             DPRINTF(Commit, "[tid:%i] Redirecting to PC %#x\n",

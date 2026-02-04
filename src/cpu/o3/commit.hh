@@ -502,6 +502,17 @@ class Commit
          * squash.
          */
         statistics::Scalar branchMispredicts;
+        /** ROB squashes caused by traps. */
+        statistics::Scalar robSquashFromTrap;
+        /** ROB squashes caused by TC squash requests. */
+        statistics::Scalar robSquashFromTC;
+        /** ROB squashes caused by squash-after requests. */
+        statistics::Scalar robSquashFromSquashAfter;
+        /** ROB squashes caused by branch mispredicts signaled by IEW. */
+        statistics::Scalar robSquashFromIEWMispredict;
+        /** ROB squashes caused by ordering/other violations signaled by IEW.
+         */
+        statistics::Scalar robSquashFromIEWOrderViolation;
         /** Distribution of the number of committed instructions each cycle. */
         statistics::Distribution numCommittedDist;
 
