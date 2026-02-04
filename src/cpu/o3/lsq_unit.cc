@@ -421,6 +421,9 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "squashed"),
       ADD_STAT(memOrderViolation, statistics::units::Count::get(),
                "Number of memory ordering violations"),
+      ADD_STAT(possibleConsistencyViolation, statistics::units::Count::get(),
+               "Possible consistency violations due to version hazard without "
+               "address overlap"),
       ADD_STAT(squashedStores, statistics::units::Count::get(),
                "Number of stores squashed"),
       ADD_STAT(rescheduledLoads, statistics::units::Count::get(),
@@ -933,7 +936,8 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         auto ld_mem_version = ld_inst->getMemOrderVersion();
         // if a younger load bypassed an older store with older version,
         // mark this load as a potential violation on snoop
-        bool possible_hazard = inst_mem_version != ld_mem_version;
+        bool possible_hazard =
+            (inst_mem_version < ld_mem_version) && !ld_inst->stlfForwarded();
 
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
@@ -956,6 +960,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                         memDepViolator = ld_inst;
 
                         ++stats.memOrderViolation;
+                        if (possible_hazard && !addr_overlap) {
+                            ++stats.possibleConsistencyViolation;
+                        }
 
                         DPRINTF(LSQUnit,
                                 "Setting fault M5PanicFault for inst "
