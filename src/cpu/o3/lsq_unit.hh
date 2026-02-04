@@ -798,6 +798,9 @@ class LSQUnit
 
         /** Tota number of memory ordering violations. */
         statistics::Scalar memOrderViolation;
+        /** Possible consistency violations due to version hazard without addr
+         * overlap. */
+        statistics::Scalar possibleConsistencyViolation;
 
         /** Total number of squashed stores. */
         statistics::Scalar squashedStores;
