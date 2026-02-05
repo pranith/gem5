@@ -1306,12 +1306,14 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             // Make the load wait for stores with lower version to drain
             if (iewStage->loadBlockedByMBVersion(
                     tid, head_inst->getMemOrderVersion())) {
+                bool same_version_stlf = false;
                 if (head_inst->stlfForwarded() &&
                     head_inst->stlfVersion() ==
                         head_inst->getMemOrderVersion()) {
+                    same_version_stlf = true;
                     stats.mbVersionLoadStallSameStlfVersion++;
                 }
-                if (stlfLoadsBypassMBDrain && head_inst->stlfForwarded()) {
+                if (stlfLoadsBypassMBDrain && same_version_stlf) {
                     stats.mbVersionLoadStallBypassedStlf++;
                 } else {
                     stats.mbVersionLoadStallCycles++;
