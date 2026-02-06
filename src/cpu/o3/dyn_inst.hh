@@ -186,6 +186,7 @@ class DynInst : public ExecContext, public RefCounted
         TranslationStarted,
         TranslationCompleted,
         PossibleLoadViolation,
+        MemDepPredHit,
         HitExternalSnoop,
         EffAddrValid,
         RecordResult,
@@ -197,8 +198,8 @@ class DynInst : public ExecContext, public RefCounted
         MemOpDone,
         HtmFromTransaction,
         StlfForwarded,
-        NoCapableFU,           /// Processor does not have capability to
-                               /// execute the instruction
+        NoCapableFU, /// Processor does not have capability to
+                     /// execute the instruction
         MaxFlags
     };
 
@@ -439,6 +440,18 @@ class DynInst : public ExecContext, public RefCounted
     possibleLoadViolation(bool f)
     {
         instFlags[PossibleLoadViolation] = f;
+    }
+
+    /** True if the memory dependence predictor reported a producer hit. */
+    bool
+    memDepPredHit() const
+    {
+        return instFlags[MemDepPredHit];
+    }
+    void
+    memDepPredHit(bool f)
+    {
+        instFlags[MemDepPredHit] = f;
     }
 
     /** True if the address hit a external snoop while sitting in the LSQ.
