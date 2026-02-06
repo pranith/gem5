@@ -267,8 +267,16 @@ class LSQUnit
         std::vector<bool> entryValid;
         /** Index of the most recently allocated entry; invalid when >= size. */
         size_t lastAllocatedIdx;
+        struct VersionCountEntry
+        {
+            uint64_t version;
+            size_t count;
+            // True when the store that caused the next tail allocation
+            // was a store-release.
+            bool tailAllocByRelease = false;
+        };
         /** Tracks counts of outstanding entries per version in order. */
-        std::deque<std::pair<uint64_t, size_t>> versionCounts;
+        std::deque<VersionCountEntry> versionCounts;
 
         LSQUnit *lsqPtr;
         bool resetRetireOnMerge;
@@ -365,7 +373,7 @@ class LSQUnit
             }
         }
 
-        void recordAllocVersion(uint64_t version);
+        void recordAllocVersion(uint64_t version, bool is_release_store);
         void recordInvalidateVersion(uint64_t version);
     };
 
