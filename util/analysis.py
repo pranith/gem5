@@ -33,6 +33,33 @@ BENCHMARK_MAPPING = {
     "557.xz_r": "xz_r",
 }
 REV_BENCHMARK_MAPPING = {v: k for k, v in BENCHMARK_MAPPING.items()}
+BASE_BENCHMARK_MAPPING = {
+    key.split(".", 1)[1]: value for key, value in BENCHMARK_MAPPING.items()
+}
+BASE_BENCHMARKS = sorted(BASE_BENCHMARK_MAPPING.keys(), key=len, reverse=True)
+
+
+def parse_chkpt_name(name: str) -> Optional[Tuple[str, Optional[str], int]]:
+    """
+    Returns (base_bench, workload, idx) for chkpt directories.
+    """
+    m = re.match(r"^chkpt_(.+)_(\d+)$", name)
+    if not m:
+        return None
+    bench_part, idx_str = m.group(1), m.group(2)
+    base = None
+    workload = None
+    for candidate in BASE_BENCHMARKS:
+        if bench_part == candidate:
+            base = candidate
+            break
+        if bench_part.startswith(candidate + "_"):
+            base = candidate
+            workload = bench_part[len(candidate) + 1 :]
+            break
+    if base is None:
+        return None
+    return base, workload, int(idx_str)
 
 
 def load_weights(path: Path) -> Dict[int, float]:
@@ -73,16 +100,20 @@ def accumulate_stats(
     for sub in os.listdir(base_dir):
         if not sub.startswith("chkpt_"):
             continue
-        m = re.search(r"chkpt_([\w\.]+_r)_(\d+)", sub)
-        if not m:
+        parsed = parse_chkpt_name(sub)
+        if not parsed:
             continue
-        bench_name = m.group(1)
-        bench_num = REV_BENCHMARK_MAPPING.get(bench_name)
+        base_bench, workload, idx = parsed
+        display_base = BASE_BENCHMARK_MAPPING.get(base_bench)
+        if not display_base:
+            continue
+        bench_num = REV_BENCHMARK_MAPPING.get(display_base)
         if not bench_num:
             continue
-        idx = int(m.group(2))
+        bench_name = f"{display_base}_{workload}" if workload else display_base
 
-        weights_path = base_dir / f"{bench_num}.weights"
+        weights_suffix = f"_{workload}" if workload else ""
+        weights_path = base_dir / f"{bench_num}{weights_suffix}.weights"
         if not weights_path.exists():
             continue
         weights = load_weights(weights_path)
@@ -110,11 +141,48 @@ def collect_stat_names(base_dirs: List[Path]) -> List[str]:
         for sub in os.listdir(base_dir):
             if not sub.startswith("chkpt_"):
                 continue
+            if not parse_chkpt_name(sub):
+                continue
             stats_path = base_dir / sub / "stats.txt"
             if not stats_path.exists():
                 continue
             names.update(parse_stats(stats_path).keys())
     return sorted(names)
+
+
+def collect_benchmarks(base_dirs: List[Path]) -> List[str]:
+    benches: Dict[str, List[Optional[str]]] = {}
+    for base_dir in base_dirs:
+        for sub in os.listdir(base_dir):
+            if not sub.startswith("chkpt_"):
+                continue
+            parsed = parse_chkpt_name(sub)
+            if not parsed:
+                continue
+            base_bench, workload, _ = parsed
+            display_base = BASE_BENCHMARK_MAPPING.get(base_bench)
+            if not display_base:
+                continue
+            benches.setdefault(display_base, [])
+            if workload not in benches[display_base]:
+                benches[display_base].append(workload)
+
+    ordered: List[str] = []
+    base_order = [
+        BENCHMARK_MAPPING[k]
+        for k in sorted(
+            BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0])
+        )
+    ]
+    for display_base in base_order:
+        workloads = benches.get(display_base)
+        if not workloads:
+            continue
+        if None in workloads:
+            ordered.append(display_base)
+        for workload in sorted(w for w in workloads if w):
+            ordered.append(f"{display_base}_{workload}")
+    return ordered
 
 
 def percent_diff(
@@ -191,12 +259,7 @@ def main() -> None:
 
     # Print summary table.
     # Keep benchmark order by spec number for readability.
-    benches = [
-        BENCHMARK_MAPPING[k]
-        for k in sorted(
-            BENCHMARK_MAPPING.keys(), key=lambda x: int(x.split(".")[0])
-        )
-    ]
+    benches = collect_benchmarks(base_dirs)
     dir_headers = args.dirs
     pct_headers = (
         [f"% {d}" for d in args.dirs[1:]] if len(args.dirs) > 1 else []
