@@ -562,6 +562,9 @@ class LSQUnit
         return !mbEmpty() || (storesToWB > 0);
     }
 
+    /** Advance merge buffer retirement independent of store writeback. */
+    void updateMergeBufferRetire();
+
     /** Returns the number of stores to writeback. */
     int numStoresToWB() { return storesToWB; }
 

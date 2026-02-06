@@ -1300,7 +1300,8 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
                 mshr->print());
 
         if (mshr->getNumTargets() > numTarget)
-            warn("allocating bonus target for snoop"); //handle later
+            DPRINTF(Cache, "Snoop target exceeds numTarget (num=%d, max=%d)\n",
+                    mshr->getNumTargets(), numTarget);
         return;
     }
 
