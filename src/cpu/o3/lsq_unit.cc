@@ -2680,7 +2680,9 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             entryValid[free_idx] = true;
             last_entry = &entries[free_idx];
             lastAllocatedIdx = free_idx;
-            recordAllocVersion(version);
+            bool is_release_store =
+                store_it->instruction()->staticInst->isRelease();
+            recordAllocVersion(version, is_release_store);
             last_entry->allocCycle = now;
 
             if (lsqPtr) {
@@ -2748,7 +2750,7 @@ LSQUnit::MergeBuffer::addAtomic(Cycles now, LSQRequest *request,
     entries[free_idx] = std::move(newEntry);
     entryValid[free_idx] = true;
     lastAllocatedIdx = free_idx;
-    recordAllocVersion(version);
+    recordAllocVersion(version, false);
 
     if (lsqPtr) {
         lsqPtr->stats.mbAllocations++;
@@ -3083,7 +3085,7 @@ LSQUnit::MergeBuffer::youngestVersion() const
     if (versionCounts.empty()) {
         return std::nullopt;
     }
-    return versionCounts.front().first;
+    return versionCounts.front().version;
 }
 
 std::optional<uint64_t>
@@ -3092,7 +3094,7 @@ LSQUnit::MergeBuffer::oldestVersion() const
     if (versionCounts.empty()) {
         return std::nullopt;
     }
-    return versionCounts.back().first;
+    return versionCounts.back().version;
 }
 
 std::optional<uint64_t>
@@ -3229,11 +3231,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     // Ensure we only drain the lowest-version entries (head of version queue),
     // except for store-release entries which may drain once their dependencies
     // are cleared.
-    if (!versionCounts.empty() && entry.version != versionCounts.front().first) {
+    if (!versionCounts.empty() &&
+        entry.version != versionCounts.front().version) {
         DPRINTF(LSQUnit,
                 "Deferring drain for block %#x with version ver:%llu "
                 "(head version ver:%llu)\n",
-                entry.blockAddr, entry.version, versionCounts.front().first);
+                entry.blockAddr, entry.version, versionCounts.front().version);
         return false;
     }
 
@@ -3448,68 +3451,66 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
 }
 
 void
-LSQUnit::MergeBuffer::recordAllocVersion(uint64_t version)
+LSQUnit::MergeBuffer::recordAllocVersion(uint64_t version,
+                                         bool is_release_store)
 {
     if (versionCounts.empty()) {
         DPRINTF(LSQUnit, "Inserting a new version entry ver:%llu total:%llu\n",
                 version, versionCounts.size());
-        versionCounts.emplace_back(version, 1);
+        versionCounts.push_back({version, 1, false});
         return;
     }
 
-    if (version >= versionCounts.back().first) {
-        if (version == versionCounts.back().first) {
+    if (version >= versionCounts.back().version) {
+        if (version == versionCounts.back().version) {
             DPRINTF(LSQUnit,
                     "Incrementing the version entry ver:%llu count %llu\n",
-                    version, versionCounts.back().second);
-            versionCounts.back().second++;
+                    version, versionCounts.back().count);
+            versionCounts.back().count++;
         } else {
+            versionCounts.back().tailAllocByRelease = is_release_store;
             DPRINTF(LSQUnit, "Inserting a new version entry ver:%llu\n",
                     version);
-            versionCounts.emplace_back(version, 1);
+            versionCounts.push_back({version, 1, false});
             // No new merges to old entries are possible
             forceRetireVersionsBefore(version);
         }
         return;
     }
 
-    auto it = std::find_if(
-        versionCounts.begin(), versionCounts.end(),
-        [version](const std::pair<uint64_t, size_t> &p) {
-            return p.first >= version;
-        });
+    auto it = std::find_if(versionCounts.begin(), versionCounts.end(),
+                           [version](const VersionCountEntry &entry) {
+                               return entry.version >= version;
+                           });
 
-    if (it != versionCounts.end() && it->first == version) {
-        it->second++;
+    if (it != versionCounts.end() && it->version == version) {
+        it->count++;
     } else {
-        versionCounts.insert(it, std::make_pair(version, 1));
+        versionCounts.insert(it, VersionCountEntry{version, 1, false});
     }
 }
 
 void
 LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
 {
-    auto it = std::find_if(
-        versionCounts.begin(), versionCounts.end(),
-        [version](const std::pair<uint64_t, size_t> &p) {
-            return p.first == version;
-        });
+    auto it = std::find_if(versionCounts.begin(), versionCounts.end(),
+                           [version](const VersionCountEntry &entry) {
+                               return entry.version == version;
+                           });
 
     if (it == versionCounts.end()) {
         return;
     }
 
-    assert(it->second > 0);
+    assert(it->count > 0);
 
     DPRINTF(LSQUnit, "Decrementing the version entry ver:%llu count %llu\n",
-            version, it->second);
+            version, it->count);
 
-    it->second--;
-    if (it->second == 0) {
-        DPRINTF(LSQUnit, "Deallocating the version entry ver:%llu\n",
-                it->first);
-        versionCounts.erase(it);
-        if (lsqPtr && lsqPtr->cpu->versioningEnabled()) {
+    it->count--;
+    if (it->count == 0) {
+        if (lsqPtr && lsqPtr->cpu->versioningEnabled() &&
+            !it->tailAllocByRelease) {
             const unsigned marked = lsqPtr->markLoadsHitExternalSnoop(version);
             if (marked) {
                 DPRINTF(LSQUnit,
@@ -3518,6 +3519,9 @@ LSQUnit::MergeBuffer::recordInvalidateVersion(uint64_t version)
                         marked);
             }
         }
+        DPRINTF(LSQUnit, "Deallocating the version entry ver:%llu\n",
+                it->version);
+        versionCounts.erase(it);
     }
 }
 
