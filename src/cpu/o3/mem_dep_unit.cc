@@ -195,8 +195,10 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
             barrier_type = "write";
 
         if (barrier_type) {
-            DPRINTF(MemDepUnit, "Inserted a %s barrier %s SN:%lli\n",
-                    barrier_type, barr_inst->pcState(), barr_sn);
+            DPRINTF(MemDepUnit, "Inserted a %s barrier %s [sn:%lli] %s\n",
+                    barrier_type, barr_inst->pcState(), barr_sn,
+                    barr_inst->staticInst->disassemble(
+                        barr_inst->pcState().instAddr()));
         }
 
         if (loadBarrierSNs.size() || storeBarrierSNs.size()) {
@@ -254,8 +256,12 @@ MemDepUnit::insert(const DynInstPtr &inst)
         }
     }
     InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
-    if (dep != 0)
+    if (dep != 0) {
+        if (inst->isLoad()) {
+            inst->memDepPredHit(true);
+        }
         producing_stores.push_back(dep);
+    }
 
     std::vector<MemDepEntryPtr> store_entries;
 

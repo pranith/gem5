@@ -955,14 +955,14 @@ Commit::commit()
         // @todo: Make this handle multi-cycle communication between
         // commit and IEW.
         if (checkEmptyROB[tid] && rob->isEmpty(tid) &&
-            !iewStage->hasStoresToWB(tid) && !committedStores[tid]) {
+            (cpu->versioningEnabled() || !iewStage->hasStoresToWB(tid)) &&
+            !committedStores[tid]) {
             checkEmptyROB[tid] = false;
             toIEW->commitInfo[tid].usedROB = true;
             toIEW->commitInfo[tid].emptyROB = true;
             toIEW->commitInfo[tid].freeROBEntries = rob->numFreeEntries(tid);
             wroteToTimeBuffer = true;
         }
-
     }
 }
 
@@ -1217,7 +1217,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
         if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
             ++stats.barrierHeadNotExecuted;
-            iewStage->forceMBDrain(tid, head_inst->seqNum);
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
         }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
@@ -1329,7 +1329,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         head_inst->getMemOrderVersion(),
                         youngest_mb_version ? *youngest_mb_version : 0);
 
-                    iewStage->forceMBDrain(tid, head_inst->seqNum);
+                    iewStage->forceMBDrain(tid,
+                                           head_inst->getMemOrderVersion());
                     return false;
                 }
             }

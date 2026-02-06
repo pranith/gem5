@@ -729,7 +729,8 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // squash this load and re-execute
                 force_squash = true;
             }
-            if (ld_inst->possibleLoadViolation() || force_squash) {
+            if (false) {
+                // if (ld_inst->possibleLoadViolation() || force_squash) {
                 DPRINTF(LSQUnit, "Conflicting load at addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
 
@@ -949,7 +950,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         auto ld_mem_version = ld_inst->getMemOrderVersion();
         // if a younger load bypassed an older store with older version,
         // mark this load as a potential violation on snoop
-        bool possible_hazard =
+        bool possible_ordering_hazard =
             (inst_mem_version < ld_mem_version) && !ld_inst->stlfForwarded();
 
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
@@ -959,7 +960,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
                             (inst_eff_addr1 <= ld_eff_addr2);
 
-        if (addr_overlap || possible_hazard) {
+        if (addr_overlap) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -973,7 +974,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                         memDepViolator = ld_inst;
 
                         ++stats.memOrderViolation;
-                        if (possible_hazard && !addr_overlap) {
+                        if (possible_ordering_hazard && !addr_overlap) {
                             ++stats.possibleConsistencyViolation;
                         }
 
@@ -1265,11 +1266,6 @@ LSQUnit::writebackStores()
     }
 
     if (mergeBufferEnabled) {
-        if (!mergeBuffer.isEmpty()) {
-            mergeBuffer.updateRetiredEntries(now);
-            iewStage->activityThisCycle();
-        }
-
         if (!needsTSO || !storeInFlight) {
             if (lsq->cachePortAvailable(false)) {
                 mergeBuffer.drainOne(this);
@@ -1579,6 +1575,20 @@ LSQUnit::writebackStores()
         }
         assert(storesToWB >= 0);
     }
+}
+
+void
+LSQUnit::updateMergeBufferRetire()
+{
+    if (!mergeBufferEnabled) {
+        return;
+    }
+    if (mergeBuffer.isEmpty()) {
+        return;
+    }
+
+    mergeBuffer.updateRetiredEntries(cpu->curCycle());
+    cpu->activityThisCycle();
 }
 
 void
@@ -3190,6 +3200,10 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
                 ready = false;
                 if (lsq_ptr) {
                     lsq_ptr->stats.mbReleaseWaitCycles++;
+                    DPRINTF(LSQUnit,
+                            "Release MB entry not ready to drain "
+                            "idx:%zu block:%#x ver:%llu (deps pending)\n",
+                            i, e.blockAddr, e.version);
                 }
             }
         }
@@ -3210,7 +3224,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     if (idx == entries.size()) {
         DPRINTF(LSQUnit, "No MB entry ready to drain now:%lli.\n",
                 lsq_ptr->cpu->curCycle());
-        // dumpWaitBits();
+        dumpWaitBits();
+        if (!versionCounts.empty()) {
+            DPRINTF(LSQUnit, "MB head version:%llu count:%u\n",
+                    versionCounts.front().version,
+                    versionCounts.front().count);
+        }
         return false;
     }
 
@@ -3354,10 +3373,15 @@ LSQUnit::MergeBuffer::dumpWaitBits() const
             bits.push_back(b ? '1' : '0');
         }
 
-        DPRINTF(LSQUnit, "MB[%llu] ver:%llu state:%s release:%d waitBits:%s\n",
+        DPRINTF(LSQUnit,
+                "MB[%llu] ver:%llu state:%s release:%d waitBits:%s "
+                "alloc:%llu retire:%llu now:%llu\n",
                 (unsigned long long)idx, (unsigned long long)e.version,
                 stateStr(e.state), e.isRelease,
-                bits.empty() ? "-" : bits.c_str());
+                bits.empty() ? "-" : bits.c_str(),
+                (unsigned long long)e.allocCycle,
+                (unsigned long long)e.retireCycle,
+                (unsigned long long)lsqPtr->cpu->curCycle());
     }
 }
 
