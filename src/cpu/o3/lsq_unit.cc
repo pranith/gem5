@@ -1961,6 +1961,12 @@ LSQUnit::sendLockedRMWAbort(LSQRequest *request)
         return;
     }
 
+    // Requests with all bytes disabled do not create any memory fragments.
+    // They should not be treated as LockedRMW accesses during squash.
+    if (!request->isMemAccessRequired()) {
+        return;
+    }
+
     RequestPtr main_req = request->mainReq();
     if (!main_req || !main_req->isLockedRMW()) {
         return;
