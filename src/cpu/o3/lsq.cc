@@ -228,6 +228,12 @@ LSQ::tick()
 
     usedLoadPorts = 0;
     usedStorePorts = 0;
+
+    // Ensure merge buffer retirement progresses even when no stores are
+    // actively being written back (e.g., during serialize stalls).
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
+        thread[tid].updateMergeBufferRetire();
+    }
 }
 
 bool
