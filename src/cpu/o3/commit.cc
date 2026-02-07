@@ -1217,7 +1217,7 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
         if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
             ++stats.barrierHeadNotExecuted;
-            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
         }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
@@ -1295,7 +1295,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         "ver:%llu until older release MB entries drain.\n",
                         tid, head_inst->seqNum,
                         head_inst->getMemOrderVersion());
-                iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion());
+                iewStage->forceMBDrain(tid,
+                                       head_inst->getMemOrderVersion() + 1);
                 return false;
             } else if (bypass_release_wait && load_blocked) {
                 stats.acquirePcReleaseBypassCount++;
