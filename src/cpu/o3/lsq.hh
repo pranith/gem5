@@ -765,6 +765,14 @@ class LSQ
     /** Gets the instruction that caused the memory ordering violation. */
     DynInstPtr getMemDepViolator(ThreadID tid);
 
+    /** Returns whether or not there was a re-exec memory order violation. */
+    bool memOrderViolation(ThreadID tid);
+
+    /** Gets the instruction that caused the re-exec memory order violation. */
+    DynInstPtr getMemOrderViolator(ThreadID tid);
+    /** Gets the re-exec memory order violator without clearing it. */
+    DynInstPtr peekMemOrderViolator(ThreadID tid);
+
     /** Returns the head index of the load queue for a specific thread. */
     int getLoadHead(ThreadID tid);
 

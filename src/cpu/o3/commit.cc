@@ -1337,6 +1337,37 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         }
     }
 
+    if (head_inst->isLoad() && iewStage->memOrderViolation(tid)) {
+        auto violator = iewStage->peekMemOrderViolator(tid);
+        if (violator && violator->seqNum == head_inst->seqNum) {
+            violator = iewStage->getMemOrderViolator(tid);
+            DPRINTF(Commit,
+                    "Re-exec memory order violation at commit [tid:%i] "
+                    "[sn:%llu] PC %s\n",
+                    tid, head_inst->seqNum, head_inst->pcState());
+
+            commitStatus[tid] = ROBSquashing;
+
+            // Squash including the violating load.
+            InstSeqNum squashed_inst = violator->seqNum;
+            youngestSeqNum[tid] = squashed_inst;
+
+            rob->squash(squashed_inst, tid);
+            changedROBNumEntries[tid] = true;
+
+            toIEW->commitInfo[tid].doneSeqNum = squashed_inst;
+            toIEW->commitInfo[tid].squash = true;
+            toIEW->commitInfo[tid].robSquashing = true;
+            toIEW->commitInfo[tid].mispredictInst = NULL;
+            toIEW->commitInfo[tid].branchTaken = false;
+            toIEW->commitInfo[tid].squashInst = violator;
+            set(toIEW->commitInfo[tid].pc, violator->pcState());
+
+            cpu->activityThisCycle();
+            return false;
+        }
+    }
+
     if (cpu->speculativeBarrierIssueEnabled() && inst_fault == NoFault &&
         head_inst->isReadBarrier()) {
 

@@ -394,6 +394,7 @@ LSQUnit::resetState()
 
     retryPkt = NULL;
     memDepViolator = NULL;
+    memOrderViolator = NULL;
 
     stalled = false;
 
@@ -628,6 +629,30 @@ LSQUnit::getMemDepViolator()
     return temp;
 }
 
+void
+LSQUnit::setMemOrderViolatorIfOlder(const DynInstPtr &inst)
+{
+    if (!memOrderViolator || inst->seqNum < memOrderViolator->seqNum) {
+        memOrderViolator = inst;
+    }
+}
+
+DynInstPtr
+LSQUnit::getMemOrderViolator()
+{
+    DynInstPtr temp = memOrderViolator;
+
+    memOrderViolator = NULL;
+
+    return temp;
+}
+
+DynInstPtr
+LSQUnit::peekMemOrderViolator() const
+{
+    return memOrderViolator;
+}
+
 unsigned
 LSQUnit::numFreeLoadEntries()
 {
@@ -716,8 +741,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // squash this load and re-execute
                 force_squash = true;
             }
-            if (false) {
-                // if (ld_inst->possibleLoadViolation() || force_squash) {
+            if (ld_inst->possibleLoadViolation() || force_squash) {
                 DPRINTF(LSQUnit, "Conflicting load at addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
 
@@ -785,6 +809,7 @@ LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
                     "[sn:%lli] barrier [sn:%lli]\n",
                     ld_inst->seqNum, barrier_sn);
             ld_inst->fault = std::make_shared<ReExec>();
+            setMemOrderViolatorIfOlder(ld_inst);
             if (entry.hasRequest()) {
                 entry.request()->setStateToFault();
             }
@@ -852,6 +877,7 @@ LSQUnit::markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
                     "[sn:%lli] barrier [sn:%lli]\n",
                     ld_inst->seqNum, barrier_sn);
             ld_inst->fault = std::make_shared<ReExec>();
+            setMemOrderViolatorIfOlder(ld_inst);
             if (entry.hasRequest()) {
                 entry.request()->setStateToFault();
             }
@@ -903,6 +929,7 @@ LSQUnit::markLoadsHitExternalSnoop(uint64_t version)
                     "[sn:%lli] ver:%llu > %llu\n",
                     ld_inst->seqNum, ld_inst->getMemOrderVersion(), version);
             ld_inst->fault = std::make_shared<ReExec>();
+            setMemOrderViolatorIfOlder(ld_inst);
             if (entry.hasRequest()) {
                 entry.request()->setStateToFault();
             }
@@ -937,8 +964,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         auto ld_mem_version = ld_inst->getMemOrderVersion();
         // if a younger load bypassed an older store with older version,
         // mark this load as a potential violation on snoop
-        bool possible_ordering_hazard =
-            (inst_mem_version < ld_mem_version) && !ld_inst->stlfForwarded();
+        bool possible_ordering_hazard = false &&
+                                        (inst_mem_version < ld_mem_version) &&
+                                        !ld_inst->stlfForwarded();
 
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
@@ -947,7 +975,7 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
                             (inst_eff_addr1 <= ld_eff_addr2);
 
-        if (addr_overlap) {
+        if (addr_overlap || possible_ordering_hazard) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -1661,6 +1689,9 @@ LSQUnit::squash(const InstSeqNum &squashed_num)
 
     if (memDepViolator && squashed_num < memDepViolator->seqNum) {
         memDepViolator = NULL;
+    }
+    if (memOrderViolator && squashed_num < memOrderViolator->seqNum) {
+        memOrderViolator = NULL;
     }
 
     while (storeQueue.size() != 0 &&

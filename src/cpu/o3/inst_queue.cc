@@ -1293,6 +1293,30 @@ void
 InstructionQueue::violation(const DynInstPtr &store,
         const DynInstPtr &faulting_load)
 {
+    if (!store->effAddrValid() || !faulting_load->effAddrValid()) {
+        DPRINTF(
+            IQ,
+            "Skipping mem-dep violation (eff addr not valid) store [sn:%llu] "
+            "load [sn:%llu]\n",
+            store->seqNum, faulting_load->seqNum);
+        return;
+    }
+
+    const Addr store_start = store->effAddr;
+    const Addr store_end = store->effAddr + store->effSize - 1;
+    const Addr load_start = faulting_load->effAddr;
+    const Addr load_end = faulting_load->effAddr + faulting_load->effSize - 1;
+    const bool addr_overlap =
+        (store_end >= load_start) && (store_start <= load_end);
+
+    if (!addr_overlap) {
+        DPRINTF(IQ,
+                "Skipping mem-dep violation (no addr overlap) store [sn:%llu] "
+                "load [sn:%llu]\n",
+                store->seqNum, faulting_load->seqNum);
+        return;
+    }
+
     iqIOStats.intInstQueueWrites++;
     memDepUnit[store->threadNumber].violation(store, faulting_load);
 }

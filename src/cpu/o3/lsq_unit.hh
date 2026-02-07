@@ -474,6 +474,18 @@ class LSQUnit
     /** Returns the memory ordering violator. */
     DynInstPtr getMemDepViolator();
 
+    /** Returns if there is a re-exec memory order violator. */
+    bool
+    memOrderViolation() const
+    {
+        return static_cast<bool>(memOrderViolator);
+    }
+
+    /** Returns the re-exec memory order violator. */
+    DynInstPtr getMemOrderViolator();
+    /** Returns the re-exec memory order violator without clearing it. */
+    DynInstPtr peekMemOrderViolator() const;
+
     /** Returns the number of free LQ entries. */
     unsigned numFreeLoadEntries();
 
@@ -778,6 +790,10 @@ class LSQUnit
 
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
+    /** The oldest load that must be squashed/replayed due to re-exec. */
+    DynInstPtr memOrderViolator;
+    /** Track the oldest load that must be squashed/replayed due to re-exec. */
+    void setMemOrderViolatorIfOlder(const DynInstPtr &inst);
 
     /** Enable optimized store-release handling. */
     bool optimizeStoreRelease = false;

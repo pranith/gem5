@@ -372,6 +372,24 @@ LSQ::getMemDepViolator(ThreadID tid)
     return thread.at(tid).getMemDepViolator();
 }
 
+bool
+LSQ::memOrderViolation(ThreadID tid)
+{
+    return thread.at(tid).memOrderViolation();
+}
+
+DynInstPtr
+LSQ::getMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid).getMemOrderViolator();
+}
+
+DynInstPtr
+LSQ::peekMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid).peekMemOrderViolator();
+}
+
 int
 LSQ::getLoadHead(ThreadID tid)
 {
