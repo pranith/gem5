@@ -204,6 +204,8 @@ IEW::IEWStats::IEWStats(CPU *cpu)
                "Number of times the IQ has become full, causing a stall"),
       ADD_STAT(lsqFullEvents, statistics::units::Count::get(),
                "Number of times the LSQ has become full, causing a stall"),
+      ADD_STAT(memDepViolationEvents, statistics::units::Count::get(),
+               "Number of mem-dep violations"),
       ADD_STAT(memOrderViolationEvents, statistics::units::Count::get(),
                "Number of memory order violations"),
       ADD_STAT(predictedTakenIncorrect, statistics::units::Count::get(),
@@ -1444,7 +1446,7 @@ IEW::executeInsts()
                 // Squash.
                 squashDueToMemOrder(violator, tid);
 
-                ++iewStats.memOrderViolationEvents;
+                ++iewStats.memDepViolationEvents;
             }
         } else {
             // Reset any state associated with redirects that will not
@@ -1461,7 +1463,7 @@ IEW::executeInsts()
                 DPRINTF(IEW, "Violation will not be handled because "
                         "already squashing\n");
 
-                ++iewStats.memOrderViolationEvents;
+                ++iewStats.memDepViolationEvents;
             }
         }
     }
@@ -1730,6 +1732,24 @@ IEW::checkMisprediction(const DynInstPtr& inst)
             }
         }
     }
+}
+
+bool
+IEW::memOrderViolation(ThreadID tid)
+{
+    return ldstQueue.memOrderViolation(tid);
+}
+
+DynInstPtr
+IEW::getMemOrderViolator(ThreadID tid)
+{
+    return ldstQueue.getMemOrderViolator(tid);
+}
+
+DynInstPtr
+IEW::peekMemOrderViolator(ThreadID tid)
+{
+    return ldstQueue.peekMemOrderViolator(tid);
 }
 
 } // namespace o3
