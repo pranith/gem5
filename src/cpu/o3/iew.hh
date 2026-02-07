@@ -281,6 +281,10 @@ class IEW
         return ldstQueue.markLoadsHitExternalSnoop(tid, version);
     }
 
+    bool memOrderViolation(ThreadID tid);
+    DynInstPtr getMemOrderViolator(ThreadID tid);
+    DynInstPtr peekMemOrderViolator(ThreadID tid);
+
     /** Check misprediction  */
     void checkMisprediction(const DynInstPtr &inst);
 
@@ -501,7 +505,9 @@ class IEW
         statistics::Scalar iqFullEvents;
         /** Stat for number of times the LSQ becomes full. */
         statistics::Scalar lsqFullEvents;
-        /** Stat for total number of memory ordering violation events. */
+        /** Stat for total number of mem-dep violation events. */
+        statistics::Scalar memDepViolationEvents;
+        /** Stat for total number of memory order violation events. */
         statistics::Scalar memOrderViolationEvents;
         /** Stat for total number of incorrect predicted taken branches. */
         statistics::Scalar predictedTakenIncorrect;

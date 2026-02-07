@@ -476,6 +476,18 @@ class LSQUnit
     /** Returns the memory ordering violator. */
     DynInstPtr getMemDepViolator();
 
+    /** Returns if there is a re-exec memory order violator. */
+    bool
+    memOrderViolation() const
+    {
+        return static_cast<bool>(memOrderViolator);
+    }
+
+    /** Returns the re-exec memory order violator. */
+    DynInstPtr getMemOrderViolator();
+    /** Returns the re-exec memory order violator without clearing it. */
+    DynInstPtr peekMemOrderViolator() const;
+
     /** Returns the number of free LQ entries. */
     unsigned numFreeLoadEntries();
 
@@ -583,12 +595,7 @@ class LSQUnit
     void recvRetry();
 
     /** Forces merge buffer drain for entries older than version. */
-    void forceMBDrain(uint64_t version)
-    {
-        const uint64_t force_before =
-            cpu->versioningEnabled() ? version : ~uint64_t(0);
-        mergeBuffer.forceRetireVersionsBefore(force_before);
-    }
+    void forceMBDrain(uint64_t version);
 
     /** Handles merge buffer drain completion. */
     void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
@@ -780,6 +787,10 @@ class LSQUnit
 
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
+    /** The oldest load that must be squashed/replayed due to re-exec. */
+    DynInstPtr memOrderViolator;
+    /** Track the oldest load that must be squashed/replayed due to re-exec. */
+    void setMemOrderViolatorIfOlder(const DynInstPtr &inst);
 
     /** Enable optimized store-release handling. */
     bool optimizeStoreRelease = false;

@@ -250,7 +250,7 @@ LSQ::tick()
     // Ensure merge buffer retirement progresses even when no stores are
     // actively being written back (e.g., during serialize stalls).
     for (ThreadID tid = 0; tid < numThreads; tid++) {
-        thread[tid].updateMergeBufferRetire();
+        thread[tid]->updateMergeBufferRetire();
     }
 }
 
@@ -332,19 +332,19 @@ LSQ::commitStores(InstSeqNum &youngest_inst, ThreadID tid)
 unsigned
 LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
 {
-    return thread.at(tid).markLoadsHitExternalSnoopAfter(barrier_sn);
+    return thread.at(tid)->markLoadsHitExternalSnoopAfter(barrier_sn);
 }
 
 unsigned
 LSQ::markAcquireLoadsHitExternalSnoopAfter(ThreadID tid, InstSeqNum barrier_sn)
 {
-    return thread.at(tid).markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
+    return thread.at(tid)->markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
 }
 
 unsigned
 LSQ::markLoadsHitExternalSnoop(ThreadID tid, uint64_t version)
 {
-    return thread.at(tid).markLoadsHitExternalSnoop(version);
+    return thread.at(tid)->markLoadsHitExternalSnoop(version);
 }
 
 void
@@ -384,6 +384,24 @@ LSQ::violation(ThreadID tid)
 DynInstPtr
 LSQ::getMemDepViolator(ThreadID tid)
 { return thread.at(tid)->getMemDepViolator(); }
+
+bool
+LSQ::memOrderViolation(ThreadID tid)
+{
+    return thread.at(tid)->memOrderViolation();
+}
+
+DynInstPtr
+LSQ::getMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid)->getMemOrderViolator();
+}
+
+DynInstPtr
+LSQ::peekMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid)->peekMemOrderViolator();
+}
 
 int
 LSQ::getLoadHead(ThreadID tid)
@@ -784,14 +802,14 @@ LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version)
 bool
 LSQ::loadBlockedByReleaseMB(ThreadID tid, uint64_t load_version)
 {
-    return thread.at(tid).loadBlockedByReleaseMB(load_version);
+    return thread.at(tid)->loadBlockedByReleaseMB(load_version);
 }
 
 bool
 LSQ::loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
                             InstSeqNum load_seq)
 {
-    return thread.at(tid).loadBlockedByReleaseSQ(load_version, load_seq);
+    return thread.at(tid)->loadBlockedByReleaseSQ(load_version, load_seq);
 }
 
 int
