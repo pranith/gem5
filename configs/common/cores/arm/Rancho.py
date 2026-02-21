@@ -46,6 +46,16 @@ from m5.objects import *
 from m5.objects.IndexingPolicies import *
 from m5.objects.ReplacementPolicies import *
 
+from .neoverse_v2 import L1D as NeoverseV2_L1D
+from .neoverse_v2 import L1I as NeoverseV2_L1I
+from .neoverse_v2 import L2 as NeoverseV2_L2
+from .neoverse_v2 import (
+    NeoverseMMU,
+    NeoverseV2,
+    NeoverseV2_BP,
+    NeoverseV2_BTB,
+)
+
 
 # Simple function to allow a string of [01x_] to be converted into a
 # mask and value for use with MinorFUTiming
@@ -1677,154 +1687,42 @@ class Rancho_FUPool(MinorFUPool):
     ]
 
 
-class Rancho_MMU(ArmMMU):
-    itb = ArmTLB(entry_type="instruction", size=256)
-    dtb = ArmTLB(entry_type="data", size=256)
+class Rancho_MMU(NeoverseMMU):
+    pass
 
 
-class Rancho_BTB(SimpleBTB):
-    numEntries = 128
-    associativity = 1
-    tagBits = 18
-    btbReplPolicy = NRURP()
-    btbIndexingPolicy = BTBSetAssociative(
-        assoc=associativity, tag_bits=tagBits
-    )
+class Rancho_BTB(NeoverseV2_BTB):
+    pass
 
 
-class Rancho_BP(BranchPredictor):
-    conditionalBranchPred = BiModeBP(
-        globalPredictorSize=4096,
-        globalCtrBits=2,
-        choicePredictorSize=1024,
-        choiceCtrBits=3,
-    )
+class Rancho_BP(NeoverseV2_BP):
     btb = Rancho_BTB()
-    ras = ReturnAddrStack(numEntries=8)
-    instShiftAmt = 2
 
 
-class Rancho_ICache(Cache):
-    data_latency = 1
-    tag_latency = 1
-    response_latency = 1
-    mshrs = 2
-    tgts_per_mshr = 8
-    size = "32kB"
-    assoc = 2
-    # No prefetcher, this is handled by the core
+class Rancho_ICache(NeoverseV2_L1I):
+    pass
 
 
-class Rancho_DCache(Cache):
-    data_latency = 1
-    tag_latency = 1
-    response_latency = 1
-    mshrs = 4
-    tgts_per_mshr = 8
-    size = "32kB"
-    assoc = 8
-    write_buffers = 4
-    prefetcher = StridePrefetcher(queue_size=4, degree=4)
+class Rancho_DCache(NeoverseV2_L1D):
+    pass
 
 
-class Rancho_L2(Cache):
-    data_latency = 13
-    tag_latency = 13
-    response_latency = 5
-    mshrs = 4
-    tgts_per_mshr = 8
-    size = "1024kB"
-    assoc = 8
-    write_buffers = 16
-    # prefetcher FIXME
+class Rancho_L2(NeoverseV2_L2):
+    pass
 
 
-class Rancho(ArmO3CPU):
+class Rancho(NeoverseV2):
     # Inherit the doc string from the module to avoid repeating it
     # here.
     __doc__ = __doc__
 
-    decodeToFetchDelay = 1
-    renameToFetchDelay = 1
-    iewToFetchDelay = 1
-    commitToFetchDelay = 1
-    fetchWidth = 8
-    fetchBufferSize = 64
-    fetchQueueSize = 32
-
-    renameToDecodeDelay = 1
-    iewToDecodeDelay = 1
-    commitToDecodeDelay = 1
-    fetchToDecodeDelay = 1
-    decodeWidth = 8
-
-    iewToRenameDelay = 1
-    commitToRenameDelay = 1
-    decodeToRenameDelay = 1
-    renameWidth = 8
-
-    commitToIEWDelay = 1
-    renameToIEWDelay = 2
-    issueToExecuteDelay = 1
-    dispatchWidth = 8
-    issueWidth = 8
-    wbWidth = 8
-    fuPool = DefaultFUPool(
-        FUList=[
-            IntALU(),
-            IntMultDiv(),
-            FP_ALU(),
-            FP_MultDiv(),
-            ReadPort(count=2),
-            SIMD_Unit(),
-            Matrix_Unit(),
-            PredALU(),
-            WritePort(),
-            RdWrPort(count=2),
-        ]
-    )
-
-    iewToCommitDelay = 1
-    renameToROBDelay = 1
-    commitWidth = 8
-    squashWidth = 8
-    trapLatency = 13
-    fetchTrapLatency = 1
-
-    backComSize = 8
-    forwardComSize = 8
-    LQEntries = 128
-    SQEntries = 128
-    # useMergeBuffer = False
+    # Rancho keeps these experiment-oriented options on top of the
+    # Neoverse V2 core model.
     mergeBufferEntries = 32
     mergeBufferPrefetch = True
     mbRetireWhenFullValid = True
     speculativeBarrierIssue = True
     enableVersioning = False
-
-    LSQDepCheckShift = 4
-    LSQCheckLoads = True
-    store_set_clear_period = 250000
-    LFSTSize = 1024
-    SSITSize = "1024"
-    SSITAssoc = 1024
-    SSITReplPolicy = LRURP()
-    SSITIndexingPolicy = SetAssociative(
-        size="4kB", entry_size=4, assoc=SSITAssoc
-    )
-
-    numPhysIntRegs = 512
-    numPhysFloatRegs = 256
-    numPhysVecRegs = 256
-    numPhysVecPredRegs = Param.Unsigned(
-        32, "Number of physical predicate registers"
-    )
-    # most ISAs don't use condition-code regs, so default is 0
-    numPhysCCRegs = Param.Unsigned(32, "Number of physical cc registers")
-    # numIQEntries = Param.Unsigned(96, "Number of instruction queue entries")
-    numROBEntries = Param.Unsigned(75, "Number of reorder buffer entries")
-
-    smtCommitPolicy = "RoundRobin"
 
     branchPred = Rancho_BP()
     needsTSO = False
