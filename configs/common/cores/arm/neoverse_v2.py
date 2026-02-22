@@ -337,8 +337,8 @@ class NeoverseV2(ArmO3CPU):
     numPhysIntRegs = 213
     numPhysFloatRegs = 188
     numROBEntries = 320
-    LQEntries = 175
-    SQEntries = 80
+    LQEntries = 32
+    SQEntries = 64
 
     LSQDepCheckShift = 0
     LFSTSize = 1024
