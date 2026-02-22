@@ -1718,7 +1718,7 @@ class Rancho(NeoverseV2):
 
     # Rancho keeps these experiment-oriented options on top of the
     # Neoverse V2 core model.
-    mergeBufferEntries = 32
+    mergeBufferEntries = 16
     mergeBufferPrefetch = True
     mbRetireWhenFullValid = True
     speculativeBarrierIssue = True
