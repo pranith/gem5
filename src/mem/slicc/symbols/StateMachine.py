@@ -791,6 +791,7 @@ $c_ident::init()
                         "NetDest",
                         "PerfectCacheMemory",
                         "TBETable",
+                        "MN_TBETable",
                     ):
                         code(f"(*{vid}).setRubySystem(m_ruby_system);")
 
