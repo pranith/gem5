@@ -902,15 +902,27 @@ LSQ::pushRequest(const DynInstPtr& inst, bool isLoad, uint8_t *data,
         inst->setRequest();
         request->taskId(cpu->taskId());
 
-        // There might be fault from a previous execution attempt if this is
-        // a strictly ordered load
-        inst->getFault() = NoFault;
+        // Clear any stale fault only if translation hasn't already completed.
+        // For split requests with a recorded translation fault, keep it so
+        // we can retire the faulting instruction instead of reissuing and
+        // losing the fault.
+        if (!inst->translationCompleted()) {
+            inst->getFault() = NoFault;
+        }
 
         request->initiateTranslation();
     }
 
     /* This is the place were instructions get the effAddr. */
     if (request->isTranslationComplete()) {
+        // If any fragment faulted during translation, do not attempt a
+        // memory access. Propagate the fault upstream and let commit
+        // handle it; accessing req->getPaddr() for an un-translated
+        // fragment would assert.
+        if (request->isPartialFault()) {
+            return inst->getFault();
+        }
+
         if (request->isMemAccessRequired()) {
             inst->effAddr = request->getVaddr();
             inst->effSize = size;
