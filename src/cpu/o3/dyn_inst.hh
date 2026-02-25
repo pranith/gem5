@@ -198,6 +198,8 @@ class DynInst : public ExecContext, public RefCounted
         MemOpDone,
         HtmFromTransaction,
         StlfForwarded,
+        SafeStlfOrdered,
+        SafeCacheOrdered,
         NoCapableFU, /// Processor does not have capability to
                      /// execute the instruction
         MaxFlags
@@ -462,6 +464,26 @@ class DynInst : public ExecContext, public RefCounted
     void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
     bool stlfForwarded() const { return instFlags[StlfForwarded]; }
     void stlfForwarded(bool f) { instFlags[StlfForwarded] = f; }
+    bool
+    safeStlfOrdered() const
+    {
+        return instFlags[SafeStlfOrdered];
+    }
+    void
+    safeStlfOrdered(bool f)
+    {
+        instFlags[SafeStlfOrdered] = f;
+    }
+    bool
+    safeCacheOrdered() const
+    {
+        return instFlags[SafeCacheOrdered];
+    }
+    void
+    safeCacheOrdered(bool f)
+    {
+        instFlags[SafeCacheOrdered] = f;
+    }
     uint64_t stlfVersion() const { return stlfForwardVersion; }
     void stlfVersion(uint64_t version) { stlfForwardVersion = version; }
 

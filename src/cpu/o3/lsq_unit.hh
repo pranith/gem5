@@ -42,13 +42,15 @@
 #ifndef __CPU_O3_LSQ_UNIT_HH__
 #define __CPU_O3_LSQ_UNIT_HH__
 
+#include <algorithm>
 #include <cstring>
 #include <deque>
-#include <map>
 #include <limits>
+#include <map>
 #include <memory>
-#include <queue>
 #include <optional>
+#include <queue>
+#include <unordered_map>
 
 #include "arch/generic/debugfaults.hh"
 #include "arch/generic/vec_reg.hh"
@@ -375,6 +377,110 @@ class LSQUnit
 
         void recordAllocVersion(uint64_t version, bool is_release_store);
         void recordInvalidateVersion(uint64_t version);
+    };
+
+    /**
+     * Tracks the ordering tag (memOrderVersion) of the first store that
+     * updates a cache line after it is brought into the cache. Entries are
+     * cleared when the line is invalidated/evicted.
+     */
+    class CacheOrderingTagMap
+    {
+      private:
+        struct Entry
+        {
+            uint64_t tag;
+            std::vector<bool> byteValids;
+        };
+        std::unordered_map<Addr, Entry> tagByLine;
+        std::deque<Addr> fifoOrder;
+        size_t capacity = 16;
+
+      public:
+        void
+        clear()
+        {
+            tagByLine.clear();
+            fifoOrder.clear();
+        }
+
+        void
+        setCapacity(size_t cap)
+        {
+            capacity = std::max<size_t>(1, cap);
+        }
+
+        void
+        record(Addr line_addr, uint64_t tag, size_t line_size, size_t offset,
+               size_t size, const std::vector<bool> *byte_enable = nullptr)
+        {
+            /* Only record the first updater of the line. */
+            auto [it, inserted] = tagByLine.emplace(
+                line_addr, Entry{tag, std::vector<bool>(line_size, false)});
+
+            auto &entry = it->second;
+            /* Preserve the original tag if the line was already present. */
+            if (inserted) {
+                entry.tag = tag;
+                fifoOrder.push_back(line_addr);
+            }
+
+            const size_t end = std::min(line_size, offset + size);
+            for (size_t i = offset; i < end; ++i) {
+                if (byte_enable && i < byte_enable->size() &&
+                    !(*byte_enable)[i]) {
+                    continue;
+                }
+                entry.byteValids[i] = true;
+            }
+
+            // Enforce capacity by evicting oldest entries.
+            while (tagByLine.size() > capacity && !fifoOrder.empty()) {
+                Addr evict = fifoOrder.front();
+                fifoOrder.pop_front();
+                tagByLine.erase(evict);
+            }
+        }
+
+        void
+        invalidate(Addr line_addr)
+        {
+            tagByLine.erase(line_addr);
+            auto it = std::find(fifoOrder.begin(), fifoOrder.end(), line_addr);
+            if (it != fifoOrder.end()) {
+                fifoOrder.erase(it);
+            }
+        }
+
+        std::optional<uint64_t>
+        lookup(Addr line_addr, size_t offset, size_t size) const
+        {
+            auto it = tagByLine.find(line_addr);
+            if (it == tagByLine.end()) {
+                return std::nullopt;
+            }
+            const auto &entry = it->second;
+            const size_t end = offset + size;
+            if (end > entry.byteValids.size()) {
+                return std::nullopt;
+            }
+            for (size_t i = offset; i < end; ++i) {
+                if (!entry.byteValids[i]) {
+                    return std::nullopt;
+                }
+            }
+            return entry.tag;
+        }
+
+        std::optional<std::vector<bool>>
+        bytes(Addr line_addr) const
+        {
+            auto it = tagByLine.find(line_addr);
+            if (it == tagByLine.end()) {
+                return std::nullopt;
+            }
+            return it->second.byteValids;
+        }
     };
 
   public:
@@ -759,6 +865,15 @@ class LSQUnit
 
     /** Address Mask for a cache block (e.g. ~(cache_block_size-1)) */
     Addr cacheBlockMask;
+
+    /** Tracks the ordering tag of the first store that updated a cache line.
+     */
+    CacheOrderingTagMap cacheOrderingTagMap;
+
+    void noteCacheUpdate(Addr paddr, size_t size, uint64_t version,
+                         const std::vector<bool> *byte_enable = nullptr);
+    void noteCacheEvict(Addr paddr);
+    std::optional<uint64_t> lookupCacheTag(Addr paddr, size_t size) const;
 
     /** Wire to read information from the issue stage time queue. */
     typename TimeBuffer<IssueStruct>::wire fromIssue;

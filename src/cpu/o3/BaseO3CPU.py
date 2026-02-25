@@ -180,13 +180,21 @@ class BaseO3CPU(BaseCPU):
         False,
         "Enable optimized store-release handling with release buffer tracking",
     )
+    cacheOrderingTagEntries = Param.Unsigned(
+        16,
+        "Maximum entries in the cache ordering tag map (per LSQ unit)",
+    )
     optimizeAcquirePC = Param.Bool(
         False,
         "Allow AcquirePC loads at ROB head to commit without draining MB",
     )
-    stlfLoadsBypassMBDrain = Param.Bool(
+    safeStlfLoadsBypassMBDrain = Param.Bool(
         True,
         "Allow STLF loads at ROB head to bypass MB version stall",
+    )
+    safeCacheLoadsBypassMBDrain = Param.Bool(
+        False,
+        "Allow cache-safe loads (ordering tag match) to bypass MB version stall",
     )
     LSQCheckLoads = Param.Bool(
         True,
