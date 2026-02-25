@@ -1414,7 +1414,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                     tid, head_inst->seqNum);
         }
 
-        if (iewStage->hasStoresToWB(tid) || inst_num > 0) {
+        bool need_store_drain = iewStage->hasStoresToWB(tid);
+
+        if (need_store_drain || inst_num > 0) {
             DPRINTF(Commit,
                     "[tid:%i] [sn:%llu] "
                     "Stores outstanding, fault must wait.\n",

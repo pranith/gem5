@@ -228,6 +228,13 @@ class IEW
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
 
+    /** Number of committed stores that still need to write back. */
+    int
+    numStoresToWB(ThreadID tid)
+    {
+        return ldstQueue.numStoresToWB(tid);
+    }
+
     /** Youngest/lowest merge buffer version for a thread, if any. */
     std::optional<uint64_t>
     youngestMBVersion(ThreadID tid) const
