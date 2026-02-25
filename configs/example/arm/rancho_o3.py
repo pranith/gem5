@@ -74,14 +74,31 @@ def get_processes(cmd):
     """Interprets commands to run and returns a list of processes"""
 
     cwd = os.getcwd()
+    # Forward selected OpenMP runtime controls from launcher env to
+    # the simulated process so benchmarks can honor thread settings.
+    openmp_env = []
+    for key in (
+        "OMP_NUM_THREADS",
+        "OMP_DYNAMIC",
+        "OMP_PROC_BIND",
+        "OMP_PLACES",
+    ):
+        val = os.environ.get(key)
+        if val is not None:
+            openmp_env.append(f"{key}={val}")
+
     multiprocesses = []
     for idx, c in enumerate(cmd):
         argv = shlex.split(c)
 
         process = Process(pid=100 + idx, cwd=cwd, cmd=argv, executable=argv[0])
         process.gid = os.getgid()
+        if openmp_env:
+            process.env = openmp_env
 
         print("info: %d. command and arguments: %s" % (idx + 1, process.cmd))
+        if openmp_env:
+            print("info: %d. OpenMP env: %s" % (idx + 1, openmp_env))
         multiprocesses.append(process)
 
     return multiprocesses
