@@ -152,7 +152,8 @@ Commit::Commit(CPU *_cpu, const BaseO3CPUParams &params)
         htmStops[tid] = 0;
     }
     interrupt = NoFault;
-    stlfLoadsBypassMBDrain = params.stlfLoadsBypassMBDrain;
+    safeStlfLoadsBypassMBDrain = params.safeStlfLoadsBypassMBDrain;
+    safeCacheLoadsBypassMBDrain = params.safeCacheLoadsBypassMBDrain;
     optimizeAcquirePC = params.optimizeAcquirePC;
 }
 
@@ -185,9 +186,11 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "Cycles barrier commit waited for SQ/MB to drain"),
       ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
                "Times a barrier is at ROB head but not executed"),
-      ADD_STAT(mbVersionLoadStallSameStlfVersion,
-               statistics::units::Count::get(),
-               "Loads stalled by MB versioning with matching STLF version"),
+      ADD_STAT(
+          safeLoadFromMbOrSq, statistics::units::Count::get(),
+          "Loads stalled by MB versioning but safe due to MB/SQ forwarding"),
+      ADD_STAT(safeCacheLoads, statistics::units::Count::get(),
+               "Cache-safe loads (ordering tag matched)"),
       ADD_STAT(mbVersionLoadStallBypassedStlf, statistics::units::Count::get(),
                "Loads that bypassed MB stall at ROB head due to STLF"),
       ADD_STAT(mbVersionLoadStallCycles, statistics::units::Count::get(),
@@ -1307,14 +1310,16 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             // Make the load wait for stores with lower version to drain
             if (iewStage->loadBlockedByMBVersion(
                     tid, head_inst->getMemOrderVersion())) {
-                bool same_version_stlf = false;
-                if (head_inst->stlfForwarded() &&
-                    head_inst->stlfVersion() ==
-                        head_inst->getMemOrderVersion()) {
-                    same_version_stlf = true;
-                    stats.mbVersionLoadStallSameStlfVersion++;
+                bool stlf_safe = head_inst->safeStlfOrdered();
+                if (stlf_safe) {
+                    stats.safeLoadFromMbOrSq++;
                 }
-                if (stlfLoadsBypassMBDrain && same_version_stlf) {
+                bool cache_safe = head_inst->safeCacheOrdered();
+                if (cache_safe) {
+                    stats.safeCacheLoads++;
+                }
+                if ((safeStlfLoadsBypassMBDrain && stlf_safe) ||
+                    (safeCacheLoadsBypassMBDrain && cache_safe)) {
                     stats.mbVersionLoadStallBypassedStlf++;
                 } else {
                     stats.mbVersionLoadStallCycles++;

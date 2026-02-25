@@ -330,7 +330,9 @@ class Commit
     TimeBuffer<IEWStruct> *iewQueue;
 
     /** Allow STLF loads to bypass MB drain stalls at commit. */
-    bool stlfLoadsBypassMBDrain;
+    bool safeStlfLoadsBypassMBDrain;
+    /** Allow cache-safe loads to bypass MB drain stalls at commit. */
+    bool safeCacheLoadsBypassMBDrain;
     /** Allow AcquirePC loads at ROB head to bypass MB drain stalls. */
     bool optimizeAcquirePC;
 
@@ -491,7 +493,9 @@ class Commit
         /** Times a barrier is at ROB head but not executed yet. */
         statistics::Scalar barrierHeadNotExecuted;
         /** Loads stalled by MB versioning with matching STLF version. */
-        statistics::Scalar mbVersionLoadStallSameStlfVersion;
+        statistics::Scalar safeLoadFromMbOrSq;
+        /** Cache-safe loads that match ordering tag. */
+        statistics::Scalar safeCacheLoads;
         /** Loads at ROB head that skip MB stall due to STLF forwarding. */
         statistics::Scalar mbVersionLoadStallBypassedStlf;
         /** Cycles commit stalled by loads waiting on older MB versions. */
