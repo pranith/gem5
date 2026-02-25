@@ -99,7 +99,7 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(24)
+multisim.set_num_processes(12)
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers/{x_workload}"
 

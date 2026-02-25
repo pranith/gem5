@@ -323,6 +323,13 @@ LSQUnit::completeDataAccess(PacketPtr pkt)
                         "size:%u value:%#llx\n",
                         inst->seqNum, inst->pcState(), pkt->getAddr(),
                         pkt->getSize(), (unsigned long long)value);
+
+                // Safe load via cache ordering tag map
+                auto tag = lookupCacheTag(pkt->getAddr(), pkt->getSize());
+                if (tag && *tag == inst->getMemOrderVersion() &&
+                    !inst->stlfForwarded()) {
+                    inst->safeCacheOrdered(true);
+                }
             }
 
             writeback(inst, request->mainPacket());
@@ -373,6 +380,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
     optimizeStoreRelease = params.optimizeStoreRelease;
     optimizeAcquirePC = params.optimizeAcquirePC;
+    cacheOrderingTagMap.setCapacity(params.cacheOrderingTagEntries);
 
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
@@ -412,6 +420,46 @@ LSQUnit::resetState()
     stalled = false;
 
     cacheBlockMask = ~(cpu->cacheLineSize() - 1);
+
+    cacheOrderingTagMap.clear();
+}
+
+void
+LSQUnit::noteCacheUpdate(Addr paddr, size_t size, uint64_t version,
+                         const std::vector<bool> *byte_enable)
+{
+    const size_t line_size = cacheLineSize();
+    Addr line_addr = paddr & cacheBlockMask;
+    size_t offset = paddr & (line_size - 1);
+    size_t remaining = size;
+
+    while (remaining > 0) {
+        const size_t chunk = std::min(line_size - offset, remaining);
+        cacheOrderingTagMap.record(line_addr, version, line_size, offset,
+                                   chunk, byte_enable);
+        remaining -= chunk;
+        line_addr += line_size;
+        offset = 0;
+        if (byte_enable && byte_enable->size() > chunk) {
+            byte_enable = nullptr; // only apply mask to first line chunk
+        }
+    }
+}
+
+void
+LSQUnit::noteCacheEvict(Addr paddr)
+{
+    const Addr line_addr = paddr & cacheBlockMask;
+    cacheOrderingTagMap.invalidate(line_addr);
+}
+
+std::optional<uint64_t>
+LSQUnit::lookupCacheTag(Addr paddr, size_t size) const
+{
+    const Addr line_addr = paddr & cacheBlockMask;
+    const size_t line_size = cpu->cacheLineSize();
+    const size_t offset = paddr & (line_size - 1);
+    return cacheOrderingTagMap.lookup(line_addr, offset, size);
 }
 
 std::string
@@ -705,6 +753,7 @@ LSQUnit::checkSnoop(PacketPtr pkt)
     auto iter = loadQueue.begin();
 
     Addr invalidate_addr = pkt->getAddr() & cacheBlockMask;
+    noteCacheEvict(invalidate_addr);
     DynInstPtr ld_inst = iter->instruction();
     assert(ld_inst);
     LSQRequest *request = iter->request();
@@ -1930,6 +1979,17 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
 
     LSQRequest *request = dynamic_cast<LSQRequest*>(data_pkt->senderState);
     bool isMergeBufferPkt = (request == nullptr);
+    uint64_t store_version = 0;
+    const std::vector<bool> *byte_enable = nullptr;
+    if (!isLoad && request) {
+        store_version = request->instruction()->getMemOrderVersion();
+        auto req = data_pkt->req;
+        if (req && req->isMasked()) {
+            const auto &be = req->getByteEnable();
+            byte_enable = &be;
+        }
+    }
+    size_t pkt_size = data_pkt->getSize();
 
     if (!lsq->cacheBlocked() &&
         lsq->cachePortAvailable(isLoad)) {
@@ -1948,6 +2008,18 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         lsq->cachePortBusy(isLoad);
         if (!isMergeBufferPkt) {
             request->packetSent();
+            if (!isLoad) {
+                noteCacheUpdate(data_pkt->getAddr(), pkt_size, store_version,
+                                byte_enable);
+            }
+        } else if (auto *mb_state =
+                       dynamic_cast<MergeBufferDrainSenderState *>(
+                           data_pkt->senderState)) {
+            if (mb_state->entry) {
+                noteCacheUpdate(data_pkt->getAddr(), pkt_size,
+                                mb_state->entry->version,
+                                &mb_state->entry->byteValids);
+            }
         }
     } else {
         if (cache_got_blocked) {

@@ -170,6 +170,8 @@ class CustomCore(BaseCPUCore):
         self.core.enableVersioning = True
         self.core.optimizeStoreRelease = False
         self.core.optimizeAcquirePC = False
+        self.core.safeStlfLoadsBypassMBDrain = True
+        self.core.safeCacheLoadsBypassMBDrain = True
 
 
 class CustomProcessor(BaseCPUProcessor):
