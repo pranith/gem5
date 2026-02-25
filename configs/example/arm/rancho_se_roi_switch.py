@@ -1,41 +1,13 @@
 # Copyright (c) 2016-2017, 2022-2023 Arm Limited
 # All rights reserved.
 #
-# The license below extends only to copyright in the software and shall
-# not be construed as granting a license to any other intellectual
-# property including but not limited to intellectual property relating
-# to a hardware implementation of the functionality of the software
-# licensed hereunder.  You may use the software subject to the license
-# terms below provided that you ensure that this notice is replicated
-# unmodified and in its entirety in all distributions of the software,
-# modified or unmodified, in source code or in binary form.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are
-# met: redistributions of source code must retain the above copyright
-# notice, this list of conditions and the following disclaimer;
-# redistributions in binary form must reproduce the above copyright
-# notice, this list of conditions and the following disclaimer in the
-# documentation and/or other materials provided with the distribution;
-# neither the name of the copyright holders nor the names of its
-# contributors may be used to endorse or promote products derived from
-# this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# Modified local copy for PARSEC ROI runs with Rancho caches enabled.
 
-"""This script is the syscall emulation example script from the ARM
-Research Starter Kit on System Modeling. More information can be found
-at: http://www.arm.com/ResearchEnablement/SystemModeling
+"""SE mode runner for Rancho with ROI-based stats reset/stop.
+
+This variant keeps execution on Rancho throughout the run so L1/L2 cache
+statistics are available in stats.txt, then resets stats at ROI begin and
+stops at ROI end.
 """
 
 import argparse
@@ -47,6 +19,7 @@ import m5
 from m5.objects import *
 from m5.util import addToPath
 
+# Resolve imports exactly like the upstream config regardless of launch cwd.
 m5.util.addToPath("../..")
 
 import devices
@@ -56,12 +29,8 @@ from common import (
 )
 from common.cores.arm import Rancho
 
-# Pre-defined CPU configurations. Each tuple must be ordered as : (cpu_class,
-# l1_icache_class, l1_dcache_class, walk_cache_class, l2_Cache_class). Any of
-# the cache class may be 'None' if the particular cache is not present.
 cpu_types = {
     "atomic": (AtomicSimpleCPU, None, None, None),
-    #    "minor": (MinorCPU, devices.L1I, devices.L1D, devices.L2),
     "rancho": (
         Rancho.Rancho,
         Rancho.Rancho_ICache,
@@ -72,7 +41,7 @@ cpu_types = {
 
 
 def get_processes(cmd, process_cwd=None):
-    """Interprets commands to run and returns a list of processes"""
+    """Interprets commands to run and returns a list of processes."""
 
     cwd = os.path.abspath(
         process_cwd if process_cwd is not None else os.getcwd()
@@ -80,8 +49,7 @@ def get_processes(cmd, process_cwd=None):
     if not os.path.isdir(cwd):
         print(f"Error: Requested cwd does not exist: {cwd}")
         sys.exit(1)
-    # Forward selected OpenMP runtime controls from launcher env to
-    # the simulated process so benchmarks can honor thread settings.
+
     openmp_env = []
     for key in (
         "OMP_NUM_THREADS",
@@ -96,7 +64,6 @@ def get_processes(cmd, process_cwd=None):
     multiprocesses = []
     for idx, c in enumerate(cmd):
         argv = shlex.split(c)
-
         process = Process(pid=100 + idx, cwd=cwd, cmd=argv, executable=argv[0])
         process.gid = os.getgid()
         if openmp_env:
@@ -112,7 +79,6 @@ def get_processes(cmd, process_cwd=None):
 
 
 def _configure_rancho_cluster(cpus, args):
-    # enable speculative post-barrier load/store issue
     for cpu in cpus:
         cpu.speculativeBarrierIssue = True
 
@@ -143,20 +109,13 @@ def _configure_rancho_cluster(cpus, args):
 def create(args):
     """Create and configure the system object."""
 
-    # Start with atomic CPUs and switch to Rancho O3 on ROI begin.
-    system = devices.SimpleSeSystem(mem_mode=AtomicSimpleCPU.memory_mode())
-    # Exit simulate() when the first m5_work_begin is hit so we can switch CPUs.
+    system = devices.SimpleSeSystem(
+        mem_mode=cpu_types["rancho"][0].memory_mode()
+    )
     system.work_begin_exit_count = 1
-    # Exit simulate() when m5_work_end is hit to stop exactly at ROI end.
     system.work_end_exit_count = 1
 
-    system.atomic_cluster = devices.ArmCpuCluster(
-        system,
-        args.num_cpus,
-        args.cpu_freq,
-        "1.2V",
-        *cpu_types["atomic"],
-    )
+    # Single Rancho cluster with private L1 and shared L2 caches.
     system.rancho_cluster = devices.ArmCpuCluster(
         system,
         args.num_cpus,
@@ -166,76 +125,49 @@ def create(args):
         tarmac_gen=args.tarmac_gen,
         tarmac_dest=args.tarmac_dest,
     )
+    system.addCaches(need_caches=True, last_cache_level=2)
 
-    for cpu in system.rancho_cluster.cpus:
-        cpu.switched_out = True
-
-    # CPU handover requires matching CPU ids between old and new CPUs.
-    for old_cpu, new_cpu in zip(
-        system.atomic_cluster.cpus, system.rancho_cluster.cpus
-    ):
-        new_cpu.cpu_id = old_cpu.cpu_id
-
-    # Atomic CPUs in this tree don't support private split L1 attachment.
-    # Keep atomic cores directly connected.
-    system.atomic_cluster.connectMemSide(system.membus)
-
-    # Tell components about the expected physical memory ranges. This
-    # is, for example, used by the MemConfig helper to determine where
-    # to map DRAMs in the physical address space.
     system.mem_ranges = [AddrRange(start=0, size=args.mem_size)]
-
-    # Configure the off-chip memory system.
     MemConfig.config_mem(args, system)
-
-    # Wire up the system's memory system
     system.connect()
 
-    # Parse the command line and get a list of Processes instances
-    # that we can pass to gem5.
     processes = get_processes(args.commands_to_run, args.cwd)
     if not processes:
         print("Error: No commands provided to run.")
         sys.exit(1)
 
+    # pthread-style benchmark: one app process mapped across multiple cores.
     if len(processes) == 1 and args.num_cpus > 1:
-        # Enable pthread-style multithreading for a single benchmark process.
         system.multi_thread = True
 
-    if len(processes) < args.num_cpus:
-        # Repeat the last process to cover all cores, similar to se.py behaviour.
-        last = processes[-1]
-        for _ in range(args.num_cpus - len(processes)):
-            processes.append(last)
-        print(
-            f"info: fewer commands than cores; repeating last workload to fill {args.num_cpus} cores"
-        )
-    elif len(processes) > args.num_cpus:
+    if len(processes) > args.num_cpus:
         print(
             f"info: more commands ({len(processes)}) than cores ({args.num_cpus}); "
             "truncating extra workloads"
         )
         processes = processes[: args.num_cpus]
+    elif len(processes) < args.num_cpus and len(processes) != 1:
+        print(
+            f"Error: fewer commands ({len(processes)}) than cores ({args.num_cpus}) without a single multithreaded workload."
+        )
+        sys.exit(1)
 
     system.workload = SEWorkload.init_compatible(processes[0].executable)
 
-    # Assign one workload to each CPU (both clusters).
-    for cpu, workload in zip(system.atomic_cluster.cpus, processes):
-        cpu.workload = workload
-    for cpu, workload in zip(system.rancho_cluster.cpus, processes):
-        cpu.workload = workload
+    if len(processes) == 1:
+        for cpu in system.rancho_cluster.cpus:
+            cpu.workload = processes[0]
+    else:
+        for cpu, workload in zip(system.rancho_cluster.cpus, processes):
+            cpu.workload = workload
 
     _configure_rancho_cluster(system.rancho_cluster.cpus, args)
 
     if args.maxinsts:
-        # Apply max instruction count to the post-ROI Rancho phase.
         for cpu in system.rancho_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts
 
-    switch_cpu_list = list(
-        zip(system.atomic_cluster.cpus, system.rancho_cluster.cpus)
-    )
-    return system, switch_cpu_list
+    return system
 
 
 def main():
@@ -258,7 +190,7 @@ def main():
         type=str,
         choices=list(cpu_types.keys()),
         default="rancho",
-        help="Kept for compatibility; this script always starts atomic and switches to rancho at ROI",
+        help="Kept for compatibility; this script executes on rancho.",
     )
     parser.add_argument("--cpu-freq", type=str, default="3GHz")
     parser.add_argument(
@@ -339,34 +271,21 @@ def main():
 
     args = parser.parse_args()
 
-    # Create a single root node for gem5's object hierarchy. There can
-    # only exist one root node in the simulator at any given
-    # time. Tell gem5 that we want to use syscall emulation mode
-    # instead of full system mode.
     root = Root(full_system=False)
+    root.system = create(args)
 
-    # Populate the root node with a system. A system corresponds to a
-    # single node with shared memory.
-    root.system, switch_cpu_list = create(args)
-
-    # Instantiate the C++ object hierarchy. After this point,
-    # SimObjects can't be instantiated anymore.
     m5.instantiate()
 
-    switched = False
+    saw_roi_begin = False
     while True:
         event = m5.simulate()
         cause = event.getCause()
         lcause = cause.lower()
         print(f"{cause} ({event.getCode()}) @ {m5.curTick()}")
 
-        if not switched and (
-            "workbegin" in lcause or "work started" in lcause
-        ):
-            print("info: ROI begin detected, switching from atomic to rancho")
-            m5.switchCpus(root.system, switch_cpu_list)
-            switched = True
-            # Ensure the measured ROI starts after CPU handover.
+        if "workbegin" in lcause or "work started" in lcause:
+            print("info: ROI begin detected on rancho, resetting stats")
+            saw_roi_begin = True
             m5.stats.reset()
             continue
 
@@ -387,9 +306,9 @@ def main():
 
         print(f"info: unhandled exit event '{cause}', continuing simulation")
 
-    if not switched:
+    if not saw_roi_begin:
         print(
-            "warning: ROI workbegin was never seen; run completed without CPU switch"
+            "warning: ROI workbegin was never seen; run completed without ROI reset"
         )
     sys.exit(event.getCode())
 
