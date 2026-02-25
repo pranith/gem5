@@ -126,6 +126,16 @@ class CsvOutputVisitor(Visitor):
     """
     This is a helper vistor class used to include a CSV output via the stats
     API (``src/python/m5/stats/__init__.py``).
+
+    It outputs a CSV file with a single header row followed by data rows.
+
+    Format:
+         key1,key2,key3
+         val1_dump1,val2_dump1,val3_dump1
+         val1_dump2,val2_dump2,val3_dump2
+
+    The first row defines column names with each subsequent row
+    representing the values of one stats dump.
     """
 
     file: str
