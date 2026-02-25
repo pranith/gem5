@@ -1101,12 +1101,15 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
     if (load_fault != NoFault && inst->translationCompleted() &&
             inst->savedRequest->isPartialFault()
             && !inst->savedRequest->isComplete()) {
-        assert(inst->savedRequest->isSplit());
-        // If we have a partial fault where the mem access is not complete yet
-        // then the cache must have been blocked. This load will be re-executed
-        // when the cache gets unblocked. We will handle the fault when the
-        // mem access is complete.
-        return NoFault;
+        // Translation already delivered a fault on one fragment; no packets
+        // were sent. Propagate the fault immediately instead of waiting for
+        // nonexistent cache responses.
+        inst->setExecuted();
+        inst->setCanCommit();
+        inst->setCompleted();
+        iewStage->instToCommit(inst);
+        iewStage->activityThisCycle();
+        return load_fault;
     }
 
     // If the instruction faulted or predicated false, then we need to send it
@@ -1125,6 +1128,10 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
             inst->isAtCommit()) {
             inst->setExecuted();
         }
+        // Faulted/predicated loads bypass normal writeback; mark them ready
+        // so commit can retire or process the fault.
+        inst->setCanCommit();
+        inst->setCompleted();
         iewStage->instToCommit(inst);
         iewStage->activityThisCycle();
     } else {
@@ -2165,6 +2172,18 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
     auto store_it = load_inst->sqIt;
     assert (store_it >= storeWBIt);
 
+    // If this split request ended translation with a partial fault, do not
+    // attempt to access merge buffer or cache; propagate the recorded fault.
+    if (request->isSplit() && request->isPartialFault()) {
+        load_entry.setRequest(nullptr);
+        request->discard();
+        // Ensure the fault is visible at commit.
+        load_inst->setExecuted();
+        load_inst->setCompleted();
+        load_inst->setCanCommit();
+        return load_inst->getFault();
+    }
+
     // End once we've reached the top of the LSQ
     while (store_it != storeWBIt && !load_inst->isDataPrefetch()) {
         // Move the index to one younger
@@ -2365,10 +2384,18 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
     if (mergeBufferEnabled) {
         AddrRangeCoverage coverage;
         if (request->isSplit()) {
-            Addr first_part_addr = request->req(0)->getPaddr();
-            size_t first_access_size = request->req(0)->getSize();
-            Addr second_part_addr = request->req(1)->getPaddr();
-            size_t second_access_size = request->req(1)->getSize();
+            auto req0 = request->req(0);
+            auto req1 = request->req(1);
+
+            // Only consider fragments that have valid paddrs; a faulted
+            // fragment will be handled by the early-return above.
+            const bool req0_valid = req0->hasPaddr();
+            const bool req1_valid = req1->hasPaddr();
+
+            Addr first_part_addr = req0_valid ? req0->getPaddr() : 0;
+            size_t first_access_size = req0_valid ? req0->getSize() : 0;
+            Addr second_part_addr = req1_valid ? req1->getPaddr() : 0;
+            size_t second_access_size = req1_valid ? req1->getSize() : 0;
 
             coverage = mergeBuffer.forwardCoverage(first_part_addr,
                                                    first_access_size);
