@@ -119,7 +119,6 @@ class Visitor(ABC):
             Group,
         ]:
             return True
-        print(type(element))
         return False
 
 
@@ -347,6 +346,7 @@ class JsonOutputVistor(Visitor):
 
     def visit_group(self, element: Group):
         values = {
+            "type": element.type,
             "time_conversion": element.time_conversion,
         }
         for key, value in element.values.items():
