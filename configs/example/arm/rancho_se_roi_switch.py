@@ -81,6 +81,7 @@ def get_processes(cmd, process_cwd=None):
 def _configure_rancho_cluster(cpus, args):
     for cpu in cpus:
         cpu.speculativeBarrierIssue = True
+        cpu.cacheOrderingTagEntries = args.cache_ordering_tag_entries
 
     if args.merge_buffer is not None:
         use_mb = args.merge_buffer == "on"
@@ -100,10 +101,14 @@ def _configure_rancho_cluster(cpus, args):
         enable_versioning = args.versioning == "on"
         enable_store_release_opt = args.optimize_release == "on"
         enable_acquire_pc_opt = args.optimize_acquire_pc == "on"
+        enable_safe_stlf_loads_bypass_mb = args.safeStlfBypass == "on"
+        enable_safe_cache_loads_bypass_mb = args.safeCacheBypass == "on"
         for cpu in cpus:
             cpu.enableVersioning = enable_versioning
             cpu.optimizeStoreRelease = enable_store_release_opt
             cpu.optimizeAcquirePC = enable_acquire_pc_opt
+            cpu.safeStlfLoadsBypassMBDrain = enable_safe_stlf_loads_bypass_mb
+            cpu.safeCacheLoadsBypassMBDrain = enable_safe_cache_loads_bypass_mb
 
 
 def create(args):
@@ -219,6 +224,24 @@ def main():
         choices=["on", "off"],
         default=None,
         help="Enable/disable versioning",
+    )
+    parser.add_argument(
+        "--safeCacheBypass",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable safe loads from cache bypass MB drain",
+    )
+    parser.add_argument(
+        "--cache-ordering-tag-entries",
+        type=int,
+        default=8192,
+        help="Maximum entries in cache ordering tag map per CPU",
+    )
+    parser.add_argument(
+        "--safeStlfBypass",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable safe loads from SQ/MB bypass MB drain",
     )
     parser.add_argument(
         "--optimize-release",
