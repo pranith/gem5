@@ -140,6 +140,8 @@ class CsvOutputVisitor(Visitor):
 
     file: str
 
+    file_created = False
+
     def __init__(self, file: str):
         """
         :param file: The output file location in which the CSV file will be dumped.
@@ -267,14 +269,26 @@ class CsvOutputVisitor(Visitor):
         :param roots: The Root, or List of roots, whose stats are are to be dumped JSON.
         """
 
-        with open(self.file, "w") as fp:
-            simstat = get_simstat(root=roots, prepare_stats=False)
-            vals = self.visit_simstat(simstat)
-            flat_dict = self.flatten_dict(vals)
+        simstat = get_simstat(root=roots, prepare_stats=False)
+        vals = self.visit_simstat(simstat)
+        flat_dict = self.flatten_dict(vals)
 
-            writer = csv.writer(fp)
-            writer.writerow(flat_dict.keys())
-            writer.writerow(flat_dict.values())
+        if not self.file_created:
+            with open(self.file, "w") as fp:
+                writer = csv.writer(fp)
+                writer.writerow(flat_dict.keys())
+                writer.writerow(flat_dict.values())
+            self.file_created = True
+        else:
+            with open(self.file, newline="") as fp:
+                reader = csv.reader(fp)
+                header = next(reader)
+
+            row = [flat_dict.get(key, "") for key in header]
+
+            with open(self.file, "a", newline="") as fp:
+                writer = csv.writer(fp)
+                writer.writerow(row)
 
 
 class JsonOutputVistor(Visitor):
