@@ -1,0 +1,59 @@
+[
+    {
+        "id": "arm32-linux-kernel",
+        "resource_version": "1.0.0",
+        "category": "kernel",
+        "author": [
+            "Giacomo Travaglini"
+        ],
+        "code_examples": [],
+        "description": "The Linux kernel compiled to arm32.",
+        "source_url": "",
+        "license": "",
+        "tags": [
+            "linux-kernel"
+        ],
+        "example_usage": "obtain_resource(resource_id=\"arm32-linux-kernel\")",
+        "gem5_versions": [
+            "23.0",
+            "23.1",
+            "24.0",
+            "24.1"
+        ],
+        "size": 152377808,
+        "url": "file:///arm_fs_tarball/binaries/vmlinux.arm",
+        "md5sum": "f8c42b97ed226163ed11c853e2fd5b9c",
+        "is_zipped": false,
+        "architecture": "ARM",
+        "source": "src/linux-kernel"
+    },
+    {
+        "id": "arm64-linux-kernel",
+        "resource_version": "1.0.0",
+        "category": "kernel",
+        "author": [
+            "Giacomo Travaglini"
+        ],
+        "code_examples": [],
+        "description": "The Linux kernel compiled to arm64.",
+        "source_url": "",
+        "license": "",
+        "tags": [
+            "linux-kernel"
+        ],
+        "example_usage": "obtain_resource(resource_id=\"arm64-linux-kernel\")",
+        "gem5_versions": [
+            "23.0",
+            "23.1",
+            "24.0",
+            "24.1"
+        ],
+        "size": 152377808,
+        "url": "file://arm_fs_tarball/binaries/vmlinux.arm64",
+        "md5sum": "29c4059d3b1b043e16bfbd8487acbcae",
+        "is_zipped": false,
+        "architecture": "ARM",
+        "source": "src/linux-kernel"
+    }
+
+]
