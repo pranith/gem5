@@ -114,6 +114,10 @@ class System(SimObject):
         "shared_backstore is non-empty.",
     )
 
+    is_sparse_restore = Param.Bool(
+        False, "Skip zero-filled pages during restore"
+    )
+
     cache_line_size = Param.Unsigned(64, "Cache line size in bytes")
 
     redirect_paths = VectorParam.RedirectPath([], "Path redirections")
