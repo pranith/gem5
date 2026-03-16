@@ -574,7 +574,14 @@ CoherentXBar::recvTimingSnoopResp(PacketPtr pkt, PortID cpu_side_port_id)
 
     // get the destination
     const auto route_lookup = routeTo.find(pkt->req);
-    assert(route_lookup != routeTo.end());
+    if (route_lookup == routeTo.end()) {
+        DPRINTF(CoherentXBar,
+                "%s: dropping stale/duplicate snoop response from %s for %s "
+                "(no route)\n",
+                __func__, src_port->name(), pkt->print());
+        delete pkt;
+        return true;
+    }
     const PortID dest_port_id = route_lookup->second;
     assert(dest_port_id != InvalidPortID);
 

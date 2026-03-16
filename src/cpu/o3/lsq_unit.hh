@@ -103,11 +103,17 @@ class LSQEntry
     LSQRequest *
     request()
     { return _request; }
+    const LSQRequest *
+    request() const
+    { return _request; }
     void
     setRequest(LSQRequest *r)
     { _request = r; }
     bool
     hasRequest()
+    { return _request != nullptr; }
+    bool
+    hasRequest() const
     { return _request != nullptr; }
     /** Member accessors. */
     /** @{ */
@@ -142,6 +148,16 @@ class SQEntry : public LSQEntry
      * style instructs (ARM DC ZVA; ALPHA WH64)
      */
     bool _isAllZeros = false;
+    /** Whether the store has early-permission visibility. */
+    bool _permReady = false;
+    /** Whether a zFence line lock has been acquired for this store. */
+    bool _lockAcquired = false;
+    /** Whether this store is eligible for relaxed retirement. */
+    bool _eligibleForRelaxedRetire = false;
+    /** Whether this store has a valid zFence line address recorded. */
+    bool _zfLineAddrValid = false;
+    /** zFence-tracked cache line address. */
+    Addr _zfLineAddr = 0;
 
   public:
     static constexpr size_t DataSize = sizeof(_data);
@@ -178,6 +194,36 @@ class SQEntry : public LSQEntry
     const bool &
     isAllZeros() const
     { return _isAllZeros; }
+    bool &
+    permReady()
+    { return _permReady; }
+    const bool &
+    permReady() const
+    { return _permReady; }
+    bool &
+    lockAcquired()
+    { return _lockAcquired; }
+    const bool &
+    lockAcquired() const
+    { return _lockAcquired; }
+    bool &
+    eligibleForRelaxedRetire()
+    { return _eligibleForRelaxedRetire; }
+    const bool &
+    eligibleForRelaxedRetire() const
+    { return _eligibleForRelaxedRetire; }
+    bool &
+    zfLineAddrValid()
+    { return _zfLineAddrValid; }
+    const bool &
+    zfLineAddrValid() const
+    { return _zfLineAddrValid; }
+    Addr &
+    zfLineAddr()
+    { return _zfLineAddr; }
+    const Addr &
+    zfLineAddr() const
+    { return _zfLineAddr; }
     char *
     data()
     { return _data; }
@@ -246,6 +292,22 @@ class LSQUnit
             bool isAtomic = false;
             LSQRequest *atomicReq = nullptr;
             std::vector<bool> waitBits;
+            /** zFence: early-permission visibility for this entry. */
+            bool zfPermReady = false;
+            /** zFence: line lock has been issued/acquired for this entry. */
+            bool zfLockAcquired = false;
+            /** zFence: entry can participate in relaxed-retire checks. */
+            bool zfEligibleForRelaxedRetire = false;
+            /** zFence: tracked line address validity. */
+            bool zfLineAddrValid = false;
+            /** zFence: tracked line address for this MB entry. */
+            Addr zfLineAddr = 0;
+            /** zFence: a line-lock request should be (re)attempted. */
+            bool zfLockReqPending = false;
+            /** zFence: a line-lock request is currently in-flight. */
+            bool zfLockReqInFlight = false;
+            /** zFence: cycle when MB line lock becomes usable. */
+            Cycles zfLockReadyCycle = Cycles(0);
 
             MergeBufferEntry(size_t size, uint64_t ver)
                 : byteValids(size, false),
@@ -343,6 +405,7 @@ class LSQUnit
         bool forwardData(Addr paddr, uint8_t *dst, size_t size,
                          uint64_t &stlf_version) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        bool hasEntryForLine(Addr line_addr) const;
         bool
         isEmpty() const
         {
@@ -356,6 +419,28 @@ class LSQUnit
                                [](bool v) { return v; });
         }
         bool hasReleaseOlderThan(uint64_t version) const;
+        /**
+         * Invalidate zFence lock/eligibility state for entries tracking
+         * the provided cache line address.
+         * @return Number of entries that were previously eligible and got
+         *         invalidated by this snoop conflict.
+         */
+        unsigned invalidateZFLine(Addr line_addr);
+        /**
+         * Validate that all valid MB entries have zBit permission set.
+         * @param has_relevant Set true if any MB entry is present.
+         * @return true if all present entries have zBit set.
+         */
+        bool validateAllMBZFLocked(bool &has_relevant) const;
+        /**
+         * Validate that all MB entries with version lower than threshold
+         * have zBit permission set.
+         * @param version Load version threshold.
+         * @param has_relevant Set true if any lower-version MB entry exists.
+         * @return true if all relevant entries have zBit set.
+         */
+        bool validateLowerVersionMBZFLocked(uint64_t version,
+                                            bool &has_relevant) const;
 
         std::string
         name() const
@@ -364,6 +449,7 @@ class LSQUnit
         }
 
       private:
+        void requestZFLineLock(MergeBufferEntry &entry);
         void
         updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
                     size_t size, bool is_all_zero)
@@ -669,6 +755,10 @@ class LSQUnit
     bool loadBlockedByReleaseMB(uint64_t version);
     /** Returns true if a load must wait for older release SQ entries. */
     bool loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const;
+    /** zFence: fence can retire despite older stores if all are protected. */
+    bool canRelaxFenceRetire(uint64_t version, InstSeqNum fence_seq);
+    /** zFence: unsafe-load can retire despite MB wait if all are protected. */
+    bool canRelaxUnsafeLoadRetire(uint64_t version, InstSeqNum load_seq);
 
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
@@ -677,8 +767,12 @@ class LSQUnit
     bool
     hasStoresToWB()
     {
-        return !mbEmpty() || (storesToWB > 0);
+        return hasUnprotectedStoresToWB();
     }
+    bool hasStoreToLine(Addr line_addr) const;
+    /** Returns whether there are outstanding stores that cannot rely on
+     *  relaxed retirement. */
+    bool hasUnprotectedStoresToWB(bool *has_protected_mb = nullptr) const;
 
     /** Advance merge buffer retirement independent of store writeback. */
     void updateMergeBufferRetire();
@@ -722,6 +816,9 @@ class LSQUnit
 
     /** Handles completing the send of a store to memory. */
     void storePostSend();
+
+    /** Mark store request fragments to hold zFence line locks in cache. */
+    void markRequestZFLineLock(LSQRequest *request) const;
 
     void sendLockedRMWAbort(LSQRequest *request);
     void retryLockedRMWAborts();
@@ -800,6 +897,21 @@ class LSQUnit
     {
         LSQUnit *lsqUnit;
         MergeBufferPrefetchSenderState(LSQUnit *unit) : lsqUnit(unit) {}
+    };
+
+    /** Sender state for merge-buffer zFence lock-only requests. */
+    struct MergeBufferZFLineLockSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        uint64_t expectedVersion;
+        Addr expectedBlockAddr;
+        MergeBufferZFLineLockSenderState(MergeBuffer::MergeBufferEntry *e,
+                                         LSQUnit *unit,
+                                         uint64_t v, Addr a)
+            : entry(e), lsqUnit(unit), expectedVersion(v),
+              expectedBlockAddr(a)
+        {}
     };
 
   public:
@@ -911,6 +1023,14 @@ class LSQUnit
     bool optimizeStoreRelease = false;
     /** Allow AcquirePC loads to bypass some release-handling checks. */
     bool optimizeAcquirePC = false;
+    /** Enable zFence infrastructure. */
+    bool zfenceEnable = false;
+    /** Enable relaxed retirement using permReady and zFence state. */
+    bool zfenceRelaxRetire = false;
+    /** Enable zFence line locking in cache metadata. */
+    bool zfenceLockLines = false;
+    /** Additional latency before MB lock is treated as acquired. */
+    Cycles zfenceMbLockAcquireLatency = Cycles(0);
 
     /** Flag for memory model. */
     bool needsTSO;
@@ -1001,6 +1121,18 @@ class LSQUnit
         statistics::Scalar mbReleaseMaxOutstanding;
         /** Insts rescheduled/replayed due to barrier handling in LSQ. */
         statistics::Scalar barrierReschedulesLSQ;
+        /** Number of store queue entries marked with early permission. */
+        statistics::Scalar numPermReadySet;
+        /** Cycles saved by fence relaxed-retirement decisions. */
+        statistics::Scalar numFenceWaitCyclesSaved;
+        /** Cycles saved by unsafe-load relaxed-retirement decisions. */
+        statistics::Scalar numUnsafeLoadWaitCyclesSaved;
+        /** Number of zFence lock conflicts that triggered fallback. */
+        statistics::Scalar numLockConflicts;
+        /** Number of deferred snoop events under zFence lock. */
+        statistics::Scalar numDeferredSnoops;
+        /** Number of times zFence falls back to baseline behavior. */
+        statistics::Scalar numFallbacks;
     } stats;
 
   public:

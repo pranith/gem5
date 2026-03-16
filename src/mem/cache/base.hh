@@ -48,7 +48,9 @@
 
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <string>
+#include <unordered_map>
 
 #include "base/addr_range.hh"
 #include "base/compiler.hh"
@@ -410,6 +412,30 @@ class BaseCache : public ClockedObject
      * hold it for deletion until a subsequent call
      */
     std::unique_ptr<Packet> pendingDelete;
+
+    /** zFence lock counts by block address (+secure bit in key LSB). */
+    std::unordered_map<uint64_t, uint32_t> zfLineLockMap;
+    /**
+     * Count of acquire-only zFence lock probes by block. These are lock
+     * requests with all-byte-masked writes and are released by later draining
+     * write responses on the same block.
+     */
+    std::unordered_map<uint64_t, uint32_t> zfLineAcquireOnlyMap;
+    /** Unique zBit owner per block address (+secure bit in key LSB). */
+    std::unordered_map<uint64_t, RequestorID> zfLineOwnerMap;
+    /** Deferred acquire-only zBit requests waiting for current owner release. */
+    std::unordered_map<uint64_t, std::deque<PacketPtr>> zfDeferredAcquireReqs;
+    /** Replay event for deferred acquire-only zBit requests. */
+    EventFunctionWrapper zfDeferredAcquireReqEvent;
+
+    uint64_t zfenceLockKey(Addr block_addr, bool is_secure) const;
+    bool isZFLineLocked(Addr block_addr, bool is_secure) const;
+    bool acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void clearZFLineLock(Addr block_addr, bool is_secure,
+                         CacheBlk *blk = nullptr);
+    void scheduleDeferredZFLineLockReqReplay();
+    void processDeferredZFLineLockReqs();
 
     /**
      * Mark a request as in service (sent downstream in the memory

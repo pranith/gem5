@@ -188,6 +188,22 @@ class BaseO3CPU(BaseCPU):
         False,
         "Allow AcquirePC loads at ROB head to commit without draining MB",
     )
+    zfenceEnable = Param.Bool(
+        False,
+        "Enable zFence early-permission tracking",
+    )
+    zfenceRelaxRetire = Param.Bool(
+        False,
+        "Enable zFence relaxed-retire paths",
+    )
+    zfenceLockLines = Param.Bool(
+        False,
+        "Enable zFence lock tracking on cache lines",
+    )
+    zfenceMbLockAcquireLatency = Param.Cycles(
+        4,
+        "Extra cycles after MB lock response before lock is considered acquired",
+    )
     safeStlfLoadsBypassMBDrain = Param.Bool(
         True,
         "Allow STLF loads at ROB head to bypass MB version stall",

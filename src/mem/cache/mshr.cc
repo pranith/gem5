@@ -471,7 +471,7 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
     // Start by determining if we will eventually respond or not,
     // matching the conditions checked in Cache::handleSnoop
     const bool will_respond = isPendingModified() && pkt->needsResponse() &&
-        !pkt->isClean();
+        !pkt->isClean() && !pkt->cacheResponding();
     if (isPendingModified() || pkt->isInvalidate()) {
         // We need to save and replay the packet in two cases:
         // 1. We're awaiting a writable copy (Modified or Exclusive),

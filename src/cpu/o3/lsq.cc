@@ -512,6 +512,10 @@ LSQ::recvTimingResp(PacketPtr pkt)
                    dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
                        pkt->senderState)) {
         return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_zf_state =
+                   dynamic_cast<LSQUnit::MergeBufferZFLineLockSenderState *>(
+                       pkt->senderState)) {
+        return mb_zf_state->lsqUnit->recvTimingResp(pkt);
     }
 
     LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);
@@ -775,6 +779,18 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+bool
+LSQ::hasStoreToLine(Addr line_addr)
+{
+    for (ThreadID tid : *activeThreads) {
+        if (thread.at(tid)->hasStoreToLine(line_addr)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void
 LSQ::forceMBDrain(ThreadID tid, uint64_t version)
 {
@@ -810,6 +826,19 @@ LSQ::loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
                             InstSeqNum load_seq)
 {
     return thread.at(tid)->loadBlockedByReleaseSQ(load_version, load_seq);
+}
+
+bool
+LSQ::canRelaxFenceRetire(ThreadID tid, uint64_t version, InstSeqNum fence_seq)
+{
+    return thread.at(tid)->canRelaxFenceRetire(version, fence_seq);
+}
+
+bool
+LSQ::canRelaxUnsafeLoadRetire(ThreadID tid, uint64_t load_version,
+                              InstSeqNum load_seq)
+{
+    return thread.at(tid)->canRelaxUnsafeLoadRetire(load_version, load_seq);
 }
 
 int

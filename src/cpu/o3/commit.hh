@@ -490,6 +490,12 @@ class Commit
         statistics::Scalar commitBarrierStallCycles;
         /** Cycles barrier commit stalled waiting for SQ/MB to drain. */
         statistics::Scalar commitBarrierDrainStallCycles;
+        /** Drain-stall cycles where ROB-head instruction is a fence/barrier. */
+        statistics::Scalar commitFenceDrainStallCycles;
+        /** Drain-stall cycles where ROB-head instruction is non-fence non-spec. */
+        statistics::Scalar commitNonFenceDrainStallCycles;
+        /** Times zFence allowed non-fence non-spec ROB head to bypass drain. */
+        statistics::Scalar commitNonFenceDrainBypassedZFence;
         /** Times a barrier is at ROB head but not executed yet. */
         statistics::Scalar barrierHeadNotExecuted;
         /** Loads stalled by MB versioning with matching STLF version. */

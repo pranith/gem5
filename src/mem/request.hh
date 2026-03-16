@@ -194,6 +194,8 @@ class Request : public Extensible<Request>
         INVALIDATE                  = 0x0000000100000000,
         /** The request cleans a memory location */
         CLEAN                       = 0x0000000200000000,
+        /** Keep a zFence line lock for this store request lifetime. */
+        ZFENCE_LOCK_LINE            = 0x0000000400000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -1044,6 +1046,7 @@ class Request : public Extensible<Request>
     bool isSecure() const { return _flags.isSet(SECURE); }
     bool isPTWalk() const { return _flags.isSet(PT_WALK); }
     bool isRelease() const { return _flags.isSet(RELEASE); }
+    bool isZFenceLockLine() const { return _flags.isSet(ZFENCE_LOCK_LINE); }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }
     bool isAtomicNoReturn() const { return _flags.isSet(ATOMIC_NO_RETURN_OP); }
