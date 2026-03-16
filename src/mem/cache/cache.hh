@@ -46,13 +46,17 @@
 #ifndef __MEM_CACHE_CACHE_HH__
 #define __MEM_CACHE_CACHE_HH__
 
+#include <deque>
 #include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "base/compiler.hh"
 #include "base/types.hh"
 #include "mem/cache/base.hh"
 #include "mem/packet.hh"
+#include "sim/eventq.hh"
 
 namespace gem5
 {
@@ -78,6 +82,32 @@ class Cache : public BaseCache
      * generated and which ones were merely forwarded.
      */
     std::unordered_set<RequestPtr> outstandingSnoop;
+
+    /**
+     * zFence: invalidating snoops that arrived while a line lock was held.
+     * Keyed by block address (+ secure bit in key LSB).
+     */
+    std::unordered_map<uint64_t,
+        std::deque<std::pair<PacketPtr, bool>>> zfDeferredInvSnoops;
+    std::unordered_map<const Packet*, bool> zfDeferredInvReplayCanRespond;
+
+    /**
+     * Queue an invalidating snoop for replay once zFence line lock drains.
+     */
+    void enqueueZFDeferredInvSnoop(const PacketPtr pkt, bool can_respond);
+
+    /**
+     * Replay queued invalidating snoops for an unlocked zFence line.
+     */
+    void drainZFDeferredInvSnoops(Addr blk_addr, bool is_secure);
+
+    /** Schedule deferred invalidating snoop replay. */
+    void scheduleZFDeferredInvReplay();
+
+    /** Replay callback run outside transient MSHR service context. */
+    void processZFDeferredInvSnoops();
+
+    EventFunctionWrapper zfDeferredInvReplayEvent;
 
   protected:
     /**
@@ -135,7 +165,8 @@ class Cache : public BaseCache
      * @return The snoop delay incurred by the upwards snoop
      */
     uint32_t handleSnoop(PacketPtr pkt, CacheBlk *blk,
-                         bool is_timing, bool is_deferred, bool pending_inval);
+                         bool is_timing, bool is_deferred,
+                         bool pending_inval, bool allow_respond = true);
 
     [[nodiscard]] PacketPtr evictBlock(CacheBlk *blk) override;
 

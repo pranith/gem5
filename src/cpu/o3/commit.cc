@@ -184,6 +184,12 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
                "was at the head"),
       ADD_STAT(commitBarrierDrainStallCycles, statistics::units::Count::get(),
                "Cycles barrier commit waited for SQ/MB to drain"),
+      ADD_STAT(commitFenceDrainStallCycles, statistics::units::Count::get(),
+               "Cycles commit waited for SQ/MB drain with fence/barrier at ROB head"),
+      ADD_STAT(commitNonFenceDrainStallCycles, statistics::units::Count::get(),
+               "Cycles commit waited for SQ/MB drain with non-fence non-spec at ROB head"),
+      ADD_STAT(commitNonFenceDrainBypassedZFence, statistics::units::Count::get(),
+               "Times zFence allowed non-fence non-spec ROB head to bypass drain"),
       ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
                "Times a barrier is at ROB head but not executed"),
       ADD_STAT(
@@ -1209,6 +1215,29 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 tid, head_inst->seqNum, head_inst->pcState());
 
         bool need_store_drain = iewStage->hasStoresToWB(tid);
+        bool relaxed_store_drain = false;
+        const bool fence_like =
+            head_inst->isFullMemBarrier() ||
+            head_inst->isReadBarrier() || head_inst->isWriteBarrier();
+        if (need_store_drain && fence_like &&
+            iewStage->canRelaxFenceRetire(
+                tid, head_inst->getMemOrderVersion() + 1,
+                head_inst->seqNum)) {
+            need_store_drain = false;
+            relaxed_store_drain = true;
+        }
+        const bool relaxable_nonspec_noop =
+            !fence_like && head_inst->isNonSpeculative() &&
+            !head_inst->isSyscall() &&
+            head_inst->opClass() == enums::No_OpClass;
+        if (need_store_drain && relaxable_nonspec_noop &&
+            iewStage->canRelaxFenceRetire(
+                tid, head_inst->getMemOrderVersion() + 1,
+                head_inst->seqNum)) {
+            need_store_drain = false;
+            relaxed_store_drain = true;
+            ++stats.commitNonFenceDrainBypassedZFence;
+        }
 
         // AcquirePC can bypass store drain. Acquire RC needs to wait for
         // possible store release in the MB to drain.
@@ -1222,11 +1251,22 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             ++stats.barrierHeadNotExecuted;
             iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
         }
+        if (relaxed_store_drain && !cpu->versioningEnabled()) {
+            // zFence can let the head instruction retire before the merge
+            // buffer fully drains, but the older MB entries still need to be
+            // pushed out promptly to preserve forward progress.
+            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
+        }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
             // Drain the merge buffer to reduce stall when versioning is off.
             if (need_store_drain) {
                 ++stats.commitBarrierDrainStallCycles;
+                if (fence_like) {
+                    ++stats.commitFenceDrainStallCycles;
+                } else {
+                    ++stats.commitNonFenceDrainStallCycles;
+                }
                 ++stats.mbHeadDrainStallCycles;
                 DPRINTF(Commit,
                         "[tid:%i] [sn:%llu] "
@@ -1321,6 +1361,11 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 if ((safeStlfLoadsBypassMBDrain && stlf_safe) ||
                     (safeCacheLoadsBypassMBDrain && cache_safe)) {
                     stats.mbVersionLoadStallBypassedStlf++;
+                } else if (iewStage->canRelaxUnsafeLoadRetire(
+                               tid, head_inst->getMemOrderVersion(),
+                               head_inst->seqNum)) {
+                    // zFence relaxed-retire path: older stores are
+                    // permReady and protected by line locks.
                 } else {
                     stats.mbVersionLoadStallCycles++;
                     stats.mbHeadDrainStallCycles++;

@@ -201,6 +201,7 @@ def create(args):
                 cpu.optimizeStoreRelease = enable_store_release_opt
                 cpu.optimizeAcquirePC = enable_acquire_pc_opt
 
+
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts

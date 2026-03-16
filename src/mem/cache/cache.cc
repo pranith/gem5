@@ -69,10 +69,127 @@ namespace gem5
 
 Cache::Cache(const CacheParams &p)
     : BaseCache(p, p.system->cacheLineSize()),
-      doFastWrites(true)
+      doFastWrites(true),
+      zfDeferredInvReplayEvent(
+          [this]{ processZFDeferredInvSnoops(); },
+          name() + ".zf_deferred_inv_replay")
 {
     assert(p.tags);
     assert(p.replacement_policy);
+}
+
+void
+Cache::enqueueZFDeferredInvSnoop(const PacketPtr pkt, bool can_respond)
+{
+    assert(pkt);
+    assert(pkt->req);
+
+    const Addr blk_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const uint64_t key = zfenceLockKey(blk_addr, is_secure);
+
+    auto &queue = zfDeferredInvSnoops[key];
+    for (auto &queued_entry : queue) {
+        PacketPtr queued_pkt = queued_entry.first;
+        if (queued_pkt && queued_pkt->req == pkt->req) {
+            if (can_respond && !queued_entry.second) {
+                queued_entry.second = true;
+                DPRINTF(Cache,
+                        "%s: upgraded zFence-deferred invalidating snoop to "
+                        "responding for block %#llx (%s), depth=%u, pkt=%s\n",
+                        __func__, blk_addr, is_secure ? "s" : "ns",
+                        static_cast<unsigned>(queue.size()), pkt->print());
+                return;
+            }
+            DPRINTF(Cache,
+                    "%s: deduped zFence-deferred invalidating snoop for "
+                    "block %#llx (%s), depth=%u, pkt=%s\n",
+                    __func__, blk_addr, is_secure ? "s" : "ns",
+                    static_cast<unsigned>(queue.size()), pkt->print());
+            return;
+        }
+    }
+
+    PacketPtr cp_pkt = new Packet(pkt, true, true);
+    cp_pkt->headerDelay = 0;
+    cp_pkt->payloadDelay = 0;
+    queue.push_back(std::make_pair(cp_pkt, can_respond));
+
+    DPRINTF(Cache,
+            "%s: queued zFence-deferred invalidating snoop for block %#llx "
+            "(%s), depth=%u, canRespond=%u, pkt=%s\n",
+            __func__, blk_addr, is_secure ? "s" : "ns",
+            static_cast<unsigned>(queue.size()), can_respond ? 1 : 0,
+            pkt->print());
+}
+
+void
+Cache::drainZFDeferredInvSnoops(Addr blk_addr, bool is_secure)
+{
+    const uint64_t key = zfenceLockKey(blk_addr, is_secure);
+    auto map_it = zfDeferredInvSnoops.find(key);
+    if (map_it != zfDeferredInvSnoops.end() && !map_it->second.empty()) {
+        scheduleZFDeferredInvReplay();
+    }
+}
+
+void
+Cache::scheduleZFDeferredInvReplay()
+{
+    if (!zfDeferredInvReplayEvent.scheduled()) {
+        schedule(zfDeferredInvReplayEvent, curTick() + 1);
+    }
+}
+
+void
+Cache::processZFDeferredInvSnoops()
+{
+    for (auto it = zfDeferredInvSnoops.begin();
+         it != zfDeferredInvSnoops.end(); ) {
+        const uint64_t key = it->first;
+        const Addr blk_addr = key & ~1ULL;
+        const bool is_secure = key & 1ULL;
+
+        if (isZFLineLocked(blk_addr, is_secure)) {
+            ++it;
+            continue;
+        }
+
+        auto queue = std::move(it->second);
+        it = zfDeferredInvSnoops.erase(it);
+        std::unordered_set<RequestPtr> replayed_reqs;
+
+        while (!queue.empty()) {
+            auto deferred_entry = queue.front();
+            queue.pop_front();
+            PacketPtr deferred_pkt = deferred_entry.first;
+            bool can_respond = deferred_entry.second;
+
+            if (deferred_pkt && deferred_pkt->req &&
+                replayed_reqs.find(deferred_pkt->req) != replayed_reqs.end()) {
+                DPRINTF(Cache,
+                        "%s: skipping duplicate replay for zFence-deferred "
+                        "invalidating snoop on block %#llx (%s), pkt=%s\n",
+                        __func__, blk_addr, is_secure ? "s" : "ns",
+                        deferred_pkt->print());
+                delete deferred_pkt;
+                continue;
+            }
+
+            DPRINTF(Cache,
+                    "%s: replaying zFence-deferred invalidating snoop for "
+                    "block %#llx (%s), canRespond=%u, pkt=%s\n",
+                    __func__, blk_addr, is_secure ? "s" : "ns",
+                    can_respond ? 1 : 0, deferred_pkt->print());
+
+            if (deferred_pkt && deferred_pkt->req) {
+                replayed_reqs.insert(deferred_pkt->req);
+            }
+            zfDeferredInvReplayCanRespond[deferred_pkt] = can_respond;
+            recvTimingSnoopReq(deferred_pkt);
+        }
+    }
+
 }
 
 void
@@ -905,6 +1022,9 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             // Reset the bus additional time as it is now accounted for
             tgt_pkt->headerDelay = tgt_pkt->payloadDelay = 0;
             cpuSidePort.schedTimingResp(tgt_pkt, completion_time);
+            releaseZFLineLock(tgt_pkt, blk);
+            drainZFDeferredInvSnoops(tgt_pkt->getBlockAddr(blkSize),
+                                     tgt_pkt->isSecure());
             break;
 
           case MSHR::Target::FromPrefetcher:
@@ -1045,7 +1165,7 @@ Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
 
 uint32_t
 Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
-                   bool is_deferred, bool pending_inval)
+                   bool is_deferred, bool pending_inval, bool allow_respond)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
     // deferred snoops can only happen in timing mode
@@ -1165,7 +1285,9 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // invalidation itself is taken care of below. We don't respond to
         // cache maintenance operations as this is done by the destination
         // xbar.
-        respond = blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse();
+        respond = allow_respond &&
+                  blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse() &&
+                  !pkt->cacheResponding();
 
         gem5_assert(!(isReadOnly && blk->isSet(CacheBlk::DirtyBit)),
             "Should never have a dirty block in a read-only cache %s\n",
@@ -1203,12 +1325,16 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // prevent anyone else from responding, cache as well as
         // memory, and also prevent any memory from even seeing the
         // request
-        pkt->setCacheResponding();
+        if (!pkt->cacheResponding()) {
+            pkt->setCacheResponding();
+        }
         if (!pkt->isClean() && blk->isSet(CacheBlk::WritableBit)) {
             // inform the cache hierarchy that this cache had the line
             // in the Modified state so that we avoid unnecessary
             // invalidations (see Packet::setResponderHadWritable)
-            pkt->setResponderHadWritable();
+            if (!pkt->responderHadWritable()) {
+                pkt->setResponderHadWritable();
+            }
 
             // in the case of an uncacheable request there is no point
             // in setting the responderHadWritable flag, but since the
@@ -1227,7 +1353,13 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
                  "but keeping the block", name(), pkt->print());
 
         if (is_timing) {
-            doTimingSupplyResponse(pkt, blk->data, is_deferred, pending_inval);
+            // Deferred snoops may carry a copied packet without data storage
+            // (e.g., when the original MSHR path did not elect a responder).
+            // Reuse the deferred packet only if it is safe to do so.
+            const bool can_reuse_deferred_pkt =
+                is_deferred && (!pkt->isRead() || pkt->hasData());
+            doTimingSupplyResponse(pkt, blk->data, can_reuse_deferred_pkt,
+                                   pending_inval);
         } else {
             pkt->makeAtomicResponse();
             // packets such as upgrades do not actually have any data
@@ -1264,6 +1396,13 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
 
+    bool zf_replay_can_respond = true;
+    auto replay_it = zfDeferredInvReplayCanRespond.find(pkt);
+    if (replay_it != zfDeferredInvReplayCanRespond.end()) {
+        zf_replay_can_respond = replay_it->second;
+        zfDeferredInvReplayCanRespond.erase(replay_it);
+    }
+
     // no need to snoop requests that are not in range
     if (!inRange(pkt->getAddr())) {
         return;
@@ -1274,6 +1413,40 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 
     Addr blk_addr = pkt->getBlockAddr(blkSize);
     MSHR *mshr = mshrQueue.findMatch(blk_addr, is_secure);
+
+    if (pkt->isInvalidate() && isZFLineLocked(blk_addr, is_secure) &&
+        !mshr) {
+        // If we would have eventually responded to this snoop, mark the
+        // response intent now so the xbar records routing/outstanding state
+        // for the later deferred snoop response.
+        const bool blk_will_respond = blk && blk->isValid() &&
+            blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse() &&
+            !pkt->isClean();
+        const bool mshr_will_respond = mshr && mshr->inService &&
+            mshr->isPendingModified() &&
+            pkt->needsResponse() && !pkt->isClean();
+
+        bool elected_responder = blk_will_respond || mshr_will_respond;
+        if (elected_responder) {
+            if (!pkt->cacheResponding()) {
+                pkt->setCacheResponding();
+                if (blk && blk->isValid() &&
+                    blk->isSet(CacheBlk::WritableBit)) {
+                    pkt->setResponderHadWritable();
+                }
+            } else {
+                elected_responder = false;
+            }
+        }
+
+        enqueueZFDeferredInvSnoop(pkt, elected_responder);
+        DPRINTF(Cache,
+                "%s: deferring invalidating snoop on zFence-locked block "
+                "%#llx (%s) before MSHR snoop handling for %s\n",
+                __func__, blk_addr, is_secure ? "s" : "ns", pkt->print());
+        pkt->setBlockCached();
+        return;
+    }
 
     // Update the latency cost of the snoop so that the crossbar can
     // account for it. Do not overwrite what other neighbouring caches
@@ -1346,7 +1519,7 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
             wb_pkt->setHasSharers();
         }
 
-        if (respond) {
+        if (respond && !pkt->cacheResponding()) {
             pkt->setCacheResponding();
 
             if (have_writable) {
@@ -1370,7 +1543,8 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
     // We could be more selective and return here if the
     // request is non-exclusive or if the writeback is
     // exclusive.
-    uint32_t snoop_delay = handleSnoop(pkt, blk, true, false, false);
+    uint32_t snoop_delay =
+        handleSnoop(pkt, blk, true, false, false, zf_replay_can_respond);
 
     // Override what we did when we first saw the snoop, as we now
     // also have the cost of the upwards snoops to account for
@@ -1387,7 +1561,8 @@ Cache::recvAtomicSnoop(PacketPtr pkt)
     }
 
     CacheBlk *blk = tags->findBlock({pkt->getAddr(), pkt->isSecure()});
-    uint32_t snoop_delay = handleSnoop(pkt, blk, false, false, false);
+    uint32_t snoop_delay =
+        handleSnoop(pkt, blk, false, false, false, true);
     return snoop_delay + lookupLatency * clockPeriod();
 }
 

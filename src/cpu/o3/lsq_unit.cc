@@ -127,6 +127,35 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         delete pf_state;
         delete pkt;
         return true;
+    } else if (auto *zf_state = dynamic_cast<MergeBufferZFLineLockSenderState *>(
+                   pkt->senderState)) {
+        if (zf_state->entry &&
+            zf_state->entry->version == zf_state->expectedVersion &&
+            zf_state->entry->blockAddr == zf_state->expectedBlockAddr) {
+            auto *entry = zf_state->entry;
+            if (entry->zfLockReqInFlight) {
+                entry->zfLockReqInFlight = false;
+            }
+            if (!entry->zfLockAcquired &&
+                entry->zfLockReadyCycle == Cycles(0)) {
+                entry->zfLockReadyCycle =
+                    cpu->curCycle() + zfenceMbLockAcquireLatency;
+                if (zfenceMbLockAcquireLatency == Cycles(0)) {
+                    if (!entry->zfPermReady) {
+                        entry->zfPermReady = true;
+                        ++stats.numPermReadySet;
+                    }
+                    entry->zfLockAcquired = true;
+                    entry->zfEligibleForRelaxedRetire =
+                        zfenceRelaxRetire && entry->zfPermReady &&
+                        entry->zfLineAddrValid;
+                    entry->zfLockReqInFlight = false;
+                }
+            }
+        }
+        delete zf_state;
+        delete pkt;
+        return true;
     } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
                    pkt->senderState)) {
         if (mb_state->entry && mb_state->entry->isAtomic) {
@@ -228,7 +257,12 @@ LSQUnit::mergeBufferPrefetch(MergeBuffer::MergeBufferEntry *entry)
     pf_pkt->allocate();
     pf_pkt->senderState = new MergeBufferPrefetchSenderState(this);
 
-    if (trySendPacket(false, pf_pkt)) {
+    // Merge-buffer prefetches are opportunistic. If the cache port is
+    // backpressured, drop them instead of marking the LSQ cache-blocked and
+    // stalling real store / MB drain traffic behind a best-effort request.
+    if (!lsq->cacheBlocked() && lsq->cachePortAvailable(false) &&
+        dcachePort->sendTimingReq(pf_pkt)) {
+        lsq->cachePortBusy(false);
         ++mergeBufferPfInFlight;
     } else {
         delete static_cast<MergeBufferPrefetchSenderState *>(
@@ -380,6 +414,10 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
     optimizeStoreRelease = params.optimizeStoreRelease;
     optimizeAcquirePC = params.optimizeAcquirePC;
+    zfenceEnable = params.zfenceEnable;
+    zfenceRelaxRetire = params.zfenceRelaxRetire;
+    zfenceLockLines = params.zfenceLockLines;
+    zfenceMbLockAcquireLatency = params.zfenceMbLockAcquireLatency;
     cacheOrderingTagMap.setCapacity(params.cacheOrderingTagEntries);
 
     storeDeallocateWidth = params.storeDeallocateWidth;
@@ -541,7 +579,19 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(mbReleaseMaxOutstanding, statistics::units::Count::get(),
                "Max release MB entries outstanding"),
       ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
-               "Instructions rescheduled/replayed due to barrier in LSQ")
+               "Instructions rescheduled/replayed due to barrier in LSQ"),
+      ADD_STAT(numPermReadySet, statistics::units::Count::get(),
+               "Store queue entries marked with early permission"),
+      ADD_STAT(numFenceWaitCyclesSaved, statistics::units::Count::get(),
+               "Cycles saved by fence relaxed-retirement"),
+      ADD_STAT(numUnsafeLoadWaitCyclesSaved, statistics::units::Count::get(),
+               "Cycles saved by unsafe-load relaxed-retirement"),
+      ADD_STAT(numLockConflicts, statistics::units::Count::get(),
+               "Lock conflicts causing fallback in zFence flow"),
+      ADD_STAT(numDeferredSnoops, statistics::units::Count::get(),
+               "Deferred snoops observed for zFence-locked lines"),
+      ADD_STAT(numFallbacks, statistics::units::Count::get(),
+               "Fallbacks to baseline ordering behavior for zFence")
 {
     loadToUse
         .init(0, 299, 10)
@@ -747,12 +797,34 @@ LSQUnit::checkSnoop(PacketPtr pkt)
         cpu->thread[x]->noSquashFromTC = no_squash;
     }
 
+    Addr invalidate_addr = pkt->getAddr() & cacheBlockMask;
+    if (zfenceEnable && zfenceRelaxRetire) {
+        unsigned zf_conflicts = 0;
+        for (auto &sq_entry : storeQueue) {
+            if (!sq_entry.valid() || sq_entry.completed() ||
+                !sq_entry.zfLineAddrValid() ||
+                sq_entry.zfLineAddr() != invalidate_addr) {
+                continue;
+            }
+            if (sq_entry.eligibleForRelaxedRetire()) {
+                sq_entry.eligibleForRelaxedRetire() = false;
+                sq_entry.lockAcquired() = false;
+                ++zf_conflicts;
+            }
+        }
+        if (mergeBufferEnabled) {
+            zf_conflicts += mergeBuffer.invalidateZFLine(invalidate_addr);
+        }
+        stats.numLockConflicts += zf_conflicts;
+        stats.numDeferredSnoops += zf_conflicts;
+        stats.numFallbacks += zf_conflicts;
+    }
+
     if (loadQueue.empty())
         return;
 
     auto iter = loadQueue.begin();
 
-    Addr invalidate_addr = pkt->getAddr() & cacheBlockMask;
     noteCacheEvict(invalidate_addr);
     DynInstPtr ld_inst = iter->instruction();
     assert(ld_inst);
@@ -1579,6 +1651,12 @@ LSQUnit::writebackStores()
             }
 
             request->buildPackets();
+            if (zfenceEnable && zfenceLockLines &&
+                !request->mainReq()->isLLSC() &&
+                !request->mainReq()->isAtomic() &&
+                !request->mainReq()->isLocalAccess()) {
+                markRequestZFLineLock(request);
+            }
 
             DPRINTF(LSQUnit,
                     "D-Cache: Writing back store idx:%i PC:%s "
@@ -1838,6 +1916,19 @@ LSQUnit::storePostSend()
         }
     }
 
+    if (zfenceEnable && zfenceLockLines && storeWBIt->hasRequest()) {
+        RequestPtr req = storeWBIt->request()->mainReq();
+        if (req && req->isZFenceLockLine()) {
+            storeWBIt->lockAcquired() = true;
+            storeWBIt->eligibleForRelaxedRetire() =
+                zfenceRelaxRetire && storeWBIt->permReady() &&
+                storeWBIt->zfLineAddrValid();
+        } else {
+            storeWBIt->lockAcquired() = false;
+            storeWBIt->eligibleForRelaxedRetire() = false;
+        }
+    }
+
     if (needsTSO) {
         storeInFlight = true;
     }
@@ -1916,6 +2007,8 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
     assert(!store_idx->completed());
 
     store_idx->completed() = true;
+    store_idx->lockAcquired() = false;
+    store_idx->eligibleForRelaxedRetire() = false;
     --storesToWB;
     // A bit conservative because a store completion may not free up entries,
     // but hopefully avoids two store completions in one cycle from making
@@ -2643,6 +2736,15 @@ LSQUnit::write(LSQRequest *request, uint8_t *data, ssize_t store_idx)
         request->mainReq()->getFlags() & Request::STORE_NO_DATA;
     storeQueue[store_idx].isAllZeros() = store_no_data;
     assert(size <= SQEntry::DataSize || store_no_data);
+    storeQueue[store_idx].eligibleForRelaxedRetire() = false;
+    if (zfenceEnable) {
+        auto req = request->mainReq();
+        if (!request->isSplit() && req && req->hasPaddr()) {
+            storeQueue[store_idx].zfLineAddr() =
+                req->getPaddr() & cacheBlockMask;
+            storeQueue[store_idx].zfLineAddrValid() = true;
+        }
+    }
 
     // copy data into the storeQueue only if the store request has valid data
     if (!(request->req()->getFlags() & Request::CACHE_BLOCK_ZERO) &&
@@ -2780,6 +2882,13 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 store_it->instruction()->seqNum < entry.seqNum) {
                 entry.seqNum = store_it->instruction()->seqNum;
             }
+            if (lsqPtr && lsqPtr->zfenceEnable) {
+                entry.zfLineAddr = lineAddr;
+                entry.zfLineAddrValid = true;
+                if (!entry.zfLockAcquired) {
+                    entry.zfLockReqPending = true;
+                }
+            }
 
             if (!entry.baseReq) {
                 entry.baseReq = std::make_shared<Request>(
@@ -2809,6 +2918,12 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             newEntry.retireCycle = now + retireWindow;
             newEntry.baseReq =
                 std::make_shared<Request>(*(store_it->request()->mainReq()));
+            if (lsqPtr && lsqPtr->zfenceEnable) {
+                newEntry.zfPermReady = false;
+                newEntry.zfLineAddrValid = true;
+                newEntry.zfLineAddr = lineAddr;
+                newEntry.zfLockReqPending = true;
+            }
             updateEntry(newEntry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
 
@@ -2834,6 +2949,7 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     "Allocating a new MB entry for Addr:%#x ver:%llu "
                     "retiring in %lu, now: %lu\n",
                     lineAddr, version, now + retireWindow, now);
+            requestZFLineLock(entries[free_idx]);
         }
 
         currAddr += chunk;
@@ -3129,6 +3245,18 @@ LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size,
     return false;
 }
 
+bool
+LSQUnit::MergeBuffer::hasEntryForLine(Addr line_addr) const
+{
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (entryValid[idx] && entries[idx].blockAddr == line_addr) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void
 LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
 {
@@ -3137,6 +3265,19 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
             continue;
         }
         auto &entry = entries[idx];
+        if (lsqPtr && entry.zfLockReadyCycle != Cycles(0) &&
+            !entry.zfLockAcquired && now >= entry.zfLockReadyCycle) {
+            if (!entry.zfPermReady) {
+                entry.zfPermReady = true;
+                ++lsqPtr->stats.numPermReadySet;
+            }
+            entry.zfLockAcquired = true;
+            entry.zfEligibleForRelaxedRetire =
+                lsqPtr->zfenceRelaxRetire && entry.zfPermReady &&
+                entry.zfLineAddrValid;
+            entry.zfLockReqInFlight = false;
+            entry.zfLockReadyCycle = Cycles(0);
+        }
         if (entry.state == EntryState::MERGING) {
 
             bool all_valid =
@@ -3151,8 +3292,73 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
                 }
             }
         }
+        requestZFLineLock(entry);
     }
 
+}
+
+void
+LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
+{
+    const size_t idx = indexOf(&entry);
+    const bool retired_for_lock =
+        entry.state == EntryState::RETIRED ||
+        entry.state == EntryState::FORCE_RETIRED;
+    if (!lsqPtr || !lsqPtr->zfenceEnable || !lsqPtr->zfenceLockLines) {
+        return;
+    }
+    if (idx >= entries.size() || !entryValid[idx] || entry.isAtomic ||
+        !entry.baseReq || !retired_for_lock ||
+        !entry.zfLineAddrValid || entry.zfLockAcquired ||
+        entry.zfLockReqInFlight || !entry.zfLockReqPending) {
+        return;
+    }
+    if (lsqPtr->cpu->versioningEnabled() && !versionCounts.empty() &&
+        entry.version != versionCounts.front().version) {
+        DPRINTF(LSQUnit,
+                "Deferring zFence MB line-lock request block:%#x ver:%llu "
+                "(head version ver:%llu)\n",
+                entry.blockAddr, entry.version,
+                versionCounts.front().version);
+        return;
+    }
+
+    Request::Flags flags = entry.baseReq->getFlags();
+    RequestorID rid = entry.baseReq->requestorId();
+    RequestPtr lock_req =
+        std::make_shared<Request>(entry.blockAddr, lineSize, flags, rid);
+    lock_req->setFlags(Request::ZFENCE_LOCK_LINE);
+
+    if (entry.baseReq->hasContextId()) {
+        lock_req->setContext(entry.baseReq->contextId());
+    }
+    if (entry.baseReq->hasPC()) {
+        lock_req->setPC(entry.baseReq->getPC());
+    }
+    lock_req->taskId(entry.baseReq->taskId());
+    lock_req->setByteEnable(std::vector<bool>(lineSize, false));
+
+    PacketPtr pkt = Packet::createWrite(lock_req);
+    uint8_t *buf = new uint8_t[lineSize];
+    std::memset(buf, 0, lineSize);
+    pkt->dataDynamic(buf);
+    pkt->senderState = new MergeBufferZFLineLockSenderState(
+        &entry, lsqPtr, entry.version, entry.blockAddr);
+
+    if (!lsqPtr->trySendPacket(false, pkt)) {
+        if (auto *zf_state = dynamic_cast<MergeBufferZFLineLockSenderState *>(
+                pkt->senderState)) {
+            delete zf_state;
+        }
+        delete pkt;
+        return;
+    }
+
+    entry.zfLockReqInFlight = true;
+    entry.zfLockReqPending = false;
+    DPRINTF(LSQUnit,
+            "Issued early zFence MB line-lock request block:%#x ver:%llu\n",
+            entry.blockAddr, entry.version);
 }
 
 void
@@ -3188,6 +3394,11 @@ SQEntry::clear()
 {
     LSQEntry::clear();
     _canWB = _completed = _committed = _isAllZeros = false;
+    _permReady = false;
+    _lockAcquired = false;
+    _eligibleForRelaxedRetire = false;
+    _zfLineAddrValid = false;
+    _zfLineAddr = 0;
 }
 
 LSQUnit::LSQUnit(const LSQUnit &l) : stats(nullptr)
@@ -3262,6 +3473,115 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version)
 }
 
 bool
+LSQUnit::hasStoreToLine(Addr line_addr) const
+{
+    for (const auto &entry : storeQueue) {
+        if (!entry.valid() || entry.completed()) {
+            continue;
+        }
+
+        if (entry.zfLineAddrValid() && entry.zfLineAddr() == line_addr) {
+            return true;
+        }
+
+        auto *request = const_cast<LSQRequest *>(entry.request());
+        if (entry.hasRequest() && request &&
+            request->isCacheBlockHit(line_addr, cacheBlockMask)) {
+            return true;
+        }
+    }
+
+    return mergeBuffer.hasEntryForLine(line_addr);
+}
+
+bool
+LSQUnit::hasUnprotectedStoresToWB(bool *has_protected_mb) const
+{
+    if (has_protected_mb) {
+        *has_protected_mb = false;
+    }
+
+    if (!zfenceEnable || !zfenceRelaxRetire || !zfenceLockLines) {
+        if (has_protected_mb) {
+            *has_protected_mb = !mergeBuffer.isEmpty();
+        }
+        return !mergeBuffer.isEmpty() || (storesToWB > 0);
+    }
+
+    if (storesToWB > 0) {
+        return true;
+    }
+
+    if (!mergeBufferEnabled) {
+        return false;
+    }
+
+    bool has_relevant = false;
+    if (!mergeBuffer.validateAllMBZFLocked(has_relevant)) {
+        if (has_protected_mb) {
+            *has_protected_mb = has_relevant;
+        }
+        return true;
+    }
+
+    if (has_protected_mb) {
+        *has_protected_mb = has_relevant;
+    }
+
+    return false;
+}
+
+bool
+LSQUnit::canRelaxFenceRetire(uint64_t, InstSeqNum)
+{
+    if (!zfenceEnable || !zfenceRelaxRetire || !zfenceLockLines) {
+        return false;
+    }
+
+    bool has_relevant_mb = false;
+    if (hasUnprotectedStoresToWB(&has_relevant_mb)) {
+        ++stats.numFallbacks;
+        return false;
+    }
+
+    if (!mergeBufferEnabled) {
+        return false;
+    }
+    if (!has_relevant_mb) {
+        ++stats.numFallbacks;
+        return false;
+    }
+
+    ++stats.numFenceWaitCyclesSaved;
+    return true;
+}
+
+bool
+LSQUnit::canRelaxUnsafeLoadRetire(uint64_t version, InstSeqNum)
+{
+    if (!zfenceEnable || !zfenceRelaxRetire || !zfenceLockLines) {
+        return false;
+    }
+
+    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+        return false;
+    }
+
+    bool has_relevant_mb = false;
+    if (!mergeBuffer.validateLowerVersionMBZFLocked(version, has_relevant_mb)) {
+        ++stats.numFallbacks;
+        return false;
+    }
+
+    if (!has_relevant_mb) {
+        return false;
+    }
+
+    ++stats.numUnsafeLoadWaitCyclesSaved;
+    return true;
+}
+
+bool
 LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
 {
     size_t release_count = 0;
@@ -3283,6 +3603,109 @@ LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
     }
 
     return false;
+}
+
+unsigned
+LSQUnit::MergeBuffer::invalidateZFLine(Addr line_addr)
+{
+    unsigned conflicts = 0;
+
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        auto &entry = entries[idx];
+        if (!entry.zfLineAddrValid || entry.zfLineAddr != line_addr) {
+            continue;
+        }
+
+        if (entry.zfLockAcquired) {
+            // Once an MB entry has acquired zBit ownership, keep the lock
+            // state intact until the entry drains. Any conflicting snoop for
+            // this line must be tolerated/deferred by the cache hierarchy.
+            DPRINTF(LSQUnit,
+                    "Ignoring zf invalidate for locked MB entry block:%#x "
+                    "ver:%llu (lock held until drain)\n",
+                    entry.blockAddr, entry.version);
+            continue;
+        }
+
+        const bool was_eligible = entry.zfEligibleForRelaxedRetire;
+        if (was_eligible) {
+            ++conflicts;
+        }
+
+        if (entry.zfEligibleForRelaxedRetire || entry.zfLockReqInFlight ||
+            entry.zfLockReadyCycle != Cycles(0)) {
+            entry.zfEligibleForRelaxedRetire = false;
+            entry.zfLockReqInFlight = false;
+            entry.zfLockReadyCycle = Cycles(0);
+            // Keep zfPermReady intact in invalidate path. zBit permission
+            // belongs to the MB entry and is released only when the entry
+            // drains and is invalidated.
+            if (!entry.isAtomic && entry.baseReq &&
+                lsqPtr && lsqPtr->zfenceEnable && lsqPtr->zfenceLockLines) {
+                entry.zfLockReqPending = true;
+            }
+        }
+    }
+
+    return conflicts;
+}
+
+bool
+LSQUnit::MergeBuffer::validateAllMBZFLocked(bool &has_relevant) const
+{
+    has_relevant = false;
+
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        const auto &entry = entries[idx];
+        has_relevant = true;
+        if (entry.isAtomic) {
+            return false;
+        }
+        if (!(entry.zfPermReady && entry.zfLockAcquired &&
+              entry.zfEligibleForRelaxedRetire && entry.zfLineAddrValid &&
+              !entry.zfLockReqPending && !entry.zfLockReqInFlight &&
+              entry.zfLockReadyCycle == Cycles(0))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool
+LSQUnit::MergeBuffer::validateLowerVersionMBZFLocked(
+    uint64_t version, bool &has_relevant) const
+{
+    has_relevant = false;
+
+    for (size_t idx = 0; idx < entries.size(); ++idx) {
+        if (!entryValid[idx]) {
+            continue;
+        }
+        const auto &entry = entries[idx];
+        if (entry.version >= version) {
+            continue;
+        }
+
+        has_relevant = true;
+        if (entry.isAtomic) {
+            return false;
+        }
+        if (!(entry.zfPermReady && entry.zfLockAcquired &&
+              entry.zfEligibleForRelaxedRetire && entry.zfLineAddrValid &&
+              !entry.zfLockReqPending && !entry.zfLockReqInFlight &&
+              entry.zfLockReadyCycle == Cycles(0))) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool
@@ -3316,6 +3739,26 @@ LSQUnit::loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const
     }
 
     return false;
+}
+
+void
+LSQUnit::markRequestZFLineLock(LSQRequest *request) const
+{
+    if (!request) {
+        return;
+    }
+
+    auto mark_one = [](const RequestPtr &r) {
+        if (r && r->hasPaddr()) {
+            r->setFlags(Request::ZFENCE_LOCK_LINE);
+        }
+    };
+
+    mark_one(request->mainReq());
+    if (request->isSplit()) {
+        mark_one(request->req(0));
+        mark_one(request->req(1));
+    }
 }
 
 bool
@@ -3428,7 +3871,6 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     RequestorID rid = base->requestorId();
     RequestPtr merged_req =
         std::make_shared<Request>(entry.blockAddr, lineSize, flags, rid);
-
     std::vector<bool> byte_enable = entry.byteValids;
     bool full_line = std::find(byte_enable.begin(), byte_enable.end(),
                                false) == byte_enable.end();
@@ -3441,6 +3883,9 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     }
     merged_req->taskId(base->taskId());
     merged_req->setByteEnable(byte_enable);
+    if (lsqPtr && lsqPtr->zfenceEnable && lsqPtr->zfenceLockLines) {
+        merged_req->setFlags(Request::ZFENCE_LOCK_LINE);
+    }
 
     PacketPtr pkt = full_line ? new Packet(merged_req, MemCmd::WriteLineReq)
                               : Packet::createWrite(merged_req);
@@ -3466,7 +3911,6 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     if (lsqPtr) {
         lsqPtr->stats.mbDrains++;
     }
-
     if (lsq_ptr->needsTSO) {
         lsq_ptr->storeInFlight = true;
     }
@@ -3512,14 +3956,19 @@ LSQUnit::MergeBuffer::dumpWaitBits() const
         }
 
         DPRINTF(LSQUnit,
-                "MB[%llu] ver:%llu state:%s release:%d waitBits:%s "
-                "alloc:%llu retire:%llu now:%llu\n",
-                (unsigned long long)idx, (unsigned long long)e.version,
-                stateStr(e.state), e.isRelease,
+                "MB[%llu] block:%#x ver:%llu state:%s release:%d waitBits:%s "
+                "alloc:%llu retire:%llu now:%llu zfPerm:%u zfLock:%u "
+                "zfElig:%u zfReqPend:%u zfReqInflight:%u zfReady:%llu\n",
+                (unsigned long long)idx, e.blockAddr,
+                (unsigned long long)e.version, stateStr(e.state), e.isRelease,
                 bits.empty() ? "-" : bits.c_str(),
                 (unsigned long long)e.allocCycle,
                 (unsigned long long)e.retireCycle,
-                (unsigned long long)lsqPtr->cpu->curCycle());
+                (unsigned long long)lsqPtr->cpu->curCycle(),
+                e.zfPermReady ? 1 : 0, e.zfLockAcquired ? 1 : 0,
+                e.zfEligibleForRelaxedRetire ? 1 : 0,
+                e.zfLockReqPending ? 1 : 0, e.zfLockReqInFlight ? 1 : 0,
+                (unsigned long long)e.zfLockReadyCycle);
     }
 }
 
@@ -3571,6 +4020,7 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     }
 
     auto &entry = entries[idx];
+    assert(entry.state == EntryState::DRAINING);
     if (lsqPtr && entryValid[idx]) {
         lsqPtr->stats.mbResidencyCycles +=
             (lsqPtr->cpu->curCycle() - entry.allocCycle);
@@ -3588,10 +4038,20 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     entry.unretireCount = 0;
     entry.blockAddr = 0;
     entry.version = 0;
+    entry.seqNum = 0;
     entry.isRelease = false;
     entry.isAtomic = false;
     entry.atomicReq = nullptr;
     entry.waitBits.clear();
+    // Clear zBit permission only at MB-entry teardown after drain.
+    entry.zfPermReady = false;
+    entry.zfLockAcquired = false;
+    entry.zfEligibleForRelaxedRetire = false;
+    entry.zfLineAddrValid = false;
+    entry.zfLineAddr = 0;
+    entry.zfLockReqPending = false;
+    entry.zfLockReqInFlight = false;
+    entry.zfLockReadyCycle = Cycles(0);
     if (lsqPtr) {
         const size_t valid_entries =
             std::count(entryValid.begin(), entryValid.end(), true);
