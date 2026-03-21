@@ -33,8 +33,8 @@ DebugFlag('FuzzyRepl')
 SimObject('ReplacementPolicies.py', sim_objects=[
     'BaseReplacementPolicy', 'DuelingRP', 'FIFORP', 'SecondChanceRP',
     'LFURP', 'LRURP', 'BIPRP', 'MRURP', 'RandomRP', 'BRRIPRP',
-    'FuzzyDRRIPRP', 'HwFuzzyDRRIPRP', 'SHiPRP', 'SHiPMemRP', 'SHiPPCRP',
-    'TreePLRURP',
+    'FuzzyDRRIPRP', 'HwFuzzyDRRIPRP', 'DynamicFuzzyRP',
+    'SHiPRP', 'SHiPMemRP', 'SHiPPCRP', 'TreePLRURP',
     'WeightedLRURP'])
 
 Source('bip_rp.cc')
@@ -43,6 +43,7 @@ Source('dueling_rp.cc')
 Source('fifo_rp.cc')
 Source('fuzzy_drrip_rp.cc')
 Source('hw_fuzzy_drrip_rp.cc')
+Source('dynamic_fuzzy_rp.cc')
 Source('lfu_rp.cc')
 Source('lru_rp.cc')
 Source('mru_rp.cc')

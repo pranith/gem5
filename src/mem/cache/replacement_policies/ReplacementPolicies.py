@@ -183,11 +183,41 @@ class HwFuzzyDRRIPRP(BRRIPRP):
     use_internal_psel = Param.Bool(
         True, "Enable internal 10-bit PSEL-like adaptation"
     )
+    dynamic_internal_psel = Param.Bool(
+        True, "Dynamically gate internal PSEL when behavior is saturated"
+    )
     fixed_global_state_idx = Param.Int(
         3,
         "Global fuzzy index used when internal PSEL is disabled (0..7)",
     )
     initial_psel = Param.Int(511, "Initial value of the 10-bit PSEL counter")
+    psel_control_epoch_misses = Param.Unsigned(
+        8192, "Misses per control epoch for dynamic internal PSEL"
+    )
+    psel_disable_low_rail = Param.Int(
+        31, "Disable dynamic internal PSEL if psel is at/below this rail"
+    )
+    psel_disable_high_rail = Param.Int(
+        992, "Disable dynamic internal PSEL if psel is at/above this rail"
+    )
+    psel_disable_near_high = Param.Float(
+        0.90, "Disable if near insertion ratio is above this threshold"
+    )
+    psel_disable_near_low = Param.Float(
+        0.10, "Disable if near insertion ratio is below this threshold"
+    )
+    psel_disable_epochs = Param.Unsigned(
+        3, "Consecutive saturated epochs required before disabling internal PSEL"
+    )
+    psel_reenable_cooldown_epochs = Param.Unsigned(
+        5, "Cooldown epochs before probing re-enable of internal PSEL"
+    )
+    psel_reenable_near_low = Param.Float(
+        0.25, "Lower near-ratio bound to re-enable internal PSEL"
+    )
+    psel_reenable_near_high = Param.Float(
+        0.75, "Upper near-ratio bound to re-enable internal PSEL"
+    )
     lfsr_seed = Param.Int(0x1F, "5-bit LFSR seed (0 is remapped to 1)")
     enable_dueling_hot_set_override = Param.Bool(
         True, "Allow this policy to override dueling in hot follower sets"
@@ -254,3 +284,10 @@ class WeightedLRURP(LRURP):
     type = "WeightedLRURP"
     cxx_class = "gem5::replacement_policy::WeightedLRU"
     cxx_header = "mem/cache/replacement_policies/weighted_lru_rp.hh"
+
+class DynamicFuzzyRP(BRRIPRP):
+    type = 'DynamicFuzzyRP'
+    cxx_class = 'gem5::replacement_policy::DynamicFuzzyRP'
+    cxx_header = "mem/cache/replacement_policies/dynamic_fuzzy_rp.hh"
+    
+    update_interval = Param.Tick(250000, "Ticks between dynamic tuning")
