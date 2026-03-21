@@ -130,6 +130,59 @@ class DRRIPRP(DuelingRP):
     replacement_policy_b = RRIPRP()
 
 
+class FuzzyDRRIPRP(BRRIPRP):
+    type = "FuzzyDRRIPRP"
+    cxx_class = "gem5::replacement_policy::FuzzyDRRIPRP"
+    cxx_header = "mem/cache/replacement_policies/fuzzy_drrip_rp.hh"
+    num_bits = 3
+    use_internal_psel = Param.Bool(
+        True, "Enable fuzzy internal global selector updates"
+    )
+    fixed_global_state_idx = Param.Int(
+        3,
+        "LUT row used when internal global selector is disabled (0..7)",
+    )
+    initial_psel = Param.Int(
+        511, "Initial value for fuzzy internal PSEL (0..1023)"
+    )
+
+
+class FuzzyDRRIPDuelingRP(DuelingRP):
+    # Dueling between a local-only fuzzy policy and static RRIP.
+    # Global adaptation is delegated to DuelingRP.
+    replacement_policy_a = FuzzyDRRIPRP(
+        use_internal_psel=False,
+        fixed_global_state_idx=3,
+    )
+    replacement_policy_b = RRIPRP()
+
+
+class HwFuzzyDRRIPRP(BRRIPRP):
+    type = "HwFuzzyDRRIPRP"
+    cxx_class = "gem5::replacement_policy::HwFuzzyDRRIPRP"
+    cxx_header = "mem/cache/replacement_policies/hw_fuzzy_drrip_rp.hh"
+    # 2-bit RRPV -> maxRRPV=3, matching SRRIP (2) vs BRRIP (3) insertion.
+    num_bits = 2
+    use_internal_psel = Param.Bool(
+        True, "Enable internal 10-bit PSEL-like adaptation"
+    )
+    fixed_global_state_idx = Param.Int(
+        3,
+        "Global fuzzy index used when internal PSEL is disabled (0..7)",
+    )
+    initial_psel = Param.Int(511, "Initial value of the 10-bit PSEL counter")
+    lfsr_seed = Param.Int(0x1F, "5-bit LFSR seed (0 is remapped to 1)")
+
+
+class HwFuzzyDRRIPDuelingRP(DuelingRP):
+    # Dueling between hardware-style fuzzy insertion and static RRIP.
+    replacement_policy_a = HwFuzzyDRRIPRP(
+        use_internal_psel=False,
+        fixed_global_state_idx=3,
+    )
+    replacement_policy_b = RRIPRP()
+
+
 class NRURP(BRRIPRP):
     btp = 100
     num_bits = 1

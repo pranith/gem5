@@ -45,12 +45,24 @@ def upgrader(cpt):
         # Search for all ISA sections
         res = re.search(r"(.*processor.*\.core.*)\.xc.*", sec)
         if res and cpt.get(res.groups()[0] + ".isa", "isaName") == "arm":
-            # Updating vector registers to add the LUT
+            # Updating vector registers to add the LUT.
             vec_list = cpt.get(sec, "regs.vector").split()
             vec_list_len = len(vec_list)
             if vec_list_len < 11520:
                 extension = ["0"] * (11520 - vec_list_len)
                 cpt.set(sec, "regs.vector", " ".join(vec_list + extension))
+
+            # regs.vector_element stores each 32-bit element packed into
+            # RegVal-sized chunks (8 bytes), so SME2 LUT adds 64 elems * 8B.
+            vec_elem_list = cpt.get(sec, "regs.vector_element", fallback="").split()
+            vec_elem_list_len = len(vec_elem_list)
+            if vec_elem_list_len < 23040:
+                extension = ["0"] * (23040 - vec_elem_list_len)
+                cpt.set(
+                    sec,
+                    "regs.vector_element",
+                    " ".join(vec_elem_list + extension),
+                )
 
 
 legacy_version = 20
