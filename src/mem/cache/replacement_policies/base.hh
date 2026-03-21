@@ -30,6 +30,7 @@
 #define __MEM_CACHE_REPLACEMENT_POLICIES_BASE_HH__
 
 #include <memory>
+#include <vector>
 
 #include "base/compiler.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
@@ -102,6 +103,17 @@ class Base : public SimObject
      */
     virtual ReplaceableEntry* getVictim(
                            const ReplacementCandidates& candidates) const = 0;
+
+    /**
+     * Optional follower-set override hook for dueling replacement policies.
+     * Returning true requests that this policy should be selected for the
+     * current follower set, regardless of the global dueling winner.
+     */
+    virtual bool shouldOverrideDuelingOnFollowers(
+        const std::vector<std::shared_ptr<ReplacementData>>& candidates) const
+    {
+        return false;
+    }
 
     /**
      * Instantiate a replacement data entry.

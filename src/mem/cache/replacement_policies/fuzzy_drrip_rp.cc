@@ -64,6 +64,9 @@ FuzzyDRRIPRP::FuzzyDRRIPRP(const Params &p)
     psel(std::clamp(p.initial_psel, 0, pselMax)),
     useInternalPsel(p.use_internal_psel),
     fixedGlobalStateIdx(std::clamp(p.fixed_global_state_idx, 0, 7)),
+    enableDuelingHotSetOverride(p.enable_dueling_hot_set_override),
+    duelingHotSetOverrideThreshold(
+        std::clamp(p.dueling_hot_set_override_threshold, 0, 7)),
     fuzzyStats(this, numRRPVBits)
 {
 }
@@ -198,6 +201,23 @@ FuzzyDRRIPRP::getVictim(const ReplacementCandidates& candidates) const
         set, candidates.size(), urgency, localStateIdx(set), globalStateIdx());
 
     return BRRIP::getVictim(candidates);
+}
+
+bool
+FuzzyDRRIPRP::shouldOverrideDuelingOnFollowers(
+    const std::vector<std::shared_ptr<ReplacementData>>& candidates) const
+{
+    if (!enableDuelingHotSetOverride || candidates.empty()) {
+        return false;
+    }
+
+    std::shared_ptr<FuzzyReplData> replData =
+        std::static_pointer_cast<FuzzyReplData>(candidates[0]);
+    if (!replData->hasSet) {
+        return false;
+    }
+
+    return localStateIdx(replData->set) >= duelingHotSetOverrideThreshold;
 }
 
 std::shared_ptr<ReplacementData>

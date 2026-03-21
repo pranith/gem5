@@ -53,6 +53,15 @@ class DuelingRP(BaseReplacementPolicy):
     replacement_policy_b = Param.BaseReplacementPolicy(
         "Sub-replacement policy B"
     )
+    selector_bits = Param.Unsigned(
+        10, "Bits in the dueling selector counter"
+    )
+    low_threshold = Param.Float(
+        0.5, "Lower selector saturation threshold to pick team B"
+    )
+    high_threshold = Param.Float(
+        0.5, "Upper selector saturation threshold to pick team A"
+    )
 
 
 class FIFORP(BaseReplacementPolicy):
@@ -145,16 +154,24 @@ class FuzzyDRRIPRP(BRRIPRP):
     initial_psel = Param.Int(
         511, "Initial value for fuzzy internal PSEL (0..1023)"
     )
+    enable_dueling_hot_set_override = Param.Bool(
+        True, "Allow this policy to override dueling in hot follower sets"
+    )
+    dueling_hot_set_override_threshold = Param.Int(
+        6, "Local fuzzy index threshold [0..7] to force policy selection"
+    )
 
 
 class FuzzyDRRIPDuelingRP(DuelingRP):
-    # Dueling between a local-only fuzzy policy and static RRIP.
-    # Global adaptation is delegated to DuelingRP.
+    # Dueling between adaptive fuzzy insertion and static RRIP.
     replacement_policy_a = FuzzyDRRIPRP(
-        use_internal_psel=False,
-        fixed_global_state_idx=3,
+        use_internal_psel=True,
     )
     replacement_policy_b = RRIPRP()
+    constituency_size = 256
+    team_size = Parent.assoc
+    low_threshold = 0.45
+    high_threshold = 0.55
 
 
 class HwFuzzyDRRIPRP(BRRIPRP):
@@ -172,15 +189,24 @@ class HwFuzzyDRRIPRP(BRRIPRP):
     )
     initial_psel = Param.Int(511, "Initial value of the 10-bit PSEL counter")
     lfsr_seed = Param.Int(0x1F, "5-bit LFSR seed (0 is remapped to 1)")
+    enable_dueling_hot_set_override = Param.Bool(
+        True, "Allow this policy to override dueling in hot follower sets"
+    )
+    dueling_hot_set_override_threshold = Param.Int(
+        6, "Set-heat threshold [0..7] to force policy selection"
+    )
 
 
 class HwFuzzyDRRIPDuelingRP(DuelingRP):
-    # Dueling between hardware-style fuzzy insertion and static RRIP.
+    # Dueling between adaptive hardware-style fuzzy insertion and static RRIP.
     replacement_policy_a = HwFuzzyDRRIPRP(
-        use_internal_psel=False,
-        fixed_global_state_idx=3,
+        use_internal_psel=True,
     )
     replacement_policy_b = RRIPRP()
+    constituency_size = 256
+    team_size = Parent.assoc
+    low_threshold = 0.45
+    high_threshold = 0.55
 
 
 class NRURP(BRRIPRP):

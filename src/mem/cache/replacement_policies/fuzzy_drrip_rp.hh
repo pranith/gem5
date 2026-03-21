@@ -31,6 +31,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 #include "base/statistics.hh"
 #include "mem/cache/replacement_policies/brrip_rp.hh"
@@ -84,6 +85,8 @@ class FuzzyDRRIPRP : public BRRIP
     mutable int psel;
     const bool useInternalPsel;
     const int fixedGlobalStateIdx;
+    const bool enableDuelingHotSetOverride;
+    const int duelingHotSetOverrideThreshold;
 
     static constexpr unsigned urgencyCounterBits = 6;
     static constexpr unsigned urgencyCounterMax =
@@ -107,6 +110,9 @@ class FuzzyDRRIPRP : public BRRIP
         const std::shared_ptr<ReplacementData>& replacement_data) const override;
     ReplaceableEntry* getVictim(
         const ReplacementCandidates& candidates) const override;
+    bool shouldOverrideDuelingOnFollowers(
+        const std::vector<std::shared_ptr<ReplacementData>>& candidates) const
+        override;
     std::shared_ptr<ReplacementData> instantiateEntry() override;
 };
 

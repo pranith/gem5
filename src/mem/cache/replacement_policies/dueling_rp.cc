@@ -40,7 +40,8 @@ namespace replacement_policy
 Dueling::Dueling(const Params &p)
   : Base(p), replPolicyA(p.replacement_policy_a),
     replPolicyB(p.replacement_policy_b),
-    duelingMonitor(p.constituency_size, p.team_size),
+    duelingMonitor(p.constituency_size, p.team_size, p.selector_bits,
+        p.low_threshold, p.high_threshold),
     duelingStats(this)
 {
     fatal_if((replPolicyA == nullptr) || (replPolicyB == nullptr),
@@ -124,13 +125,25 @@ Dueling::getVictim(const ReplacementCandidates& candidates) const
         std::static_pointer_cast<DuelerReplData>(
             candidates[0]->replacementData).get()), team);
 
+    // Allow the selected policy to request follower-set override.
+    std::vector<std::shared_ptr<ReplacementData>> repl_data_a;
+    repl_data_a.reserve(candidates.size());
+    for (const auto& candidate : candidates) {
+        std::shared_ptr<DuelerReplData> dueler_repl_data =
+            std::static_pointer_cast<DuelerReplData>(
+                candidate->replacementData);
+        repl_data_a.push_back(dueler_repl_data->replDataA);
+    }
+    const bool force_team_a = !is_sample &&
+        replPolicyA->shouldOverrideDuelingOnFollowers(repl_data_a);
+
     // All replacement candidates must be set appropriately, so that the
     // proper replacement data is used. A replacement policy X must be used
     // if the candidates are its samples - in which case they must always
     // use X - or if it is not a sample, and X is currently the best RP.
     // This assumes that A's team is "false", and B's team is "true".
     bool team_a;
-    if ((is_sample && !team) || (!is_sample && !winner)) {
+    if (force_team_a || (is_sample && !team) || (!is_sample && !winner)) {
         duelingStats.selectedA++;
         team_a = true;
     } else {
