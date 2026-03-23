@@ -85,9 +85,9 @@ jobs:
             test-dirs-matrix-flattened: ${{ steps.flatten-matrix.outputs.matrix }}
         needs: [get-date, get-testlib-dirs]
         steps:
-            - id: flatten-matrix
+            - name: Flatten matrix into length and testdir pairs
+              id: flatten-matrix
               run: |
-                  echo '${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }}'
                   primary='["quick", "long", "very-long"]'
                   secondary='{
                       "quick": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }},
