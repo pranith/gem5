@@ -88,9 +88,11 @@ jobs:
             - id: flatten-matrix
               run: |
                   echo '${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }}'
-                  primary='["quick"]'
+                  primary='["quick", "long", "very-long"]'
                   secondary='{
-                      "quick": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }}
+                      "quick": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }},
+                      "long": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-long }},
+                      "very-long": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-very-long }}
                   }'
 
                   flat_matrix=$(echo $secondary | jq -c '[
