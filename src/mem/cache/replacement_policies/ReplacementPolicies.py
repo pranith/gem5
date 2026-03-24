@@ -53,9 +53,7 @@ class DuelingRP(BaseReplacementPolicy):
     replacement_policy_b = Param.BaseReplacementPolicy(
         "Sub-replacement policy B"
     )
-    selector_bits = Param.Unsigned(
-        10, "Bits in the dueling selector counter"
-    )
+    selector_bits = Param.Unsigned(10, "Bits in the dueling selector counter")
     low_threshold = Param.Float(
         0.5, "Lower selector saturation threshold to pick team B"
     )
@@ -199,11 +197,40 @@ class FuzzyRLRP(FuzzyDRRIPRP):
     hold_action_init_q = Param.Float(
         0.02, "Initial Q-value bias for holding alpha steady"
     )
-    min_alpha = Param.Float(
-        0.0, "Lower clamp for learned alpha values"
+    min_alpha = Param.Float(0.0, "Lower clamp for learned alpha values")
+    max_alpha = Param.Float(1.0, "Upper clamp for learned alpha values")
+
+
+class HwFuzzyRLRP(FuzzyDRRIPRP):
+    type = "HwFuzzyRLRP"
+    cxx_class = "gem5::replacement_policy::HwFuzzyRLRP"
+    cxx_header = "mem/cache/replacement_policies/hw_fuzzy_rl_rp.hh"
+    q_learning_rate_q8 = Param.Unsigned(
+        51, "Fixed-point Q-learning rate in Q8"
     )
-    max_alpha = Param.Float(
-        1.0, "Upper clamp for learned alpha values"
+    q_discount_q8 = Param.Unsigned(230, "Fixed-point discount factor in Q8")
+    q_epsilon_q5 = Param.Unsigned(1, "Exploration threshold in Q5 (0..31)")
+    alpha_step_q6 = Param.Unsigned(1, "Alpha step size in Q6 (0..63)")
+    reward_window_size = Param.Unsigned(
+        32, "Per-set accesses per reward window"
+    )
+    reward_deadband_q6 = Param.Unsigned(
+        1, "Reward deadband in Q6 hit-rate units"
+    )
+    hold_action_init_q = Param.Int(
+        1, "Initial signed Q-value bias for holding alpha"
+    )
+    lfsr_seed = Param.Int(
+        0x1F, "5-bit LFSR seed used for exploration and hit-upgrade sampling"
+    )
+    reuse_table_entries = Param.Unsigned(
+        1024, "Entries in the sampled reuse predictor"
+    )
+    reuse_tag_bits = Param.Unsigned(
+        12, "Partial tag bits stored per reuse predictor entry"
+    )
+    immediate_reuse_threshold = Param.Unsigned(
+        2, "Reuse score needed to allow immediate insertion"
     )
 
 
@@ -240,7 +267,8 @@ class HwFuzzyDRRIPRP(BRRIPRP):
         0.10, "Disable if near insertion ratio is below this threshold"
     )
     psel_disable_epochs = Param.Unsigned(
-        3, "Consecutive saturated epochs required before disabling internal PSEL"
+        3,
+        "Consecutive saturated epochs required before disabling internal PSEL",
     )
     psel_reenable_cooldown_epochs = Param.Unsigned(
         5, "Cooldown epochs before probing re-enable of internal PSEL"
@@ -318,9 +346,10 @@ class WeightedLRURP(LRURP):
     cxx_class = "gem5::replacement_policy::WeightedLRU"
     cxx_header = "mem/cache/replacement_policies/weighted_lru_rp.hh"
 
+
 class DynamicFuzzyRP(BRRIPRP):
-    type = 'DynamicFuzzyRP'
-    cxx_class = 'gem5::replacement_policy::DynamicFuzzyRP'
+    type = "DynamicFuzzyRP"
+    cxx_class = "gem5::replacement_policy::DynamicFuzzyRP"
     cxx_header = "mem/cache/replacement_policies/dynamic_fuzzy_rp.hh"
-    
+
     update_interval = Param.Tick(250000, "Ticks between dynamic tuning")
