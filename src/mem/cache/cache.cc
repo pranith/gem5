@@ -81,6 +81,14 @@ Cache::satisfyRequest(PacketPtr pkt, CacheBlk *blk,
 {
     BaseCache::satisfyRequest(pkt, blk);
 
+    if (pkt->fromCache() && blk && blk->isValid()) {
+        if (pkt->needsWritable()) {
+            resetInclusive(blk, pkt);
+        } else if (pkt->isRead()) {
+            markInclusive(blk, pkt);
+        }
+    }
+
     if (pkt->isRead()) {
         // determine if this read is from a (coherent) cache or not
         if (pkt->fromCache()) {
@@ -551,6 +559,7 @@ Cache::createMissPacket(PacketPtr cpu_pkt, CacheBlk *blk,
             (force_clean_rsp ? MemCmd::ReadCleanReq : MemCmd::ReadSharedReq);
     }
     PacketPtr pkt = new Packet(cpu_pkt->req, cmd, blkSize);
+    annotatePacket(pkt);
 
     // if there are upstream caches that have already marked the
     // packet as having sharers (not passing writable), pass that info
@@ -986,6 +995,7 @@ Cache::cleanEvictBlk(CacheBlk *blk)
     req->taskId(blk->getTaskId());
 
     PacketPtr pkt = new Packet(req, MemCmd::CleanEvict);
+    annotatePacket(pkt);
     pkt->allocate();
     DPRINTF(Cache, "Create CleanEvict %s\n", pkt->print());
 

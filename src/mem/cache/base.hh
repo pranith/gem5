@@ -97,6 +97,20 @@ class QueueEntry;
 class WriteQueueEntry;
 struct BaseCacheParams;
 
+class CacheTrackingExtension :
+    public Extension<Packet, CacheTrackingExtension>
+{
+  public:
+    explicit CacheTrackingExtension(RequestorID id) : cacheId(id) {}
+
+    std::unique_ptr<ExtensionBase> clone() const override
+    {
+        return std::make_unique<CacheTrackingExtension>(*this);
+    }
+
+    RequestorID cacheId;
+};
+
 /**
  * A basic cache interface. Implements some common functions for speed.
  */
@@ -829,6 +843,21 @@ class BaseCache : public ClockedObject
      */
     void invalidateBlock(CacheBlk *blk);
 
+    /** Attach this cache's tracking ID to a downstream packet. */
+    void annotatePacket(PacketPtr pkt) const;
+
+    /** Extract the sending cache's tracking ID from a packet. */
+    RequestorID getPacketCacheId(const PacketPtr pkt) const;
+
+    /** Track that the sender cache now holds the block. */
+    void markInclusive(CacheBlk *blk, const PacketPtr pkt) const;
+
+    /** Track that the sender cache dropped the block. */
+    void clearInclusive(CacheBlk *blk, const PacketPtr pkt) const;
+
+    /** Reset the block bitmap to a single sender-cache owner. */
+    void resetInclusive(CacheBlk *blk, const PacketPtr pkt) const;
+
     /**
      * Create a writeback request for the given block.
      *
@@ -986,6 +1015,9 @@ class BaseCache : public ClockedObject
   public:
     /** System we are currently operating in. */
     System *system;
+
+    /** Unique requestor ID used to tag packets emitted by this cache. */
+    const RequestorID cacheTrackingId;
 
     struct CacheCmdStats : public statistics::Group
     {

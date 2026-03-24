@@ -161,6 +161,9 @@ CompressedTags::findVictim(const CacheBlk::KeyType& key,
         // Choose replacement victim from replacement candidates
         victim_superblock = static_cast<SuperBlk*>(
             replacementPolicy->getVictim(superblock_entries));
+        if (victim_superblock == nullptr) {
+            return nullptr;
+        }
 
         // The whole superblock must be evicted to make room for the new one
         for (const auto& blk : victim_superblock->blks){

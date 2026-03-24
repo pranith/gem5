@@ -32,6 +32,7 @@
 #include <memory>
 
 #include "base/logging.hh" // For fatal_if
+#include "mem/cache/cache_blk.hh"
 #include "params/BRRIPRP.hh"
 
 namespace gem5
@@ -48,6 +49,16 @@ BRRIP::BRRIP(const Params &p)
 }
 
 void
+BRRIP::syncMetadata(
+    const ReplaceableEntry* entry,
+    const std::shared_ptr<BRRIPReplData>& replacement_data) const
+{
+    const auto* blk = dynamic_cast<const CacheBlk*>(entry);
+    replacement_data->prefetched = blk && blk->wasPrefetched();
+    replacement_data->inclusive = blk && blk->isInclusive();
+}
+
+void
 BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
     std::shared_ptr<BRRIPReplData> casted_replacement_data =
@@ -55,6 +66,8 @@ BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 
     // Invalidate entry
     casted_replacement_data->valid = false;
+    casted_replacement_data->prefetched = false;
+    casted_replacement_data->inclusive = false;
 }
 
 void
@@ -97,31 +110,44 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
     // There must be at least one replacement candidate
     assert(candidates.size() > 0);
 
-    // Use first candidate as dummy victim
-    ReplaceableEntry* victim = candidates[0];
+    const auto selectVictim = [&](const bool skip_inclusive)
+        -> ReplaceableEntry*
+    {
+        ReplaceableEntry* victim = nullptr;
+        int victim_RRPV = 0;
 
-    // Store victim->rrpv in a variable to improve code readability
-    int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
-                        victim->replacementData)->rrpv;
+        for (const auto& candidate : candidates) {
+            std::shared_ptr<BRRIPReplData> candidate_repl_data =
+                std::static_pointer_cast<BRRIPReplData>(
+                    candidate->replacementData);
+            syncMetadata(candidate, candidate_repl_data);
 
-    // Visit all candidates to find victim
-    for (const auto& candidate : candidates) {
-        std::shared_ptr<BRRIPReplData> candidate_repl_data =
-            std::static_pointer_cast<BRRIPReplData>(
-                candidate->replacementData);
+            // Stop searching for victims if an invalid entry is found.
+            if (!candidate_repl_data->valid) {
+                return candidate;
+            }
 
-        // Stop searching for victims if an invalid entry is found
-        if (!candidate_repl_data->valid) {
-            return candidate;
+            if (skip_inclusive && candidate_repl_data->inclusive) {
+                continue;
+            }
+
+            const int candidate_RRPV = candidate_repl_data->rrpv;
+            if (!victim || candidate_RRPV > victim_RRPV) {
+                victim = candidate;
+                victim_RRPV = candidate_RRPV;
+            }
         }
 
-        // Update victim entry if necessary
-        int candidate_RRPV = candidate_repl_data->rrpv;
-        if (candidate_RRPV > victim_RRPV) {
-            victim = candidate;
-            victim_RRPV = candidate_RRPV;
-        }
+        return victim;
+    };
+
+    // Prefer non-inclusive lines, but fall back to the whole set when every
+    // candidate is marked inclusive.
+    ReplaceableEntry* victim = selectVictim(true);
+    if (!victim) {
+        victim = selectVictim(false);
     }
+    assert(victim != nullptr);
 
     // Get difference of victim's RRPV to the highest possible RRPV in
     // order to update the RRPV of all the other entries accordingly

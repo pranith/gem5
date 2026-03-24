@@ -174,6 +174,39 @@ class FuzzyDRRIPDuelingRP(DuelingRP):
     high_threshold = 0.55
 
 
+class FuzzyRLRP(FuzzyDRRIPRP):
+    type = "FuzzyRLRP"
+    cxx_class = "gem5::replacement_policy::FuzzyRLRP"
+    cxx_header = "mem/cache/replacement_policies/fuzzy_rl_rp.hh"
+    q_learning_rate = Param.Float(
+        0.20, "Q-learning update rate for the RL action-value table"
+    )
+    q_discount = Param.Float(
+        0.90, "Discount factor for bootstrapping future RL value"
+    )
+    q_epsilon = Param.Float(
+        0.02, "Exploration probability for epsilon-greedy RL actions"
+    )
+    alpha_step = Param.Float(
+        0.02, "Alpha increment or decrement applied by each RL action"
+    )
+    reward_window_size = Param.Unsigned(
+        32, "Per-set accesses per reward window"
+    )
+    reward_deadband = Param.Float(
+        0.01, "Ignore tiny hit-rate deltas to reduce noisy RL updates"
+    )
+    hold_action_init_q = Param.Float(
+        0.02, "Initial Q-value bias for holding alpha steady"
+    )
+    min_alpha = Param.Float(
+        0.0, "Lower clamp for learned alpha values"
+    )
+    max_alpha = Param.Float(
+        1.0, "Upper clamp for learned alpha values"
+    )
+
+
 class HwFuzzyDRRIPRP(BRRIPRP):
     type = "HwFuzzyDRRIPRP"
     cxx_class = "gem5::replacement_policy::HwFuzzyDRRIPRP"

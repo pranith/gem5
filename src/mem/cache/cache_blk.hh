@@ -46,12 +46,14 @@
 #ifndef __MEM_CACHE_CACHE_BLK_HH__
 #define __MEM_CACHE_CACHE_BLK_HH__
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <list>
 #include <string>
+#include <vector>
 
 #include "base/printable.hh"
 #include "base/types.hh"
@@ -188,6 +190,7 @@ class CacheBlk : public TaggedEntry
         setWhenReady(curTick());
         setRefCount(other.getRefCount());
         setSrcRequestorId(other.getSrcRequestorId());
+        _inclusive = other._inclusive;
         std::swap(lockList, other.lockList);
 
         other.invalidate();
@@ -211,6 +214,7 @@ class CacheBlk : public TaggedEntry
         setWhenReady(MaxTick);
         setRefCount(0);
         setSrcRequestorId(Request::invldRequestorId);
+        clearInclusive();
         lockList.clear();
     }
 
@@ -259,6 +263,50 @@ class CacheBlk : public TaggedEntry
 
     /** Marks this blocks as a recently prefetched block. */
     void setPrefetched() { _prefetched = true; }
+
+    /**
+     * Check if this block must be preserved for inclusivity.
+     */
+    bool
+    isInclusive() const
+    {
+        return std::find(_inclusive.begin(), _inclusive.end(), true) !=
+            _inclusive.end();
+    }
+
+    /** Check if a specific upstream cache currently tracks this line. */
+    bool
+    isInclusive(RequestorID cache_id) const
+    {
+        return cache_id < _inclusive.size() && _inclusive[cache_id];
+    }
+
+    /** Track that the given upstream cache currently holds this line. */
+    void
+    setInclusive(RequestorID cache_id)
+    {
+        assert(isValid());
+        if (cache_id >= _inclusive.size()) {
+            _inclusive.resize(cache_id + 1, false);
+        }
+        _inclusive[cache_id] = true;
+    }
+
+    /** Clear the tracked owner bit for the given upstream cache. */
+    void
+    clearInclusive(RequestorID cache_id)
+    {
+        if (cache_id < _inclusive.size()) {
+            _inclusive[cache_id] = false;
+        }
+    }
+
+    /** Clear the full upstream-cache ownership bitmap. */
+    void
+    clearInclusive()
+    {
+        _inclusive.clear();
+    }
 
     /**
      * Get tick at which block's data will be available for access.
@@ -407,9 +455,10 @@ class CacheBlk : public TaggedEntry
           default:    s = 'T'; break; // @TODO add other types
         }
         return csprintf("state: %x (%c) writable: %d readable: %d "
-            "dirty: %d prefetched: %d | %s", coherence, s,
+            "dirty: %d prefetched: %d inclusive: %d | %s",
+            coherence, s,
             isSet(WritableBit), isSet(ReadableBit), isSet(DirtyBit),
-            wasPrefetched(), TaggedEntry::print());
+            wasPrefetched(), isInclusive(), TaggedEntry::print());
     }
 
     /**
@@ -506,6 +555,9 @@ class CacheBlk : public TaggedEntry
 
     /** Whether this block is an unaccessed hardware prefetch. */
     bool _prefetched = 0;
+
+    /** Upstream caches currently tracked for inclusivity. */
+    std::vector<bool> _inclusive;
 };
 
 /**

@@ -324,6 +324,9 @@ SectorTags::findVictim(const CacheBlk::KeyType &key,
         // Choose replacement victim from replacement candidates
         victim_sector = static_cast<SectorBlk*>(replacementPolicy->getVictim(
                                                 sector_entries));
+        if (victim_sector == nullptr) {
+            return nullptr;
+        }
     }
 
     // Get the entry of the victim block within the sector

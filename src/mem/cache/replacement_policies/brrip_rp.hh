@@ -82,11 +82,18 @@ class BRRIP : public Base
         /** Whether the entry is valid. */
         bool valid;
 
+        /** Whether the cache line currently carries prefetch state. */
+        bool prefetched;
+
+        /** Whether the cache line must be preserved for inclusivity. */
+        bool inclusive;
+
         /**
          * Default constructor. Invalidate data.
          */
         BRRIPReplData(const int num_bits)
-            : rrpv(num_bits), valid(false)
+            : rrpv(num_bits), valid(false), prefetched(false),
+              inclusive(false)
         {
         }
     };
@@ -113,6 +120,10 @@ class BRRIP : public Base
     const unsigned btp;
 
     mutable Random::RandomPtr rng = Random::genRandom();
+
+    void syncMetadata(const ReplaceableEntry* entry,
+                      const std::shared_ptr<BRRIPReplData>& replacement_data)
+        const;
 
   public:
     typedef BRRIPRPParams Params;

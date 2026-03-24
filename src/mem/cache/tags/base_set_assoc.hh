@@ -185,7 +185,9 @@ class BaseSetAssoc : public BaseTags
             static_cast<CacheBlk*>(replacementPolicy->getVictim(entries));
 
         // There is only one eviction for this replacement
-        evict_blks.push_back(victim);
+        if (victim) {
+            evict_blks.push_back(victim);
+        }
 
         return victim;
     }

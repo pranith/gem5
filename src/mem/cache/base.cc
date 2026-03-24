@@ -115,6 +115,7 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
       missCount(p.max_miss_count),
       addrRanges(p.addr_ranges.begin(), p.addr_ranges.end()),
       system(p.system),
+      cacheTrackingId(p.system->getRequestorId(this)),
       stats(*this)
 {
     // the MSHR queue has no reserve entries as we check the MSHR
@@ -1349,6 +1350,10 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                 // A clean evict does not need to access the data array
                 lat = calculateTagOnlyLatency(pkt->headerDelay, tag_latency);
 
+                if (blk && pkt->fromCache()) {
+                    clearInclusive(blk, pkt);
+                }
+
                 return true;
             } else {
                 assert(pkt->cmd == MemCmd::WritebackDirty);
@@ -1385,6 +1390,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
             // and we just had to wait for the time to find a match in the
             // MSHR. As of now assume a mshr queue search takes as long as
             // a tag lookup for simplicity.
+            if (blk && pkt->fromCache()) {
+                clearInclusive(blk, pkt);
+            }
             return true;
         }
 
@@ -1427,6 +1435,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
         assert(!pkt->needsResponse());
 
         updateBlockData(blk, pkt, has_old_data);
+        if (pkt->fromCache()) {
+            clearInclusive(blk, pkt);
+        }
         DPRINTF(Cache, "%s new state is %s\n", __func__, blk->print());
         incHitCount(pkt);
 
@@ -1446,6 +1457,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
             // propagating further down the hierarchy. Returning true will
             // treat the CleanEvict like a satisfied write request and delete
             // it.
+            if (pkt->fromCache()) {
+                clearInclusive(blk, pkt);
+            }
             return true;
         }
         // We didn't find the block here, propagate the CleanEvict further
@@ -1502,6 +1516,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
         assert(!pkt->needsResponse());
 
         updateBlockData(blk, pkt, has_old_data);
+        if (pkt->fromCache()) {
+            clearInclusive(blk, pkt);
+        }
         DPRINTF(Cache, "%s new state is %s\n", __func__, blk->print());
 
         incHitCount(pkt);
@@ -1744,6 +1761,65 @@ BaseCache::invalidateBlock(CacheBlk *blk)
 }
 
 void
+BaseCache::annotatePacket(PacketPtr pkt) const
+{
+    pkt->setExtension(std::make_shared<CacheTrackingExtension>(
+        cacheTrackingId));
+}
+
+RequestorID
+BaseCache::getPacketCacheId(const PacketPtr pkt) const
+{
+    auto ext = pkt->getExtension<CacheTrackingExtension>();
+    if (ext) {
+        return ext->cacheId;
+    }
+    return static_cast<RequestorID>(Request::invldRequestorId);
+}
+
+void
+BaseCache::markInclusive(CacheBlk *blk, const PacketPtr pkt) const
+{
+    if (!blk || !blk->isValid() || clusivity != enums::mostly_incl) {
+        return;
+    }
+
+    const auto cache_id = getPacketCacheId(pkt);
+    if (cache_id != Request::invldRequestorId) {
+        blk->setInclusive(cache_id);
+    }
+}
+
+void
+BaseCache::clearInclusive(CacheBlk *blk, const PacketPtr pkt) const
+{
+    if (!blk || !blk->isValid() || clusivity != enums::mostly_incl) {
+        return;
+    }
+
+    const auto cache_id = getPacketCacheId(pkt);
+    if (cache_id != Request::invldRequestorId) {
+        blk->clearInclusive(cache_id);
+    }
+}
+
+void
+BaseCache::resetInclusive(CacheBlk *blk, const PacketPtr pkt) const
+{
+    if (!blk || !blk->isValid() || clusivity != enums::mostly_incl) {
+        return;
+    }
+
+    const auto cache_id = getPacketCacheId(pkt);
+    if (cache_id == Request::invldRequestorId) {
+        return;
+    }
+
+    blk->clearInclusive();
+    blk->setInclusive(cache_id);
+}
+
+void
 BaseCache::evictBlock(CacheBlk *blk, PacketList &writebacks)
 {
     PacketPtr pkt = evictBlock(blk);
@@ -1773,6 +1849,7 @@ BaseCache::writebackBlk(CacheBlk *blk)
     PacketPtr pkt =
         new Packet(req, blk->isSet(CacheBlk::DirtyBit) ?
                    MemCmd::WritebackDirty : MemCmd::WritebackClean);
+    annotatePacket(pkt);
 
     DPRINTF(Cache, "Create Writeback %s writable: %d, dirty: %d\n",
         pkt->print(), blk->isSet(CacheBlk::WritableBit),
@@ -1814,6 +1891,7 @@ BaseCache::writecleanBlk(CacheBlk *blk, Request::Flags dest, PacketId id)
     req->taskId(blk->getTaskId());
 
     PacketPtr pkt = new Packet(req, MemCmd::WriteClean, blkSize, id);
+    annotatePacket(pkt);
 
     if (dest) {
         req->setFlags(dest);
