@@ -112,7 +112,7 @@ class LinuxArmSystemBuilder:
     def create_system(self):
         if self.aarch64_kernel:
             gem5_kernel = obtain_resource(
-                "arm64-linux-kernel", resource_version="1.0.0"
+                "arm64-linux-kernel-6.18.19", resource_version="1.0.0"
             )
             if self.machine_type == "VExpress_GEM5_Foundation":
                 bootloader = [

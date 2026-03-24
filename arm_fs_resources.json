@@ -28,7 +28,7 @@
         "source": "src/linux-kernel"
     },
     {
-        "id": "arm64-linux-kernel",
+        "id": "arm64-linux-kernel-6.18.19",
         "resource_version": "1.0.0",
         "category": "kernel",
         "author": [
@@ -41,7 +41,8 @@
         "tags": [
             "linux-kernel"
         ],
-        "example_usage": "obtain_resource(resource_id=\"arm64-linux-kernel\")",
+        "example_usage":
+            "obtain_resource(resource_id=\"arm64-linux-kernel-6.18.19\")",
         "gem5_versions": [
             "23.0",
             "23.1",
@@ -49,8 +50,9 @@
             "24.1"
         ],
         "size": 152377808,
-        "url": "file://arm_fs_tarball/binaries/vmlinux.arm64",
-        "md5sum": "29c4059d3b1b043e16bfbd8487acbcae",
+        "url":
+            "https://dist.gem5.org/dist/develop/kernels/arm/static/vmlinux-6.18.19.arm64-20260324",
+        "md5sum": "701704f4d15fd5502d965ee6f4f65b4d",
         "is_zipped": false,
         "architecture": "ARM",
         "source": "src/linux-kernel"
