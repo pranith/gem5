@@ -45,6 +45,7 @@
 
 #include <sys/resource.h>
 
+#include <sstream>
 #include <string>
 
 #include "cpu/activity.hh"
@@ -81,6 +82,8 @@ CPU::CPU(const BaseO3CPUParams &params)
       tickEvent([this] { tick(); }, "O3CPU tick", false, Event::CPU_Tick_Pri),
       threadExitEvent([this] { exitThreads(); }, "O3CPU exit threads", false,
                       Event::CPU_Exit_Pri),
+      pipelineIdleEvent([this] { checkPipelineIdle(); },
+                        "O3CPU pipeline idle check", false, Event::CPU_Tick_Pri),
 #ifndef NDEBUG
       instcount(0),
 #endif
@@ -116,6 +119,7 @@ CPU::CPU(const BaseO3CPUParams &params)
       iewQueue(params.backComSize, params.forwardComSize),
       activityRec(name(), NumStages,
                   params.backComSize + params.forwardComSize, params.activity),
+      pipelineIdleStallCycles(params.pipelineIdleStallCycles),
 
       globalSeqNum(1),
       globalFTSeqNum(1),
@@ -497,13 +501,22 @@ CPU::tick()
     if (!tickEvent.scheduled()) {
         if (_status == SwitchedOut) {
             DPRINTF(O3CPU, "Switched out!\n");
-            // increment stat
             lastRunningCycle = curCycle();
+            if (pipelineIdleEvent.scheduled())
+                pipelineIdleEvent.squash();
         } else if (!activityRec.active() || _status == Idle) {
             DPRINTF(O3CPU, "Idle!\n");
             lastRunningCycle = curCycle();
             cpuStats.timesIdled++;
+            if (pipelineIdleStallCycles != Cycles(0) &&
+                !pipelineIdleEvent.scheduled() &&
+                drainState() != DrainState::Drained) {
+                schedule(pipelineIdleEvent,
+                         clockEdge(pipelineIdleStallCycles));
+            }
         } else {
+            if (pipelineIdleEvent.scheduled())
+                pipelineIdleEvent.squash();
             schedule(tickEvent, clockEdge(Cycles(1)));
             DPRINTF(O3CPU, "Scheduling next tick!\n");
         }
@@ -1431,6 +1444,9 @@ CPU::wakeCPU()
         return;
     }
 
+    if (pipelineIdleEvent.scheduled())
+        pipelineIdleEvent.squash();
+
     DPRINTF(Activity, "Waking up CPU\n");
 
     Cycles cycles(curCycle() - lastRunningCycle);
@@ -1442,6 +1458,43 @@ CPU::wakeCPU()
     }
 
     schedule(tickEvent, clockEdge());
+}
+
+void
+CPU::checkPipelineIdle()
+{
+    if (pipelineIdleStallCycles == Cycles(0))
+        return;
+    if (activityRec.active() || tickEvent.scheduled())
+        return;
+    if (drainState() == DrainState::Drained || _status == SwitchedOut)
+        return;
+
+    auto oldest = rob.oldestInstructions();
+    std::string oldestInfoStr;
+    if (oldest.empty()) {
+        oldestInfoStr = "none";
+    } else {
+        std::ostringstream oldestInfo;
+        bool first = true;
+        for (const auto &entry : oldest) {
+            if (!first) {
+                oldestInfo << ", ";
+            }
+            oldestInfo << "tid" << entry.first << ":sn"
+                       << static_cast<unsigned long long>(entry.second);
+            first = false;
+        }
+        oldestInfoStr = oldestInfo.str();
+    }
+
+    DPRINTF(O3CPU, "Pipeline idle hang: oldest instructions: %s\n",
+            oldestInfoStr);
+
+    panic("O3CPU pipeline has been idle for %llu cycles without activity "
+          "or scheduled ticks - likely hang (oldest instructions: %s)",
+          (unsigned long long)pipelineIdleStallCycles,
+          oldestInfoStr.c_str());
 }
 
 void

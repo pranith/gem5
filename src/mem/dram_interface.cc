@@ -933,6 +933,9 @@ DRAMInterface::respondEvent(uint8_t rank)
 {
     Rank& rank_ref = *ranks[rank];
 
+    DPRINTF(DRAM, "TraceReqBus DRAM rank %u stage=dram_resp qlen %u\n",
+            rank, rank_ref.readEntries);
+
     // if a read has reached its ready-time, decrement the number of reads
     // At this point the packet has been handled and there is a possibility
     // to switch to low-power mode if no other packet is available

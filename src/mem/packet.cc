@@ -534,4 +534,10 @@ Packet::getHtmTransactionUid() const
     return htmTransactionUid;
 }
 
+    std::ostream &
+    operator<<(std::ostream &os, MemCmd::Command cmd)
+    {
+        os << MemCmd::getCommandInfo(cmd).str;
+        return os;
+    }
 } // namespace gem5

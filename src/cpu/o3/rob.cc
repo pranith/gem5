@@ -509,6 +509,28 @@ ROB::readTailInst(ThreadID tid)
     return *tail_thread;
 }
 
+std::vector<std::pair<ThreadID, InstSeqNum>>
+ROB::oldestInstructions() const
+{
+    std::vector<std::pair<ThreadID, InstSeqNum>> result;
+    if (numInstsInROB == 0) {
+        return result;
+    }
+
+    for (ThreadID tid = 0; tid < numThreads; ++tid) {
+        if (threadEntries[tid] == 0) {
+            continue;
+        }
+
+        InstConstIt it = instList[tid].begin();
+        if (it != instList[tid].end()) {
+            result.emplace_back(tid, (*it)->seqNum);
+        }
+    }
+
+    return result;
+}
+
 ROB::ROBStats::ROBStats(statistics::Group *parent)
   : statistics::Group(parent, "rob"),
     ADD_STAT(reads, statistics::units::Count::get(),

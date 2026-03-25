@@ -42,6 +42,7 @@
 #define __CPU__REG_CLASS_HH__
 
 #include <cstddef>
+#include <iosfwd>
 #include <iterator>
 #include <string>
 
@@ -530,6 +531,29 @@ class PhysRegId : private RegId
 };
 
 using PhysRegIdPtr = PhysRegId*;
+
+inline const char *
+regClassTypeName(RegClassType type)
+{
+    switch (type) {
+      case IntRegClass:   return IntRegClassName;
+      case FloatRegClass: return FloatRegClassName;
+      case VecRegClass:   return VecRegClassName;
+      case VecElemClass:  return VecElemClassName;
+      case VecPredRegClass: return VecPredRegClassName;
+      case MatRegClass:   return MatRegClassName;
+      case CCRegClass:    return CCRegClassName;
+      case MiscRegClass:  return MiscRegClassName;
+      default:            return "invalid";
+    }
+}
+
+inline std::ostream &
+operator<<(std::ostream &os, RegClassType type)
+{
+    os << regClassTypeName(type);
+    return os;
+}
 
 } // namespace gem5
 

@@ -127,6 +127,8 @@ class CPU : public BaseCPU
     /** The exit event used for terminating all ready-to-exit threads */
     EventFunctionWrapper threadExitEvent;
 
+    EventFunctionWrapper pipelineIdleEvent;
+
     /** Schedule tick event, regardless of its current state. */
     void
     scheduleTickEvent(Cycles delay)
@@ -518,6 +520,7 @@ class CPU : public BaseCPU
      * itself.
      */
     ActivityRecorder activityRec;
+    Cycles pipelineIdleStallCycles;
 
   public:
     /** Records that there was time buffer activity this cycle. */
@@ -539,6 +542,10 @@ class CPU : public BaseCPU
 
     /** Wakes the CPU, rescheduling the CPU if it's not already active. */
     void wakeCPU();
+
+    void checkPipelineIdle();
+
+    void recordPipelineProgress();
 
     virtual void wakeup(ThreadID tid) override;
 
@@ -588,6 +595,8 @@ class CPU : public BaseCPU
 
     /** The cycle that the CPU was last running, used for statistics. */
     Cycles lastRunningCycle;
+
+    Tick lastProgressCycle;
 
     /** Per-CPU heartbeat state. */
     mutable Counter heartbeatPrevTotalInsts = 0;

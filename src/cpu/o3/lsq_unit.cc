@@ -156,6 +156,35 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         delete zf_state;
         delete pkt;
         return true;
+    } else if (auto *hold_state = dynamic_cast<MergeBufferHoldSenderState *>(
+                   pkt->senderState)) {
+        if (hold_state->entry &&
+            hold_state->entry->version == hold_state->expectedVersion &&
+            hold_state->entry->blockAddr == hold_state->expectedBlockAddr) {
+            auto *entry = hold_state->entry;
+            if (entry->zfLockReqInFlight) {
+                entry->zfLockReqInFlight = false;
+            }
+            if (!entry->zfLockAcquired &&
+                entry->zfLockReadyCycle == Cycles(0)) {
+                entry->zfLockReadyCycle =
+                    cpu->curCycle() + zfenceMbLockAcquireLatency;
+                if (zfenceMbLockAcquireLatency == Cycles(0)) {
+                    if (!entry->zfPermReady) {
+                        entry->zfPermReady = true;
+                        ++stats.numPermReadySet;
+                    }
+                    entry->zfLockAcquired = true;
+                    entry->zfEligibleForRelaxedRetire =
+                        zfenceRelaxRetire && entry->zfPermReady &&
+                        entry->zfLineAddrValid;
+                    entry->zfLockReqInFlight = false;
+                }
+            }
+        }
+        delete hold_state;
+        delete pkt;
+        return true;
     } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
                    pkt->senderState)) {
         if (mb_state->entry && mb_state->entry->isAtomic) {
@@ -418,6 +447,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     zfenceRelaxRetire = params.zfenceRelaxRetire;
     zfenceLockLines = params.zfenceLockLines;
     zfenceMbLockAcquireLatency = params.zfenceMbLockAcquireLatency;
+    zfenceMbLockAcquireLatencyHit = params.zfenceMbLockAcquireLatencyHit;
     cacheOrderingTagMap.setCapacity(params.cacheOrderingTagEntries);
 
     storeDeallocateWidth = params.storeDeallocateWidth;
@@ -498,6 +528,12 @@ LSQUnit::lookupCacheTag(Addr paddr, size_t size) const
     const size_t line_size = cpu->cacheLineSize();
     const size_t offset = paddr & (line_size - 1);
     return cacheOrderingTagMap.lookup(line_addr, offset, size);
+}
+
+bool
+LSQUnit::hasCacheLine(Addr line_addr) const
+{
+    return cacheOrderingTagMap.hasLine(line_addr);
 }
 
 std::string
@@ -1504,11 +1540,18 @@ LSQUnit::writebackStores()
         assert(!storeWBIt->committed());
 
         if (can_use_mb) {
+            uint64_t store_version = inst->getMemOrderVersion();
+            const Addr line_addr_mask = ~(mergeBuffer.lineSizeBytes() - 1);
+            const Addr line_addr = request->mainReq()->getPaddr() & line_addr_mask;
+            DPRINTF(LSQUnit,
+                    "TraceMBPrep store idx:%i addr:%#x line:%#x lineSize:%zu ver:%llu now:%llu\n",
+                    storeWBIt.idx(), request->mainReq()->getPaddr(), line_addr,
+                    mergeBuffer.lineSizeBytes(), store_version,
+                    (long long unsigned)now);
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
             MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
-            uint64_t store_version = inst->getMemOrderVersion();
 
             bool is_release_req = request->mainReq()->isRelease();
             bool is_release_store =
@@ -1920,11 +1963,13 @@ LSQUnit::storePostSend()
         RequestPtr req = storeWBIt->request()->mainReq();
         if (req && req->isZFenceLockLine()) {
             storeWBIt->lockAcquired() = true;
+            storeWBIt->permReady() = true;
             storeWBIt->eligibleForRelaxedRetire() =
                 zfenceRelaxRetire && storeWBIt->permReady() &&
                 storeWBIt->zfLineAddrValid();
         } else {
             storeWBIt->lockAcquired() = false;
+            storeWBIt->permReady() = false;
             storeWBIt->eligibleForRelaxedRetire() = false;
         }
     }
@@ -2084,8 +2129,11 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
     }
     size_t pkt_size = data_pkt->getSize();
 
-    if (!lsq->cacheBlocked() &&
-        lsq->cachePortAvailable(isLoad)) {
+    const bool allowMBSend = isMergeBufferPkt &&
+        lsq->cachePortAvailable(isLoad);
+    const bool allowNormalSend = !isMergeBufferPkt &&
+        !lsq->cacheBlocked() && lsq->cachePortAvailable(isLoad);
+    if (allowMBSend || allowNormalSend) {
         if (!dcachePort->sendTimingReq(data_pkt)) {
             ret = false;
             cache_got_blocked = true;
@@ -2115,7 +2163,7 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
             }
         }
     } else {
-        if (cache_got_blocked) {
+        if (cache_got_blocked && !isMergeBufferPkt) {
             lsq->cacheBlocked(true);
             ++stats.blockedByCache;
         }
@@ -3298,17 +3346,64 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
 }
 
 void
+LSQUnit::MergeBuffer::holdZFLineLockInCache(MergeBufferEntry &entry)
+{
+    if (!lsqPtr || !entry.baseReq) {
+        return;
+    }
+
+    Request::Flags flags = entry.baseReq->getFlags();
+    RequestorID rid = entry.baseReq->requestorId();
+    RequestPtr hold_req = std::make_shared<Request>(entry.blockAddr,
+                                                   lineSize, flags, rid);
+    hold_req->setFlags(Request::ZFENCE_LOCK_LINE | Request::ZFENCE_HOLD_LINE);
+
+    if (entry.baseReq->hasContextId()) {
+        hold_req->setContext(entry.baseReq->contextId());
+    }
+    if (entry.baseReq->hasPC()) {
+        hold_req->setPC(entry.baseReq->getPC());
+    }
+    hold_req->taskId(entry.baseReq->taskId());
+    hold_req->setByteEnable(std::vector<bool>(lineSize, false));
+
+    PacketPtr pkt = Packet::createWrite(hold_req);
+    uint8_t *buf = new uint8_t[lineSize];
+    std::memset(buf, 0, lineSize);
+    pkt->dataDynamic(buf);
+    pkt->senderState = new MergeBufferHoldSenderState(&entry, lsqPtr,
+                                                     entry.version,
+                                                     entry.blockAddr);
+
+    if (!lsqPtr->trySendPacket(false, pkt)) {
+        if (auto *hold_state = dynamic_cast<MergeBufferHoldSenderState *>(
+                pkt->senderState)) {
+            delete hold_state;
+        }
+        delete pkt;
+        entry.zfLockReqPending = true;
+        return;
+    }
+
+    entry.zfLockReqInFlight = true;
+    entry.zfLockReqPending = false;
+    entry.zfLockReadyCycle = lsqPtr->cpu->curCycle() +
+        lsqPtr->zfenceMbLockAcquireLatencyHit;
+    DPRINTF(LSQUnit,
+            "Holding zFence MB line in cache block:%#x ver:%llu ready:%llu\n",
+            entry.blockAddr, entry.version,
+            (unsigned long long)entry.zfLockReadyCycle);
+}
+
+void
 LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
 {
     const size_t idx = indexOf(&entry);
-    const bool retired_for_lock =
-        entry.state == EntryState::RETIRED ||
-        entry.state == EntryState::FORCE_RETIRED;
     if (!lsqPtr || !lsqPtr->zfenceEnable || !lsqPtr->zfenceLockLines) {
         return;
     }
     if (idx >= entries.size() || !entryValid[idx] || entry.isAtomic ||
-        !entry.baseReq || !retired_for_lock ||
+        !entry.baseReq ||
         !entry.zfLineAddrValid || entry.zfLockAcquired ||
         entry.zfLockReqInFlight || !entry.zfLockReqPending) {
         return;
@@ -3320,6 +3415,11 @@ LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
                 "(head version ver:%llu)\n",
                 entry.blockAddr, entry.version,
                 versionCounts.front().version);
+        return;
+    }
+
+    if (lsqPtr->hasCacheLine(entry.zfLineAddr)) {
+        holdZFLineLockInCache(entry);
         return;
     }
 
@@ -3351,6 +3451,7 @@ LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
             delete zf_state;
         }
         delete pkt;
+        entry.zfLockReqPending = true;
         return;
     }
 
@@ -3667,10 +3768,9 @@ LSQUnit::MergeBuffer::validateAllMBZFLocked(bool &has_relevant) const
         if (entry.isAtomic) {
             return false;
         }
-        if (!(entry.zfPermReady && entry.zfLockAcquired &&
-              entry.zfEligibleForRelaxedRetire && entry.zfLineAddrValid &&
-              !entry.zfLockReqPending && !entry.zfLockReqInFlight &&
-              entry.zfLockReadyCycle == Cycles(0))) {
+        if (!(entry.zfPermReady && entry.zfEligibleForRelaxedRetire &&
+              entry.zfLineAddrValid && !entry.zfLockReqPending &&
+              !entry.zfLockReqInFlight)) {
             return false;
         }
     }
@@ -3697,10 +3797,9 @@ LSQUnit::MergeBuffer::validateLowerVersionMBZFLocked(
         if (entry.isAtomic) {
             return false;
         }
-        if (!(entry.zfPermReady && entry.zfLockAcquired &&
-              entry.zfEligibleForRelaxedRetire && entry.zfLineAddrValid &&
-              !entry.zfLockReqPending && !entry.zfLockReqInFlight &&
-              entry.zfLockReadyCycle == Cycles(0))) {
+        if (!(entry.zfPermReady && entry.zfEligibleForRelaxedRetire &&
+              entry.zfLineAddrValid && !entry.zfLockReqPending &&
+              !entry.zfLockReqInFlight)) {
             return false;
         }
     }
@@ -3806,6 +3905,7 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
         DPRINTF(LSQUnit, "No MB entry ready to drain now:%lli.\n",
                 lsq_ptr->cpu->curCycle());
         dumpWaitBits();
+        dumpVersionCounts();
         if (!versionCounts.empty()) {
             DPRINTF(LSQUnit, "MB head version:%llu count:%u\n",
                     versionCounts.front().version,
@@ -3827,6 +3927,22 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
                 entry.blockAddr, entry.version, versionCounts.front().version);
         return false;
     }
+    const char *state_name = [] (EntryState state) {
+        switch (state) {
+          case EntryState::MERGING: return "MERGING";
+          case EntryState::RETIRED: return "RETIRED";
+          case EntryState::DRAINING: return "DRAINING";
+          case EntryState::FORCE_RETIRED: return "FORCE_RETIRED";
+        }
+        return "UNKNOWN";
+    }(entry.state);
+    DPRINTF(LSQUnit,
+            "TraceMB addr %#x state=drain_selected ver:%llu stage=drainAttempt"
+            " entry_state=%s zfPerm:%u zfLock:%u zfElig:%u zfReqPend:%u zfReqInflight:%u\n",
+            entry.blockAddr, (unsigned long long)entry.version, state_name,
+            entry.zfPermReady, entry.zfLockAcquired,
+            entry.zfEligibleForRelaxedRetire, entry.zfLockReqPending,
+            entry.zfLockReqInFlight);
 
     assert(entry.baseReq);
     RequestPtr base = entry.baseReq;
@@ -3883,7 +3999,9 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     }
     merged_req->taskId(base->taskId());
     merged_req->setByteEnable(byte_enable);
-    if (lsqPtr && lsqPtr->zfenceEnable && lsqPtr->zfenceLockLines) {
+    const bool need_zf_line_lock = lsqPtr && lsqPtr->zfenceEnable &&
+        lsqPtr->zfenceLockLines && !entry.zfLockAcquired;
+    if (need_zf_line_lock) {
         merged_req->setFlags(Request::ZFENCE_LOCK_LINE);
     }
 
@@ -3970,6 +4088,34 @@ LSQUnit::MergeBuffer::dumpWaitBits() const
                 e.zfLockReqPending ? 1 : 0, e.zfLockReqInFlight ? 1 : 0,
                 (unsigned long long)e.zfLockReadyCycle);
     }
+}
+
+void
+LSQUnit::MergeBuffer::dumpVersionCounts() const
+{
+    if (!lsqPtr) {
+        return;
+    }
+
+    if (versionCounts.empty()) {
+        DPRINTF(LSQUnit, "MB version queue is empty\n");
+        return;
+    }
+
+    std::string buf;
+    buf.reserve(versionCounts.size() * 16);
+    for (const auto &entry : versionCounts) {
+        if (!buf.empty()) {
+            buf += ", ";
+        }
+        buf += std::to_string(entry.version);
+        buf += ":";
+        buf += std::to_string(entry.count);
+        if (entry.tailAllocByRelease) {
+            buf += "R";
+        }
+    }
+    DPRINTF(LSQUnit, "MB versionCounts: %s\n", buf.c_str());
 }
 
 void
@@ -4148,5 +4294,27 @@ LSQUnit::MergeBuffer::indexOf(const MergeBufferEntry *entry) const
     return std::distance(entries.begin(), it);
 }
 
+std::ostream &
+operator<<(std::ostream &os, LSQUnit::MergeBuffer::EntryState state)
+{
+    using EntryState = LSQUnit::MergeBuffer::EntryState;
+    switch (state) {
+      case EntryState::MERGING:
+        os << "MERGING";
+        break;
+      case EntryState::RETIRED:
+        os << "RETIRED";
+        break;
+      case EntryState::DRAINING:
+        os << "DRAINING";
+        break;
+      case EntryState::FORCE_RETIRED:
+        os << "FORCE_RETIRED";
+        break;
+    }
+    return os;
+}
+
 } // namespace o3
+
 } // namespace gem5

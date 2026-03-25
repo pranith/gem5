@@ -44,6 +44,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iosfwd>
 #include <deque>
 #include <limits>
 #include <map>
@@ -308,6 +309,11 @@ class LSQUnit
             bool zfLockReqInFlight = false;
             /** zFence: cycle when MB line lock becomes usable. */
             Cycles zfLockReadyCycle = Cycles(0);
+            /** zFence: hold request active for this entry. */
+            bool zfHoldActive = false;
+            /** zFence: hold request pending/in-flight. */
+            bool zfHoldReqPending = false;
+            bool zfHoldReqInFlight = false;
 
             MergeBufferEntry(size_t size, uint64_t ver)
                 : byteValids(size, false),
@@ -383,6 +389,7 @@ class LSQUnit
         std::optional<uint64_t> oldestVersion() const;
         std::vector<bool> validVector() const { return entryValid; }
         void dumpWaitBits() const;
+        void dumpVersionCounts() const;
         size_t indexOf(const MergeBufferEntry *entry) const;
         void
         reset()
@@ -418,6 +425,11 @@ class LSQUnit
             return std::all_of(entryValid.begin(), entryValid.end(),
                                [](bool v) { return v; });
         }
+        size_t
+        lineSizeBytes() const
+        {
+            return lineSize;
+        }
         bool hasReleaseOlderThan(uint64_t version) const;
         /**
          * Invalidate zFence lock/eligibility state for entries tracking
@@ -450,6 +462,7 @@ class LSQUnit
 
       private:
         void requestZFLineLock(MergeBufferEntry &entry);
+        void holdZFLineLockInCache(MergeBufferEntry &entry);
         void
         updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
                     size_t size, bool is_all_zero)
@@ -566,6 +579,12 @@ class LSQUnit
                 return std::nullopt;
             }
             return it->second.byteValids;
+        }
+
+        bool
+        hasLine(Addr line_addr) const
+        {
+            return tagByLine.find(line_addr) != tagByLine.end();
         }
     };
 
@@ -914,6 +933,20 @@ class LSQUnit
         {}
     };
 
+    struct MergeBufferHoldSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        uint64_t expectedVersion;
+        Addr expectedBlockAddr;
+        MergeBufferHoldSenderState(MergeBuffer::MergeBufferEntry *e,
+                                   LSQUnit *unit,
+                                   uint64_t v, Addr a)
+            : entry(e), lsqUnit(unit), expectedVersion(v),
+              expectedBlockAddr(a)
+        {}
+    };
+
   public:
     /**
      * Handles writing back and completing the load or store that has
@@ -986,6 +1019,7 @@ class LSQUnit
                          const std::vector<bool> *byte_enable = nullptr);
     void noteCacheEvict(Addr paddr);
     std::optional<uint64_t> lookupCacheTag(Addr paddr, size_t size) const;
+    bool hasCacheLine(Addr line_addr) const;
 
     /** Wire to read information from the issue stage time queue. */
     typename TimeBuffer<IssueStruct>::wire fromIssue;
@@ -1031,6 +1065,7 @@ class LSQUnit
     bool zfenceLockLines = false;
     /** Additional latency before MB lock is treated as acquired. */
     Cycles zfenceMbLockAcquireLatency = Cycles(0);
+    Cycles zfenceMbLockAcquireLatencyHit = Cycles(0);
 
     /** Flag for memory model. */
     bool needsTSO;
@@ -1163,6 +1198,11 @@ class LSQUnit
 };
 
 } // namespace o3
+
+std::ostream &
+operator<<(std::ostream &os,
+           o3::LSQUnit::MergeBuffer::EntryState state);
+
 } // namespace gem5
 
 #endif // __CPU_O3_LSQ_UNIT_HH__

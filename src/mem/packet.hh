@@ -51,6 +51,7 @@
 #include <cassert>
 #include <initializer_list>
 #include <list>
+#include <iosfwd>
 
 #include "base/addr_range.hh"
 #include "base/cast.hh"
@@ -212,6 +213,13 @@ class MemCmd
 
     /// Array to map Command enum to associated info.
     static const CommandInfo commandInfo[];
+
+  public:
+    static const CommandInfo &
+    getCommandInfo(Command command)
+    {
+        return commandInfo[command];
+    }
 
   private:
 
@@ -1546,7 +1554,13 @@ class Packet : public Printable, public Extensible<Packet>
      * failed transaction, this function returns the failure reason.
      */
     HtmCacheFailure getHtmTransactionFailedInCacheRC() const;
+
+    friend std::ostream &
+    operator<<(std::ostream &os, Command cmd);
 };
+
+    std::ostream &
+    operator<<(std::ostream &os, MemCmd::Command cmd);
 
 } // namespace gem5
 

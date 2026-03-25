@@ -421,6 +421,11 @@ class BaseCache : public ClockedObject
      * write responses on the same block.
      */
     std::unordered_map<uint64_t, uint32_t> zfLineAcquireOnlyMap;
+    /**
+     * Count of zFence hold requests that pin a cached line despite not
+     * yet draining the merge-buffer entry.
+     */
+    std::unordered_map<uint64_t, uint32_t> zfLineHoldMap;
     /** Unique zBit owner per block address (+secure bit in key LSB). */
     std::unordered_map<uint64_t, RequestorID> zfLineOwnerMap;
     /** Deferred acquire-only zBit requests waiting for current owner release. */

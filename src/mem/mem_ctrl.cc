@@ -280,6 +280,10 @@ MemCtrl::addToReadQueue(PacketPtr pkt,
 
             // Update stats
             stats.avgRdQLen = totalReadQueueSize + respQueue.size();
+
+            DPRINTF(DRAM,
+                    "TraceReqQueue addr %#x reqor %u pkt %p mem_pkt %p size %u stage=enqueue\n",
+                    mem_pkt->addr, pkt->requestorId(), pkt, mem_pkt, size);
         }
 
         // Starting address of next memory pkt (aligned to burst boundary)
@@ -491,10 +495,13 @@ MemCtrl::processRespondEvent(MemInterface* mem_intr,
                         bool& retry_rd_req)
 {
 
+    MemPacket* mem_pkt = queue.front();
+    DPRINTF(DRAM,
+            "TraceReqBus addr %#x reqor %u mem_pkt %p stage=ready\n",
+            mem_pkt->addr, mem_pkt->requestorId(), mem_pkt);
+
     DPRINTF(MemCtrl,
             "processRespondEvent(): Some req has reached its readyTime\n");
-
-    MemPacket* mem_pkt = queue.front();
 
     // media specific checks and functions when read response is complete
     // DRAM only
@@ -808,6 +815,9 @@ MemCtrl::doBurstAccess(MemPacket* mem_pkt, MemInterface* mem_intr)
     std::tie(cmd_at, mem_intr->nextBurstAt) =
             mem_intr->doBurstAccess(mem_pkt, mem_intr->nextBurstAt, queue);
 
+    DPRINTF(DRAM, "TraceReqBus addr %#x mem_pkt %p ready %lld stage=drain\n",
+            mem_pkt->addr, mem_pkt, mem_pkt->readyTime);
+
     DPRINTF(MemCtrl, "Access to %#x, ready at %lld next burst at %lld.\n",
             mem_pkt->addr, mem_pkt->readyTime, mem_intr->nextBurstAt);
 
@@ -1014,8 +1024,8 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
 
             // log the response
             logResponse(MemCtrl::READ, (*to_read)->requestorId(),
-                        mem_pkt->qosValue(), mem_pkt->getAddr(), 1,
-                        mem_pkt->readyTime - mem_pkt->entryTime);
+                    mem_pkt->qosValue(), mem_pkt->getAddr(), 1,
+                    mem_pkt->readyTime - mem_pkt->entryTime);
 
             mem_intr->readQueueSize--;
 
@@ -1030,6 +1040,11 @@ MemCtrl::processNextReqEvent(MemInterface* mem_intr,
             }
 
             resp_queue.push_back(mem_pkt);
+
+            DPRINTF(DRAM,
+                    "TraceReqQueue addr %#x reqor %u mem_pkt %p stage=issued ready %lld\n",
+                    mem_pkt->addr, mem_pkt->requestorId(), mem_pkt,
+                    mem_pkt->readyTime);
 
             // we have so many writes that we have to transition
             // don't transition if the writeRespQueue is full and
