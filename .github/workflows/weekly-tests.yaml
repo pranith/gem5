@@ -52,7 +52,7 @@ jobs:
             test-dirs-matrix-very-long: ${{ steps.dir-matrix.outputs.test-dirs-matrix-very-long }}
         steps:
             - uses: actions/checkout@v4
-            - name: Get directories for testlib-very-long
+            - name: Get directories for testlib-${{ matrix.type }}
               working-directory: ${{ github.workspace }}/tests
               id: dir-matrix
               run: |
@@ -85,12 +85,14 @@ jobs:
             test-dirs-matrix-flattened: ${{ steps.flatten-matrix.outputs.matrix }}
         needs: [get-date, get-testlib-dirs]
         steps:
-            - id: flatten-matrix
+            - name: Flatten matrix into length and testdir pairs
+              id: flatten-matrix
               run: |
-                  echo '${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }}'
-                  primary='["quick"]'
+                  primary='["quick", "long", "very-long"]'
                   secondary='{
-                      "quick": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }}
+                      "quick": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-quick }},
+                      "long": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-long }},
+                      "very-long": ${{ needs.get-testlib-dirs.outputs.test-dirs-matrix-very-long }}
                   }'
 
                   flat_matrix=$(echo $secondary | jq -c '[
@@ -140,7 +142,7 @@ jobs:
               if: always()
               uses: actions/upload-artifact@v4
               with:
-                  name: weekly-tests-run-${{ github.run_number }}-attempt-${{ github.run_attempt }}-testlib-very-long-${{ steps.sanitize-test-dir.outputs.sanitized-test-dir
+                  name: weekly-tests-run-${{ github.run_number }}-attempt-${{ github.run_attempt }}-testlib-${{ matrix.test-type.length }}-${{ steps.sanitize-test-dir.outputs.sanitized-test-dir
                       }}-status-${{ steps.run-tests.outcome }}-output
                   path: tests/testing-results
 
