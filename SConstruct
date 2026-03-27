@@ -603,13 +603,6 @@ for variant_path in variant_paths:
         with gem5_scons.Configure(env) as conf:
             conf.CheckCxxFlag('-Wno-volatile')
 
-        # Arithmetic operations between differen enums are deprecated.
-        # https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p1120r0.html
-        # However, this is common used in code under arch/.
-        # e.g. ArmFault::AddressSizeLL + start_lookup_level
-        env.Append(CXXFLAGS=['-Wno-deprecated-enum-enum-conversion'])
-        env.Append(CXXFLAGS=['-Wno-deprecated-anon-enum-enum-conversion'])
-
         if sys.platform.startswith('freebsd'):
             env.Append(CCFLAGS=['-I/usr/local/include'])
             env.Append(CXXFLAGS=['-I/usr/local/include'])
