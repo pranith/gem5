@@ -1265,8 +1265,15 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
         }
 
-        if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
-            // Drain the merge buffer to reduce stall when versioning is off.
+        const bool atomic_must_wait_for_stores =
+            head_inst->isAtomic() && need_store_drain;
+
+        if ((!cpu->versioningEnabled() &&
+             (inst_num > 0 || need_store_drain)) ||
+            atomic_must_wait_for_stores) {
+            // Non-versioned barriers use the existing drain path here.
+            // Atomics also force this path in any mode so they cannot
+            // execute ahead of older committed SQ/MB entries.
             if (need_store_drain) {
                 ++stats.commitBarrierDrainStallCycles;
                 if (fence_like) {
