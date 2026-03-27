@@ -784,6 +784,17 @@ LSQ::hasStoresToWB()
 }
 
 bool
+LSQ::hasAnyStoresToWB()
+{
+    for (ThreadID tid : *activeThreads) {
+        if (hasAnyStoresToWB(tid))
+            return true;
+    }
+
+    return false;
+}
+
+bool
 LSQ::hasStoreToLine(Addr line_addr)
 {
     for (ThreadID tid : *activeThreads) {
@@ -805,6 +816,12 @@ bool
 LSQ::hasStoresToWB(ThreadID tid)
 {
     return thread.at(tid)->hasStoresToWB();
+}
+
+bool
+LSQ::hasAnyStoresToWB(ThreadID tid)
+{
+    return thread.at(tid)->hasAnyStoresToWB();
 }
 
 std::optional<uint64_t>

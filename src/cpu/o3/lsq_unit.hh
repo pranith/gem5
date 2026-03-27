@@ -788,6 +788,13 @@ class LSQUnit
     {
         return hasUnprotectedStoresToWB();
     }
+    /** Returns whether there are any outstanding SQ/MB entries at all,
+     *  including zFence-protected merge-buffer entries. */
+    bool
+    hasAnyStoresToWB() const
+    {
+        return !mergeBuffer.isEmpty() || (storesToWB > 0);
+    }
     bool hasStoreToLine(Addr line_addr) const;
     /** Returns whether there are outstanding stores that cannot rely on
      *  relaxed retirement. */

@@ -28,6 +28,8 @@
 
 #include <sim/futex_map.hh>
 
+#include "debug/SyscallBase.hh"
+
 namespace gem5
 {
 
@@ -61,11 +63,17 @@ FutexMap::wakeup(Addr addr, uint64_t tgid, int count)
     FutexKey key(addr, tgid);
     auto it = find(key);
 
-    if (it == end())
+    if (it == end()) {
+        DPRINTF(SyscallBase,
+                "futex map wake addr=%#x tgid=%llu count=%d "
+                "waiters_before=0 woken=0 waiters_after=0\n",
+                addr, static_cast<unsigned long long>(tgid), count);
         return 0;
+    }
 
     int woken_up = 0;
     auto &waiterList = it->second;
+    const size_t waiters_before = waiterList.size();
 
     while (!waiterList.empty() && woken_up < count) {
         // Threads may be woken up by access to locked
@@ -79,8 +87,15 @@ FutexMap::wakeup(Addr addr, uint64_t tgid, int count)
         waitingTcs.erase(tc);
     }
 
+    const size_t waiters_after = waiterList.size();
     if (waiterList.empty())
         erase(it);
+
+    DPRINTF(SyscallBase,
+            "futex map wake addr=%#x tgid=%llu count=%d "
+            "waiters_before=%zu woken=%d waiters_after=%zu\n",
+            addr, static_cast<unsigned long long>(tgid), count,
+            waiters_before, woken_up, waiters_after);
 
     return woken_up;
 }
@@ -91,6 +106,7 @@ FutexMap::suspend_bitset(Addr addr, uint64_t tgid, ThreadContext *tc,
 {
     FutexKey key(addr, tgid);
     auto it = find(key);
+    const size_t waiters_before = (it == end()) ? 0 : it->second.size();
 
     if (it == end()) {
         WaiterList waiterList {WaiterState(tc, bitmask)};
@@ -99,6 +115,13 @@ FutexMap::suspend_bitset(Addr addr, uint64_t tgid, ThreadContext *tc,
         it->second.push_back(WaiterState(tc, bitmask));
     }
     waitingTcs.emplace(tc);
+    const size_t waiters_after = find(key)->second.size();
+
+    DPRINTF(SyscallBase,
+            "futex map suspend ctx=%d addr=%#x tgid=%llu mask=%#x "
+            "waiters_before=%zu waiters_after=%zu\n",
+            tc->contextId(), addr, static_cast<unsigned long long>(tgid),
+            bitmask, waiters_before, waiters_after);
 
     /** Suspend the thread context */
     tc->suspend();
@@ -110,12 +133,18 @@ FutexMap::wakeup_bitset(Addr addr, uint64_t tgid, int bitmask)
     FutexKey key(addr, tgid);
     auto it = find(key);
 
-    if (it == end())
+    if (it == end()) {
+        DPRINTF(SyscallBase,
+                "futex map wake_bitset addr=%#x tgid=%llu mask=%#x "
+                "waiters_before=0 woken=0 waiters_after=0\n",
+                addr, static_cast<unsigned long long>(tgid), bitmask);
         return 0;
+    }
 
     int woken_up = 0;
 
     auto &waiterList = it->second;
+    const size_t waiters_before = waiterList.size();
     auto iter = waiterList.begin();
 
     while (iter != waiterList.end()) {
@@ -131,8 +160,15 @@ FutexMap::wakeup_bitset(Addr addr, uint64_t tgid, int bitmask)
         }
     }
 
+    const size_t waiters_after = waiterList.size();
     if (waiterList.empty())
         erase(it);
+
+    DPRINTF(SyscallBase,
+            "futex map wake_bitset addr=%#x tgid=%llu mask=%#x "
+            "waiters_before=%zu woken=%d waiters_after=%zu\n",
+            addr, static_cast<unsigned long long>(tgid), bitmask,
+            waiters_before, woken_up, waiters_after);
 
     return woken_up;
 }
@@ -143,15 +179,24 @@ FutexMap::requeue(Addr addr1, uint64_t tgid, int count, int count2, Addr addr2)
     FutexKey key1(addr1, tgid);
     auto it1 = find(key1);
 
-    if (it1 == end())
+    if (it1 == end()) {
+        DPRINTF(SyscallBase,
+                "futex map requeue addr1=%#x addr2=%#x tgid=%llu wake=%d "
+                "requeue=%d waiters_before=0 woken=0 moved=0 waiters_after=0\n",
+                addr1, addr2, static_cast<unsigned long long>(tgid),
+                count, count2);
         return 0;
+    }
 
     int woken_up = 0;
     auto &waiterList1 = it1->second;
+    const size_t waiters_before = waiterList1.size();
 
     while (!waiterList1.empty() && woken_up < count) {
-        waiterList1.front().tc->activate();
+        auto *tc = waiterList1.front().tc;
+        tc->activate();
         waiterList1.pop_front();
+        waitingTcs.erase(tc);
         woken_up++;
     }
 
@@ -175,8 +220,15 @@ FutexMap::requeue(Addr addr1, uint64_t tgid, int count, int count2, Addr addr2)
                            tmpList.begin(), tmpList.end());
     }
 
+    const size_t waiters_after = waiterList1.size();
     if (waiterList1.empty())
         erase(it1);
+
+    DPRINTF(SyscallBase,
+            "futex map requeue addr1=%#x addr2=%#x tgid=%llu wake=%d "
+            "requeue=%d waiters_before=%zu woken=%d moved=%d waiters_after=%zu\n",
+            addr1, addr2, static_cast<unsigned long long>(tgid),
+            count, count2, waiters_before, woken_up, requeued, waiters_after);
 
     return woken_up + requeued;
 }

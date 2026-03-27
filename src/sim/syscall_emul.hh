@@ -415,9 +415,9 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
 
         return false;
     };
-    const auto currentO3HasStores = [tc]() {
+    const auto currentO3HasAnyStores = [tc]() {
         auto *o3_cpu = dynamic_cast<o3::CPU *>(tc->getCpuPtr());
-        return o3_cpu && o3_cpu->hasStoresToWB();
+        return o3_cpu && o3_cpu->hasAnyStoresToWB();
     };
 
     if (OS::TGT_FUTEX_WAIT == op || OS::TGT_FUTEX_WAIT_BITSET == op) {
@@ -445,7 +445,7 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         if (val != mem_val)
             return -OS::TGT_EWOULDBLOCK;
 
-        if (currentO3HasStores()) {
+        if (currentO3HasAnyStores()) {
             DPRINTF_SYSCALL(Base,
                     "futex retry op=%d ctx=%d uaddr=%#x "
                     "local_store_blocked=1 before_wait_sleep\n",
@@ -453,6 +453,9 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
             return SyscallReturn::retry();
         }
 
+        DPRINTF_SYSCALL(Base,
+                "futex wait_sleep op=%d ctx=%d uaddr=%#x bitmask=%#x\n",
+                op, tc->contextId(), (Addr)uaddr, val3);
         if (OS::TGT_FUTEX_WAIT == op) {
             futex_map.suspend(uaddr, process->tgid(), tc);
         } else {
@@ -464,12 +467,20 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         DPRINTF_SYSCALL(Base,
                 "futex wake ctx=%d uaddr=%#x nr=%d\n",
                 tc->contextId(), (Addr)uaddr, val);
-        return futex_map.wakeup(uaddr, process->tgid(), val);
+        int woken = futex_map.wakeup(uaddr, process->tgid(), val);
+        DPRINTF_SYSCALL(Base,
+                "futex wake_ret ctx=%d uaddr=%#x nr=%d woken=%d\n",
+                tc->contextId(), (Addr)uaddr, val, woken);
+        return woken;
     } else if (OS::TGT_FUTEX_WAKE_BITSET == op) {
         DPRINTF_SYSCALL(Base,
                 "futex wake_bitset ctx=%d uaddr=%#x mask=%#x\n",
                 tc->contextId(), (Addr)uaddr, val3);
-        return futex_map.wakeup_bitset(uaddr, process->tgid(), val3);
+        int woken = futex_map.wakeup_bitset(uaddr, process->tgid(), val3);
+        DPRINTF_SYSCALL(Base,
+                "futex wake_bitset_ret ctx=%d uaddr=%#x mask=%#x woken=%d\n",
+                tc->contextId(), (Addr)uaddr, val3, woken);
+        return woken;
     } else if (OS::TGT_FUTEX_REQUEUE == op ||
                OS::TGT_FUTEX_CMP_REQUEUE == op) {
         if (anyOutstandingO3StoresToLine(futex_line)) {
@@ -494,14 +505,19 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
          */
         if (OS::TGT_FUTEX_CMP_REQUEUE && val3 != mem_val)
             return -OS::TGT_EWOULDBLOCK;
-        if (currentO3HasStores()) {
+        if (currentO3HasAnyStores()) {
             DPRINTF_SYSCALL(Base,
                     "futex retry op=%d ctx=%d uaddr=%#x "
                     "local_store_blocked=1 before_requeue\n",
                     op, tc->contextId(), (Addr)uaddr);
             return SyscallReturn::retry();
         }
-        return futex_map.requeue(uaddr, process->tgid(), val, timeout, uaddr2);
+        int moved = futex_map.requeue(uaddr, process->tgid(), val, timeout,
+                                      uaddr2);
+        DPRINTF_SYSCALL(Base,
+                "futex requeue_ret op=%d ctx=%d uaddr=%#x uaddr2=%#x moved=%d\n",
+                op, tc->contextId(), (Addr)uaddr, (Addr)uaddr2, moved);
+        return moved;
     } else if (OS::TGT_FUTEX_WAKE_OP == op) {
         if (anyOutstandingO3StoresToLine(futex_line) ||
             anyOutstandingO3StoresToLine(futex_line2)) {
@@ -585,7 +601,13 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         if (is_wake2)
             woken2 = futex_map.wakeup(uaddr2, process->tgid(), timeout);
 
-        return woken1 + woken2;
+        int woken = woken1 + woken2;
+        DPRINTF_SYSCALL(Base,
+                "futex wake_op_ret ctx=%d uaddr=%#x uaddr2=%#x woken1=%d "
+                "woken2=%d total=%d\n",
+                tc->contextId(), (Addr)uaddr, (Addr)uaddr2,
+                woken1, woken2, woken);
+        return woken;
     }
     warn("futex: op %d not implemented; ignoring.", op);
     return -ENOSYS;

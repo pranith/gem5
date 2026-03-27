@@ -1214,7 +1214,14 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        bool need_store_drain = iewStage->hasStoresToWB(tid);
+        // Atomics execute at the head of the ROB, but they still must not
+        // run while older committed SQ/MB entries remain buffered. The
+        // zFence-relaxed retire check is only safe for normal retirement;
+        // using it here can let an AMO observe/modify memory before older
+        // stores are globally visible.
+        bool need_store_drain = head_inst->isAtomic()
+            ? iewStage->hasAnyStoresToWB(tid)
+            : iewStage->hasStoresToWB(tid);
         bool relaxed_store_drain = false;
         const bool fence_like =
             head_inst->isFullMemBarrier() ||
@@ -1464,7 +1471,11 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                     tid, head_inst->seqNum);
         }
 
-        bool need_store_drain = iewStage->hasStoresToWB(tid);
+        // Faulting instructions, including syscalls, must wait for all older
+        // committed SQ/MB entries to drain. zFence's relaxed-retire checks are
+        // only safe for normal retirement, not for executing a trap handler
+        // that may observe or act on memory before those stores are visible.
+        bool need_store_drain = iewStage->hasAnyStoresToWB(tid);
 
         if (need_store_drain || inst_num > 0) {
             DPRINTF(Commit,

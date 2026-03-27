@@ -224,10 +224,12 @@ class IEW
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB() { return ldstQueue.hasStoresToWB(); }
+    bool hasAnyStoresToWB() { return ldstQueue.hasAnyStoresToWB(); }
     bool hasStoreToLine(Addr line_addr) { return ldstQueue.hasStoreToLine(line_addr); }
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
+    bool hasAnyStoresToWB(ThreadID tid) { return ldstQueue.hasAnyStoresToWB(tid); }
 
     /** Number of committed stores that still need to write back. */
     int

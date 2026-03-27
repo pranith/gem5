@@ -849,12 +849,16 @@ class LSQ
 
     /** Returns whether or not there are any stores to write back to memory. */
     bool hasStoresToWB();
+    /** Returns whether there are any outstanding committed SQ/MB entries. */
+    bool hasAnyStoresToWB();
     bool hasStoreToLine(Addr line_addr);
 
     /** Returns whether or not a specific thread has any stores to write back
      * to memory.
      */
     bool hasStoresToWB(ThreadID tid);
+    /** Returns whether a thread has any outstanding committed SQ/MB entries. */
+    bool hasAnyStoresToWB(ThreadID tid);
     void forceMBDrain(ThreadID tid, uint64_t version);
 
     /** Youngest/lowest merge buffer version for the given thread, if any. */
