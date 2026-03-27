@@ -258,14 +258,19 @@ class Request : public Extensible<Request>
             remote TLB Sync request has completed */
         TLBI_EXT_SYNC_COMP          = 0x0000800000000000,
 
+        /** zFence hold request completed from the local dcache. */
+        ZFENCE_DCACHE_HIT           = 0x0001000000000000,
+        /** Draining store consumes an existing zFence hold lock. */
+        ZFENCE_CONSUME_HOLD         = 0x0002000000000000,
+
         /**
          * These flags are *not* cleared when a Request object is
          * reused (assigned a new address).
          */
         STICKY_FLAGS = INST_FETCH,
-        /** TLBI_EXT_SYNC_COMP seems to be the largest value
+        /** ZFENCE_CONSUME_HOLD seems to be the largest value
             of FlagsType, so HAS_NO_ADDR's value is that << 1 */
-        HAS_NO_ADDR                = 0x0001000000000000,
+        HAS_NO_ADDR                = 0x0004000000000000,
         // clang-format on
     };
     static const FlagsType STORE_NO_DATA = CACHE_BLOCK_ZERO |
@@ -1050,6 +1055,11 @@ class Request : public Extensible<Request>
     bool isRelease() const { return _flags.isSet(RELEASE); }
     bool isZFenceLockLine() const { return _flags.isSet(ZFENCE_LOCK_LINE); }
     bool isZFenceHoldLine() const { return _flags.isSet(ZFENCE_HOLD_LINE); }
+    bool isZFenceDCacheHit() const { return _flags.isSet(ZFENCE_DCACHE_HIT); }
+    bool isZFenceConsumeHold() const
+    {
+        return _flags.isSet(ZFENCE_CONSUME_HOLD);
+    }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }
     bool isAtomicNoReturn() const { return _flags.isSet(ATOMIC_NO_RETURN_OP); }

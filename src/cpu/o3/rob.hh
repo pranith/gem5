@@ -146,9 +146,6 @@ class ROB
      */
     DynInstPtr readTailInst(ThreadID tid);
 
-    /** Returns the head SN of each thread currently in the ROB. */
-    std::vector<std::pair<ThreadID, InstSeqNum>> oldestInstructions() const;
-
     /** Retires the head instruction, removing it from the ROB. */
 //    void retireHead();
 

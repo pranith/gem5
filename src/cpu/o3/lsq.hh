@@ -1020,13 +1020,6 @@ class LSQ
     Addr recvRespLastCachelineAddr;
     Cycles recvRespLastActiveCycle;
     EventFunctionWrapper retryRespEvent;
-    EventFunctionWrapper mergeBufferRetryEvent;
-
-  public:
-    void scheduleMergeBufferRetry();
-
-  private:
-    void mergeBufferRetry();
 };
 
 } // namespace o3

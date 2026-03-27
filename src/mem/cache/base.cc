@@ -79,6 +79,10 @@ isAcquireOnlyZFLineLockReq(const PacketPtr pkt)
         return false;
     }
 
+    if (pkt->req->isZFenceHoldLine()) {
+        return false;
+    }
+
     const auto &byte_en = pkt->req->getByteEnable();
     if (byte_en.empty()) {
         return false;
@@ -338,6 +342,7 @@ BaseCache::acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk)
     const bool is_secure = pkt->isSecure();
     const uint64_t key = zfenceLockKey(blk_addr, is_secure);
     const bool acquire_only = isAcquireOnlyZFLineLockReq(pkt);
+    const bool hold_req = pkt->req->isZFenceHoldLine();
     const RequestorID rid = pkt->req->requestorId();
     auto owner_it = zfLineOwnerMap.find(key);
 
@@ -366,7 +371,21 @@ BaseCache::acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk)
         zfLineOwnerMap[key] = rid;
     }
 
-    if (acquire_only) {
+    if (hold_req) {
+        auto hold_it = zfLineHoldMap.find(key);
+        if (owner_it != zfLineOwnerMap.end() && owner_it->second == rid &&
+            hold_it != zfLineHoldMap.end() && hold_it->second > 0) {
+            DPRINTF(Cache,
+                    "%s: ignoring duplicate zFence hold for block %#llx "
+                    "(%s) reqRid=%u outstanding=%u\n",
+                    __func__, blk_addr, is_secure ? "s" : "ns", rid,
+                    hold_it->second);
+            return true;
+        }
+
+        ++zfLineLockMap[key];
+        ++zfLineHoldMap[key];
+    } else if (acquire_only) {
         auto acq_it = zfLineAcquireOnlyMap.find(key);
         if (owner_it != zfLineOwnerMap.end() && owner_it->second == rid &&
             acq_it != zfLineAcquireOnlyMap.end() && acq_it->second > 0) {
@@ -381,14 +400,20 @@ BaseCache::acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk)
         ++zfLineLockMap[key];
         ++zfLineAcquireOnlyMap[key];
     } else {
-        auto acq_it = zfLineAcquireOnlyMap.find(key);
-        if (acq_it != zfLineAcquireOnlyMap.end() && acq_it->second > 0) {
-            --acq_it->second;
-            if (acq_it->second == 0) {
-                zfLineAcquireOnlyMap.erase(acq_it);
-            }
+        auto hold_it = zfLineHoldMap.find(key);
+        if (owner_it != zfLineOwnerMap.end() && owner_it->second == rid &&
+            hold_it != zfLineHoldMap.end() && hold_it->second > 0) {
+            pkt->req->setFlags(Request::ZFENCE_CONSUME_HOLD);
         } else {
-            ++zfLineLockMap[key];
+            auto acq_it = zfLineAcquireOnlyMap.find(key);
+            if (acq_it != zfLineAcquireOnlyMap.end() && acq_it->second > 0) {
+                --acq_it->second;
+                if (acq_it->second == 0) {
+                    zfLineAcquireOnlyMap.erase(acq_it);
+                }
+            } else {
+                ++zfLineLockMap[key];
+            }
         }
     }
 
@@ -425,13 +450,24 @@ BaseCache::releaseZFLineLock(const PacketPtr pkt, CacheBlk *blk)
         return;
     }
 
-    if (isAcquireOnlyZFLineLockReq(pkt)) {
+    if (pkt->req->isZFenceHoldLine() || isAcquireOnlyZFLineLockReq(pkt)) {
         return;
     }
 
     const Addr blk_addr = pkt->getBlockAddr(blkSize);
     const bool is_secure = pkt->isSecure();
     const uint64_t key = zfenceLockKey(blk_addr, is_secure);
+    if (pkt->req->isZFenceConsumeHold()) {
+        auto hold_it = zfLineHoldMap.find(key);
+        if (hold_it != zfLineHoldMap.end()) {
+            if (hold_it->second > 0) {
+                --hold_it->second;
+            }
+            if (hold_it->second == 0) {
+                zfLineHoldMap.erase(hold_it);
+            }
+        }
+    }
     auto it = zfLineLockMap.find(key);
     if (it != zfLineLockMap.end()) {
         if (it->second > 0) {
@@ -478,6 +514,7 @@ BaseCache::clearZFLineLock(Addr block_addr, bool is_secure, CacheBlk *blk)
     const uint64_t key = zfenceLockKey(block_addr, is_secure);
     zfLineLockMap.erase(key);
     zfLineAcquireOnlyMap.erase(key);
+    zfLineHoldMap.erase(key);
     zfLineOwnerMap.erase(key);
 
     if (!blk) {
@@ -609,6 +646,9 @@ BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
         assert(pkt->headerDelay == 0);
         assert(pkt->payloadDelay == 0);
 
+        if (pkt->req && pkt->req->isZFenceHoldLine()) {
+            pkt->req->setFlags(Request::ZFENCE_DCACHE_HIT);
+        }
         pkt->makeTimingResponse();
 
         // In this case we are considering request_time that takes
@@ -796,6 +836,9 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     if (isAcquireOnlyZFLineLockReq(pkt) && forwardSnoops) {
         Tick grant_time = clockEdge(forwardLatency) + pkt->headerDelay;
         pkt->headerDelay = pkt->payloadDelay = 0;
+        if (pkt->req && pkt->req->isZFenceHoldLine()) {
+            pkt->req->setFlags(Request::ZFENCE_DCACHE_HIT);
+        }
         if (pkt->needsResponse()) {
             pkt->makeTimingResponse();
             cpuSidePort.schedTimingResp(pkt, grant_time);

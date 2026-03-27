@@ -71,12 +71,6 @@ class BaseO3CPU(BaseCPU):
         return True
 
     activity = Param.Unsigned(0, "Initial count")
-    pipelineIdleStallCycles = Param.Cycles(
-        1000,
-        "Cycles the O3 pipeline can stay idle with no scheduled tick "
-        "before asserting (0 disables).",
-    )
-
     cacheStorePorts = Param.Unsigned(
         200, "Cache Ports. Constrains stores only."
     )

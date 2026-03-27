@@ -167,9 +167,13 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
             }
             if (!entry->zfLockAcquired &&
                 entry->zfLockReadyCycle == Cycles(0)) {
+                const Cycles acquire_latency =
+                    (pkt->req && pkt->req->isZFenceDCacheHit()) ?
+                    zfenceMbLockAcquireLatencyHit :
+                    zfenceMbLockAcquireLatency;
                 entry->zfLockReadyCycle =
-                    cpu->curCycle() + zfenceMbLockAcquireLatency;
-                if (zfenceMbLockAcquireLatency == Cycles(0)) {
+                    cpu->curCycle() + acquire_latency;
+                if (acquire_latency == Cycles(0)) {
                     if (!entry->zfPermReady) {
                         entry->zfPermReady = true;
                         ++stats.numPermReadySet;
@@ -180,6 +184,7 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
                         entry->zfLineAddrValid;
                     entry->zfLockReqInFlight = false;
                 }
+                entry->zfHoldActive = true;
             }
         }
         delete hold_state;
@@ -3387,23 +3392,24 @@ LSQUnit::MergeBuffer::holdZFLineLockInCache(MergeBufferEntry &entry)
 
     entry.zfLockReqInFlight = true;
     entry.zfLockReqPending = false;
-    entry.zfLockReadyCycle = lsqPtr->cpu->curCycle() +
-        lsqPtr->zfenceMbLockAcquireLatencyHit;
     DPRINTF(LSQUnit,
-            "Holding zFence MB line in cache block:%#x ver:%llu ready:%llu\n",
-            entry.blockAddr, entry.version,
-            (unsigned long long)entry.zfLockReadyCycle);
+            "Sent zFence MB hold request for cache-resident line block:%#x "
+            "ver:%llu\n",
+            entry.blockAddr, entry.version);
 }
 
 void
 LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
 {
     const size_t idx = indexOf(&entry);
+    const bool retired_for_lock =
+        entry.state == EntryState::RETIRED ||
+        entry.state == EntryState::FORCE_RETIRED;
     if (!lsqPtr || !lsqPtr->zfenceEnable || !lsqPtr->zfenceLockLines) {
         return;
     }
     if (idx >= entries.size() || !entryValid[idx] || entry.isAtomic ||
-        !entry.baseReq ||
+        !entry.baseReq || !retired_for_lock ||
         !entry.zfLineAddrValid || entry.zfLockAcquired ||
         entry.zfLockReqInFlight || !entry.zfLockReqPending) {
         return;
@@ -3685,16 +3691,12 @@ LSQUnit::canRelaxUnsafeLoadRetire(uint64_t version, InstSeqNum)
 bool
 LSQUnit::MergeBuffer::hasReleaseOlderThan(uint64_t version) const
 {
-    size_t release_count = 0;
     bool versioned = lsqPtr && lsqPtr->cpu->versioningEnabled();
     for (size_t idx = 0; idx < entries.size(); ++idx) {
         if (!entryValid[idx]) {
             continue;
         }
         const auto &entry = entries[idx];
-        if (entry.isRelease) {
-            release_count++;
-        }
         if (entry.isRelease && (!versioned || entry.version <= version)) {
             if (lsqPtr) {
                 lsqPtr->stats.mbReleaseOlderThanLoadHits++;
@@ -3887,6 +3889,20 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
                 }
             }
         }
+        if (ready && lsq_ptr && lsq_ptr->zfenceEnable &&
+            lsq_ptr->zfenceLockLines && !e.isAtomic && e.zfLineAddrValid &&
+            !e.zfLockAcquired &&
+            (e.zfLockReqPending || e.zfLockReqInFlight ||
+             e.zfLockReadyCycle != Cycles(0))) {
+            ready = false;
+            DPRINTF(LSQUnit,
+                    "Deferring MB drain idx:%zu block:%#x ver:%llu "
+                    "(waiting for zFence lock state pend:%u inflight:%u "
+                    "ready:%llu)\n",
+                    i, e.blockAddr, e.version, e.zfLockReqPending,
+                    e.zfLockReqInFlight,
+                    (unsigned long long)e.zfLockReadyCycle);
+        }
         if (!ready) {
             continue;
         }
@@ -4000,7 +4016,8 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     merged_req->taskId(base->taskId());
     merged_req->setByteEnable(byte_enable);
     const bool need_zf_line_lock = lsqPtr && lsqPtr->zfenceEnable &&
-        lsqPtr->zfenceLockLines && !entry.zfLockAcquired;
+        lsqPtr->zfenceLockLines &&
+        (!entry.zfLockAcquired || entry.zfHoldActive);
     if (need_zf_line_lock) {
         merged_req->setFlags(Request::ZFENCE_LOCK_LINE);
     }
@@ -4198,6 +4215,9 @@ LSQUnit::MergeBuffer::invalidateEntry(size_t idx)
     entry.zfLockReqPending = false;
     entry.zfLockReqInFlight = false;
     entry.zfLockReadyCycle = Cycles(0);
+    entry.zfHoldActive = false;
+    entry.zfHoldReqPending = false;
+    entry.zfHoldReqInFlight = false;
     if (lsqPtr) {
         const size_t valid_entries =
             std::count(entryValid.begin(), entryValid.end(), true);
