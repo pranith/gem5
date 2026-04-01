@@ -115,7 +115,9 @@ class System(SimObject):
     )
 
     is_sparse_restore = Param.Bool(
-        False, "Skip zero-filled pages during restore"
+        False,
+        "Optimizes host RAM footprint by skipping zero-filled pages during restore, "
+        "preventing physical memory allocation for unused guest regions.",
     )
 
     cache_line_size = Param.Unsigned(64, "Cache line size in bytes")

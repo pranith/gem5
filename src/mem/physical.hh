@@ -153,12 +153,12 @@ class PhysicalMemory : public Serializable
     // Let the user choose if we reserve swap space when calling mmap
     const bool mmapUsingNoReserve;
 
-    const bool isSparseRestore;
-
     const std::string sharedBackstore;
     uint64_t sharedBackstoreSize;
 
     long pageSize;
+
+    const bool isSparseRestore;
 
     // The physical memory used to provide the memory in the simulated
     // system

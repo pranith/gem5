@@ -470,6 +470,12 @@ PhysicalMemory::unserializeStore(CheckpointIn &cp)
     uint64_t curr_size = 0;
     uint32_t bytes_read;
     if (isSparseRestore) {
+        static_assert(chunk_size >= 4096 && (chunk_size % 4096 == 0),
+                      "chunk_size must be a multiple of the 4KB page size");
+        static_assert(
+            chunk_size <= 65536,
+            "chunk_size too large, smaller chunks improve sparse efficiency");
+
         uint8_t buffer[chunk_size];
         uint8_t zeros[chunk_size] = {0};
         while (curr_size < range.size()) {
