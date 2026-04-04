@@ -415,9 +415,9 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
 
         return false;
     };
-    const auto currentO3HasStores = [tc]() {
+    const auto currentO3HasAnyStores = [tc]() {
         auto *o3_cpu = dynamic_cast<o3::CPU *>(tc->getCpuPtr());
-        return o3_cpu && o3_cpu->hasStoresToWB();
+        return o3_cpu && o3_cpu->hasAnyStoresToWB();
     };
 
     if (OS::TGT_FUTEX_WAIT == op || OS::TGT_FUTEX_WAIT_BITSET == op) {
@@ -445,7 +445,7 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         if (val != mem_val)
             return -OS::TGT_EWOULDBLOCK;
 
-        if (currentO3HasStores()) {
+        if (currentO3HasAnyStores()) {
             DPRINTF_SYSCALL(Base,
                     "futex retry op=%d ctx=%d uaddr=%#x "
                     "local_store_blocked=1 before_wait_sleep\n",
@@ -494,7 +494,7 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
          */
         if (OS::TGT_FUTEX_CMP_REQUEUE && val3 != mem_val)
             return -OS::TGT_EWOULDBLOCK;
-        if (currentO3HasStores()) {
+        if (currentO3HasAnyStores()) {
             DPRINTF_SYSCALL(Base,
                     "futex retry op=%d ctx=%d uaddr=%#x "
                     "local_store_blocked=1 before_requeue\n",

@@ -769,7 +769,14 @@ class LSQUnit
     {
         return hasUnprotectedStoresToWB();
     }
+    /** Returns whether there are any outstanding committed SQ/MB entries. */
+    bool
+    hasAnyStoresToWB() const
+    {
+        return !mergeBuffer.isEmpty() || (storesToWB > 0);
+    }
     bool hasStoreToLine(Addr line_addr) const;
+    bool hasStoresToWBForLine(Addr line_addr) const;
     /** Returns whether there are outstanding stores that cannot rely on
      *  relaxed retirement. */
     bool hasUnprotectedStoresToWB(bool *has_protected_mb = nullptr) const;

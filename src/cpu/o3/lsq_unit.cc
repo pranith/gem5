@@ -3495,6 +3495,28 @@ LSQUnit::hasStoreToLine(Addr line_addr) const
 }
 
 bool
+LSQUnit::hasStoresToWBForLine(Addr line_addr) const
+{
+    for (const auto &entry : storeQueue) {
+        if (!entry.valid() || entry.completed() || !entry.committed()) {
+            continue;
+        }
+
+        if (entry.zfLineAddrValid() && entry.zfLineAddr() == line_addr) {
+            return true;
+        }
+
+        auto *request = const_cast<LSQRequest *>(entry.request());
+        if (entry.hasRequest() && request &&
+            request->isCacheBlockHit(line_addr, cacheBlockMask)) {
+            return true;
+        }
+    }
+
+    return mergeBuffer.hasEntryForLine(line_addr);
+}
+
+bool
 LSQUnit::hasUnprotectedStoresToWB(bool *has_protected_mb) const
 {
     if (has_protected_mb) {
