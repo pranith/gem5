@@ -1215,10 +1215,30 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 tid, head_inst->seqNum, head_inst->pcState());
 
         bool need_store_drain = iewStage->hasStoresToWB(tid);
-        bool relaxed_store_drain = false;
         const bool fence_like =
             head_inst->isFullMemBarrier() ||
             head_inst->isReadBarrier() || head_inst->isWriteBarrier();
+        bool atomic_must_wait_for_all_stores = false;
+        bool atomic_must_wait_for_same_line_store = false;
+        if (head_inst->isAtomic()) {
+            // Release atomics publish prior stores and must wait for all
+            // committed SQ/MB state to drain. Other atomics only need to
+            // serialize with older committed stores to the same cache line.
+            atomic_must_wait_for_all_stores =
+                head_inst->staticInst->isRelease() &&
+                iewStage->hasAnyStoresToWB(tid);
+            if (!atomic_must_wait_for_all_stores &&
+                head_inst->effAddrValid()) {
+                const Addr line_addr =
+                    head_inst->physEffAddr & ~(cpu->cacheLineSize() - 1);
+                atomic_must_wait_for_same_line_store =
+                    iewStage->hasStoresToWBForLine(tid, line_addr);
+            }
+            need_store_drain = need_store_drain ||
+                               atomic_must_wait_for_all_stores ||
+                               atomic_must_wait_for_same_line_store;
+        }
+        bool relaxed_store_drain = false;
         if (need_store_drain && fence_like &&
             iewStage->canRelaxFenceRetire(
                 tid, head_inst->getMemOrderVersion() + 1,
@@ -1258,7 +1278,13 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
         }
 
-        if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
+        const bool atomic_must_wait_for_stores =
+            head_inst->isAtomic() && (atomic_must_wait_for_all_stores ||
+                                      atomic_must_wait_for_same_line_store);
+
+        if ((!cpu->versioningEnabled() &&
+             (inst_num > 0 || need_store_drain)) ||
+            atomic_must_wait_for_stores) {
             // Drain the merge buffer to reduce stall when versioning is off.
             if (need_store_drain) {
                 ++stats.commitBarrierDrainStallCycles;

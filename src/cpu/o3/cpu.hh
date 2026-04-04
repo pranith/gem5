@@ -542,9 +542,19 @@ class CPU : public BaseCPU
 
     virtual void wakeup(ThreadID tid) override;
 
-    /** Returns whether any thread still has stores or MB entries to drain. */
+    /** Returns whether any thread still has stores blocking normal retire. */
     bool hasStoresToWB() { return iew.hasStoresToWB(); }
-    bool hasStoreToLine(Addr line_addr) { return iew.hasStoreToLine(line_addr); }
+    /** Returns whether any thread still has committed SQ/MB state at all. */
+    bool
+    hasAnyStoresToWB()
+    {
+        return iew.hasAnyStoresToWB();
+    }
+    bool
+    hasStoreToLine(Addr line_addr)
+    {
+        return iew.hasStoreToLine(line_addr);
+    }
 
     /** Gets a free thread id. Use if thread ids change across system. */
     ThreadID getFreeTid();
