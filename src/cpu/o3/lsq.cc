@@ -516,6 +516,10 @@ LSQ::recvTimingResp(PacketPtr pkt)
                    dynamic_cast<LSQUnit::MergeBufferZFLineLockSenderState *>(
                        pkt->senderState)) {
         return mb_zf_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *sq_zf_state =
+                   dynamic_cast<LSQUnit::SQZFLineLockSenderState *>(
+                       pkt->senderState)) {
+        return sq_zf_state->lsqUnit->recvTimingResp(pkt);
     }
 
     LSQRequest *request = dynamic_cast<LSQRequest*>(pkt->senderState);

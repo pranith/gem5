@@ -201,8 +201,19 @@ class BaseO3CPU(BaseCPU):
         "Enable zFence lock tracking on cache lines",
     )
     zfenceMbLockAcquireLatency = Param.Cycles(
-        4,
+        2,
         "Extra cycles after MB lock response before lock is considered acquired",
+    )
+    zfenceMbLockAcquireLatencyHit = Param.Cycles(
+        0,
+        "Extra cycles after an early zFence lock-only response before the "
+        "lock is considered acquired",
+    )
+    zfenceMbLockRequestAtAlloc = Param.Bool(
+        False,
+        "Issue zFence MB line-lock requests when the merge-buffer entry is "
+        "allocated instead of relying on the SQ writeback-ready path and "
+        "retirement-time requests",
     )
     safeStlfLoadsBypassMBDrain = Param.Bool(
         True,
