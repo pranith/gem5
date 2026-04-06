@@ -593,7 +593,10 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(numDeferredSnoops, statistics::units::Count::get(),
                "Deferred snoops observed for zFence-locked lines"),
       ADD_STAT(numFallbacks, statistics::units::Count::get(),
-               "Fallbacks to baseline ordering behavior for zFence")
+               "Fallbacks to baseline ordering behavior for zFence"),
+      ADD_STAT(numInactiveOrderingSnoopLoads, statistics::units::Count::get(),
+               "Snooped loads left non-hazardous because no active ordering "
+               "context remained")
 {
     loadToUse
         .init(0, 299, 10)
@@ -888,8 +891,13 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 request->setStateToFault();
                 ++stats.barrierReschedulesLSQ;
             } else {
-                DPRINTF(LSQUnit, "HitExternal Snoop for addr %#x [sn:%lli]\n",
-                        pkt->getAddr(), ld_inst->seqNum);
+                const bool ordering_hazard =
+                    loadNeedsOrderingHazardTracking(ld_inst);
+                const bool first_snoop = !ld_inst->hitExternalSnoop();
+                DPRINTF(LSQUnit,
+                        "HitExternal Snoop for addr %#x [sn:%lli] "
+                        "ordering_hazard:%d\n",
+                        pkt->getAddr(), ld_inst->seqNum, ordering_hazard);
 
                 // Make sure that we don't lose a snoop hitting a LOCKED
                 // address since the LOCK* flags don't get updated until
@@ -902,7 +910,11 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // If an older barrier or load checks this and it's true
                 // then we might have missed the snoop
                 // in which case we need to invalidate to be sure
+                if (first_snoop && !ordering_hazard) {
+                    ++stats.numInactiveOrderingSnoopLoads;
+                }
                 ld_inst->hitExternalSnoop(true);
+                ld_inst->orderingHazardSnoop(ordering_hazard);
             }
         }
     }
@@ -935,7 +947,7 @@ LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
             continue;
         }
 
-        if (!ld_inst->hitExternalSnoop()) {
+        if (!ld_inst->orderingHazardSnoop()) {
             continue;
         }
 
@@ -991,9 +1003,10 @@ LSQUnit::markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
 
         DPRINTF(LSQUnit,
                 "Acquire scan [sn:%lli] PC:%s exec:%d snoop:%d "
-                "fault:%s squashed:%d\n",
+                "ordering_hazard:%d fault:%s squashed:%d\n",
                 ld_inst->seqNum, ld_inst->pcState(), ld_inst->isExecuted(),
                 ld_inst->hitExternalSnoop(),
+                ld_inst->orderingHazardSnoop(),
                 ld_inst->fault ? ld_inst->fault->name() : "NoFault",
                 ld_inst->isSquashed());
 
@@ -1003,7 +1016,7 @@ LSQUnit::markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
             continue;
         }
 
-        if (!ld_inst->hitExternalSnoop()) {
+        if (!ld_inst->orderingHazardSnoop()) {
             continue;
         }
 
@@ -1055,7 +1068,7 @@ LSQUnit::markLoadsHitExternalSnoop(uint64_t version)
             continue;
         }
 
-        if (!ld_inst->hitExternalSnoop()) {
+        if (!ld_inst->orderingHazardSnoop()) {
             continue;
         }
 
@@ -3477,6 +3490,57 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version)
     }
 
     if (version > *youngest) {
+        return true;
+    }
+
+    return false;
+}
+
+bool
+LSQUnit::loadNeedsOrderingHazardTracking(const DynInstPtr &inst) const
+{
+    if (!inst) {
+        return false;
+    }
+
+    if (needsTSO || !cpu->versioningEnabled()) {
+        return true;
+    }
+
+    const uint64_t version = inst->getMemOrderVersion();
+    return loadBlockedByOlderAcquire(inst->seqNum) ||
+           const_cast<LSQUnit *>(this)->loadBlockedByMBVersion(version) ||
+           const_cast<LSQUnit *>(this)->loadBlockedByReleaseMB(version) ||
+           loadBlockedByReleaseSQ(version, inst->seqNum);
+}
+
+bool
+LSQUnit::loadBlockedByOlderAcquire(InstSeqNum load_seq) const
+{
+    for (const auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->seqNum >= load_seq || ld_inst->isSquashed()) {
+            continue;
+        }
+
+        if (!ld_inst->staticInst->isAcquire()) {
+            continue;
+        }
+
+        if (ld_inst->staticInst->isAcquirePC() && optimizeAcquirePC) {
+            continue;
+        }
+
+        if (ld_inst->isExecuted()) {
+            continue;
+        }
+
         return true;
     }
 

@@ -177,7 +177,7 @@ class BaseO3CPU(BaseCPU):
         64, "Retire window used when resetting an entry on merge"
     )
     optimizeStoreRelease = Param.Bool(
-        False,
+        True,
         "Enable optimized store-release handling with release buffer tracking",
     )
     cacheOrderingTagEntries = Param.Unsigned(
@@ -205,7 +205,7 @@ class BaseO3CPU(BaseCPU):
         "Extra cycles after MB lock response before lock is considered acquired",
     )
     zfenceMbLockAcquireLatencyHit = Param.Cycles(
-        0,
+        4,
         "Extra cycles after an early zFence lock-only response before the "
         "lock is considered acquired",
     )

@@ -543,12 +543,15 @@ class CPU : public BaseCPU
     virtual void wakeup(ThreadID tid) override;
 
     /** Returns whether any thread still has stores blocking normal retire. */
-    bool hasStoresToWB() { return iew.hasStoresToWB(); }
+    bool hasStoresToWB() const
+    {
+        return const_cast<IEW &>(iew).hasStoresToWB();
+    }
     /** Returns whether any thread still has committed SQ/MB state at all. */
     bool
-    hasAnyStoresToWB()
+    hasAnyStoresToWB() const
     {
-        return iew.hasAnyStoresToWB();
+        return const_cast<IEW &>(iew).hasAnyStoresToWB();
     }
     bool
     hasStoreToLine(Addr line_addr)

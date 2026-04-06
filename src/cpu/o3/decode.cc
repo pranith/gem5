@@ -116,6 +116,7 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
         squashInst[tid] = nullptr;
         squashAfterDelaySlot[tid] = 0;
         memOrderVersion[tid] = 0;
+        memOrderReleaseVersion[tid] = 0;
         memOrderHistory[tid].clear();
     }
 }
@@ -140,6 +141,7 @@ Decode::clearStates(ThreadID tid)
     }
 
     memOrderVersion[tid] = 0;
+    memOrderReleaseVersion[tid] = 0;
     memOrderHistory[tid].clear();
 
     // Clear out any of this thread's instructions being sent to fetch.
@@ -738,27 +740,51 @@ Decode::decodeInsts(ThreadID tid)
         }
 
         if (cpu->versioningEnabled()) {
-            // Increment the per-thread memory version on barriers so that
-            // following memory ops can be tagged with a new epoch. Store
-            // releases only skip the bump when optimizeStoreRelease is on.
-            bool bump_version =
-                (inst->isWriteBarrier() || inst->isReadBarrier()) &&
-                (!(inst->staticInst->isAcquire() ||
-                   (inst->staticInst->isRelease() && optimizeStoreRelease)));
+            uint64_t inst_version = memOrderVersion[tid];
+            const bool is_store_release =
+                optimizeStoreRelease &&
+                inst->staticInst->isRelease() &&
+                inst->isWriteBarrier() &&
+                !inst->isFullMemBarrier();
+            const bool is_barrier =
+                inst->isWriteBarrier() || inst->isReadBarrier();
+            const bool is_full_fence = inst->isFullMemBarrier();
 
-            if (bump_version) {
-                ++memOrderVersion[tid];
+            if (is_store_release) {
+                memOrderReleaseVersion[tid] =
+                    std::max(memOrderVersion[tid],
+                             memOrderReleaseVersion[tid]) + 1;
+                inst_version = memOrderReleaseVersion[tid];
 
                 DPRINTF(Decode,
-                        "[tid:%i] Decoded a barrier instruction %i with PC:"
-                        "%s %s. Mem Order version is %i\n",
+                        "[tid:%i] Decoded store-release [sn:%llu] PC %s %s. "
+                        "Mem Order version is %llu (g=%llu, r=%llu)\n",
                         tid, inst->seqNum, inst->pcState(),
                         inst->staticInst->disassemble(
                             inst->pcState().instAddr()),
-                        memOrderVersion[tid]);
+                        inst_version, memOrderVersion[tid],
+                        memOrderReleaseVersion[tid]);
+            } else if (is_barrier && !inst->staticInst->isAcquire()) {
+                if (is_full_fence && optimizeStoreRelease) {
+                    memOrderVersion[tid] =
+                        std::max(memOrderVersion[tid],
+                                 memOrderReleaseVersion[tid]) + 1;
+                } else {
+                    ++memOrderVersion[tid];
+                }
+                inst_version = memOrderVersion[tid];
+
+                DPRINTF(Decode,
+                        "[tid:%i] Decoded a barrier instruction %i with PC:"
+                        "%s %s. Mem Order version is %llu (g=%llu, r=%llu)\n",
+                        tid, inst->seqNum, inst->pcState(),
+                        inst->staticInst->disassemble(
+                            inst->pcState().instAddr()),
+                        inst_version, memOrderVersion[tid],
+                        memOrderReleaseVersion[tid]);
             }
 
-            inst->setMemOrderVersion(memOrderVersion[tid]);
+            inst->setMemOrderVersion(inst_version);
         }
 
         // This current instruction is valid, so add it into the decode
