@@ -193,11 +193,11 @@ class BaseO3CPU(BaseCPU):
         "Enable zFence early-permission tracking",
     )
     zfenceRelaxRetire = Param.Bool(
-        False,
+        True,
         "Enable zFence relaxed-retire paths",
     )
     zfenceLockLines = Param.Bool(
-        False,
+        True,
         "Enable zFence lock tracking on cache lines",
     )
     zfenceMbLockAcquireLatency = Param.Cycles(
@@ -210,10 +210,9 @@ class BaseO3CPU(BaseCPU):
         "lock is considered acquired",
     )
     zfenceMbLockRequestAtAlloc = Param.Bool(
-        False,
+        True,
         "Issue zFence MB line-lock requests when the merge-buffer entry is "
-        "allocated instead of relying on the SQ writeback-ready path and "
-        "retirement-time requests",
+        "allocated instead of waiting until retirement",
     )
     safeStlfLoadsBypassMBDrain = Param.Bool(
         True,
