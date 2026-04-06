@@ -442,6 +442,22 @@ CPU::heartbeat() const
                                      (*head_inst)->pcState().instAddr());
                 disasm = disasm_str.c_str();
             }
+            const bool waiting_on_store_drain =
+                hasAnyStoresToWB() &&
+                (((*head_inst)->isAtomic() &&
+                  (*head_inst)->staticInst &&
+                  (*head_inst)->staticInst->isRelease()) ||
+                 (*head_inst)->isFullMemBarrier() ||
+                 (*head_inst)->isReadBarrier() ||
+                 (*head_inst)->isWriteBarrier());
+            if (waiting_on_store_drain) {
+                warn("IPC 0 in heartbeat on CPU %i while head ROB inst "
+                     "[tid:%i] [sn:%llu] PC %s %s waits for store drain; "
+                     "continuing\n",
+                     cpuId(), head_tid, (*head_inst)->seqNum,
+                     (*head_inst)->pcState(), disasm);
+                return;
+            }
             panic("IPC 0 in heartbeat. CPU %i head ROB inst [tid:%i] [sn:%llu] "
                   "PC %s %s\n",
                   cpuId(), head_tid, (*head_inst)->seqNum,

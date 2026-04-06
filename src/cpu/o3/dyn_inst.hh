@@ -188,6 +188,7 @@ class DynInst : public ExecContext, public RefCounted
         PossibleLoadViolation,
         MemDepPredHit,
         HitExternalSnoop,
+        OrderingHazardSnoop,
         EffAddrValid,
         RecordResult,
         Predicate,
@@ -456,12 +457,18 @@ class DynInst : public ExecContext, public RefCounted
         instFlags[MemDepPredHit] = f;
     }
 
-    /** True if the address hit a external snoop while sitting in the LSQ.
-     * If this is true and a older instruction sees it, this instruction must
-     * reexecute
-     */
+    /** True if the address saw an external snoop while sitting in the LSQ. */
     bool hitExternalSnoop() const { return instFlags[HitExternalSnoop]; }
     void hitExternalSnoop(bool f) { instFlags[HitExternalSnoop] = f; }
+    /** True if a snoop still implies an active ordering hazard. */
+    bool orderingHazardSnoop() const
+    {
+        return instFlags[OrderingHazardSnoop];
+    }
+    void orderingHazardSnoop(bool f)
+    {
+        instFlags[OrderingHazardSnoop] = f;
+    }
     bool stlfForwarded() const { return instFlags[StlfForwarded]; }
     void stlfForwarded(bool f) { instFlags[StlfForwarded] = f; }
     bool

@@ -751,6 +751,10 @@ class LSQUnit
      * that has not drained yet.
      */
     bool loadBlockedByMBVersion(uint64_t version);
+    /** Returns true if a snooped load still has an active ordering context. */
+    bool loadNeedsOrderingHazardTracking(const DynInstPtr &inst) const;
+    /** Returns true if there is an older incomplete acquire load. */
+    bool loadBlockedByOlderAcquire(InstSeqNum load_seq) const;
     /** Returns true if a load must wait for older release MB entries. */
     bool loadBlockedByReleaseMB(uint64_t version);
     /** Returns true if a load must wait for older release SQ entries. */
@@ -1146,6 +1150,8 @@ class LSQUnit
         statistics::Scalar numDeferredSnoops;
         /** Number of times zFence falls back to baseline behavior. */
         statistics::Scalar numFallbacks;
+        /** Snooped loads kept non-hazardous because ordering is no longer active. */
+        statistics::Scalar numInactiveOrderingSnoopLoads;
     } stats;
 
   public:
