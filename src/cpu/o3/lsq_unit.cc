@@ -2157,6 +2157,21 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
     return ret;
 }
 
+bool
+LSQUnit::trySendPacketBestEffort(bool isLoad, PacketPtr data_pkt)
+{
+    if (lsq->cacheBlocked() || !lsq->cachePortAvailable(isLoad)) {
+        return false;
+    }
+
+    if (!dcachePort->sendTimingReq(data_pkt)) {
+        return false;
+    }
+
+    lsq->cachePortBusy(isLoad);
+    return true;
+}
+
 void
 LSQUnit::startStaleTranslationFlush()
 {
@@ -3369,7 +3384,7 @@ LSQUnit::MergeBuffer::requestZFLineLock(MergeBufferEntry &entry)
     pkt->senderState = new MergeBufferZFLineLockSenderState(
         &entry, lsqPtr, entry.version, entry.blockAddr, acquire_latency);
 
-    if (!lsqPtr->trySendPacket(false, pkt)) {
+    if (!lsqPtr->trySendPacketBestEffort(false, pkt)) {
         if (auto *zf_state = dynamic_cast<MergeBufferZFLineLockSenderState *>(
                 pkt->senderState)) {
             delete zf_state;
