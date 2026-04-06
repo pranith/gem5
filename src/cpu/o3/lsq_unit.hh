@@ -158,12 +158,6 @@ class SQEntry : public LSQEntry
     bool _zfLineAddrValid = false;
     /** zFence-tracked cache line address. */
     Addr _zfLineAddr = 0;
-    /** zFence: a line-lock request should be (re)attempted. */
-    bool _zfLockReqPending = false;
-    /** zFence: a line-lock request is currently in-flight. */
-    bool _zfLockReqInFlight = false;
-    /** zFence: cycle when SQ line lock becomes usable. */
-    Cycles _zfLockReadyCycle = Cycles(0);
 
   public:
     static constexpr size_t DataSize = sizeof(_data);
@@ -230,24 +224,6 @@ class SQEntry : public LSQEntry
     const Addr &
     zfLineAddr() const
     { return _zfLineAddr; }
-    bool &
-    zfLockReqPending()
-    { return _zfLockReqPending; }
-    const bool &
-    zfLockReqPending() const
-    { return _zfLockReqPending; }
-    bool &
-    zfLockReqInFlight()
-    { return _zfLockReqInFlight; }
-    const bool &
-    zfLockReqInFlight() const
-    { return _zfLockReqInFlight; }
-    Cycles &
-    zfLockReadyCycle()
-    { return _zfLockReadyCycle; }
-    const Cycles &
-    zfLockReadyCycle() const
-    { return _zfLockReadyCycle; }
     char *
     data()
     { return _data; }
@@ -803,7 +779,7 @@ class LSQUnit
     bool hasStoresToWBForLine(Addr line_addr) const;
     /** Returns whether there are outstanding stores that cannot rely on
      *  relaxed retirement. */
-    bool hasUnprotectedStoresToWB(bool *has_protected_mb = nullptr);
+    bool hasUnprotectedStoresToWB(bool *has_protected_mb = nullptr) const;
 
     /** Advance merge buffer retirement independent of store writeback. */
     void updateMergeBufferRetire();
@@ -850,18 +826,6 @@ class LSQUnit
 
     /** Mark store request fragments to hold zFence line locks in cache. */
     void markRequestZFLineLock(LSQRequest *request) const;
-
-    /** Issue an acquire-only zFence line-lock request for a canWB SQ store. */
-    void issuePendingSQZFLineLock();
-
-    /** Returns true if the store can participate in SQ-side zFence locking. */
-    bool canProtectSQEntryWithZFence(const SQEntry &entry) const;
-
-    /** Promote a matured SQ zFence lock request into usable permission. */
-    void updateSQZFLockState(SQEntry &entry);
-
-    /** Returns true if the SQ entry is fully protected for relaxed retire. */
-    bool isSQEntryZFLocked(const SQEntry &entry) const;
 
     void sendLockedRMWAbort(LSQRequest *request);
     void retryLockedRMWAborts();
@@ -955,22 +919,6 @@ class LSQUnit
                                          uint64_t v, Addr a,
                                          Cycles latency)
             : entry(e), lsqUnit(unit), expectedVersion(v),
-              expectedBlockAddr(a), acquireLatency(latency)
-        {}
-    };
-
-    /** Sender state for store-queue zFence lock-only requests. */
-    struct SQZFLineLockSenderState : public Packet::SenderState
-    {
-        SQEntry *entry;
-        LSQUnit *lsqUnit;
-        InstSeqNum expectedSeqNum;
-        Addr expectedBlockAddr;
-        Cycles acquireLatency;
-        SQZFLineLockSenderState(SQEntry *e, LSQUnit *unit,
-                                InstSeqNum seq, Addr a,
-                                Cycles latency)
-            : entry(e), lsqUnit(unit), expectedSeqNum(seq),
               expectedBlockAddr(a), acquireLatency(latency)
         {}
     };

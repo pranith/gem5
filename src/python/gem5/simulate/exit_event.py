@@ -74,9 +74,15 @@ class ExitEvent(Enum):
             return ExitEvent.WORKBEGIN
         elif exit_string == "workbegin":
             return ExitEvent.WORKBEGIN
+        elif exit_string == "work started count reach":
+            return ExitEvent.WORKBEGIN
+        elif exit_string == "work started on specific cpu":
+            return ExitEvent.WORKBEGIN
         elif exit_string == "m5_workend instruction encountered":
             return ExitEvent.WORKEND
         elif exit_string == "workend":
+            return ExitEvent.WORKEND
+        elif exit_string == "work items exit count reached":
             return ExitEvent.WORKEND
         elif exit_string == "m5_exit instruction encountered":
             return ExitEvent.EXIT
