@@ -841,6 +841,12 @@ class LSQUnit
      */
     bool trySendPacket(bool isLoad, PacketPtr data_pkt);
 
+    /**
+     * Attempts to send a best-effort packet without marking the LSQ cache
+     * blocked if the cache port is backpressured.
+     */
+    bool trySendPacketBestEffort(bool isLoad, PacketPtr data_pkt);
+
 
     /** Debugging function to dump instructions in the LSQ. */
     void dumpInsts() const;
