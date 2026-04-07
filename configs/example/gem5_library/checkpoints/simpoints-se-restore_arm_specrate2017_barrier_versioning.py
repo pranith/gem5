@@ -52,9 +52,9 @@ scons build/X86/gem5.opt
 
 """
 
-import argparse
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import m5
@@ -76,10 +76,20 @@ from m5.stats import (
 )
 
 from gem5.components.boards.simple_board import SimpleBoard
+from gem5.components.boards.abstract_board import AbstractBoard
+from gem5.components.cachehierarchies.abstract_three_level_cache_hierarchy import (
+    AbstractThreeLevelCacheHierarchy,
+)
+from gem5.components.cachehierarchies.classic.abstract_classic_cache_hierarchy import (
+    AbstractClassicCacheHierarchy,
+)
+from gem5.components.cachehierarchies.classic.caches.l1dcache import L1DCache
+from gem5.components.cachehierarchies.classic.caches.l1icache import L1ICache
+from gem5.components.cachehierarchies.classic.caches.l2cache import L2Cache
 from gem5.components.cachehierarchies.classic.private_l1_private_l2_cache_hierarchy import (
     PrivateL1PrivateL2CacheHierarchy,
 )
-from gem5.components.memory import DualChannelDDR4_2400
+from gem5.components.memory import DIMM_DDR5_4400
 from gem5.components.processors.base_cpu_core import BaseCPUCore
 from gem5.components.processors.base_cpu_processor import BaseCPUProcessor
 from gem5.components.processors.cpu_types import CPUTypes
@@ -101,6 +111,26 @@ import gem5.utils.multisim as multisim
 
 multisim.set_num_processes(24)
 
+
+def _env_on_off(name):
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if value == "on":
+        return True
+    if value == "off":
+        return False
+    raise ValueError(f"{name} must be set to 'on' or 'off'")
+
+
+def _env_workload_filter(name):
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    workloads = [item.strip() for item in value.split(",") if item.strip()]
+    return set(workloads) if workloads else None
+
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers/{x_workload}"
 
 spec_rate_workloads = [
@@ -120,6 +150,17 @@ spec_rate_workloads = [
     "541.leela_r",
     "557.xz_r",
 ]
+
+workload_filter = _env_workload_filter("WORKLOAD_FILTER")
+if workload_filter is not None:
+    unknown = sorted(workload_filter.difference(spec_rate_workloads))
+    if unknown:
+        raise ValueError(
+            "Unknown workloads in WORKLOAD_FILTER: " + ", ".join(unknown)
+        )
+    spec_rate_workloads = [
+        workload for workload in spec_rate_workloads if workload in workload_filter
+    ]
 
 spec_rate_binary = {
     "500.perlbench_r_checkspam": "perlbench_r",
@@ -158,6 +199,39 @@ spec_rate_args = {
 }
 
 
+def resolve_workload_args(workload, workload_dir):
+    all_args = spec_rate_args[workload].split()
+
+    if workload.startswith("500.perlbench_r_"):
+        resolved = []
+        for arg in all_args:
+            if arg == "-I./lib":
+                resolved.append(f"-I{workload_dir}/lib")
+            elif arg.endswith(".pl"):
+                resolved.append(f"{workload_dir}/{arg}")
+            else:
+                resolved.append(arg)
+        return resolved
+
+    if workload == "525.x264_r":
+        return [
+            "--pass",
+            "1",
+            "--stats",
+            f"{workload_dir}/x264_stats.log",
+            "--bitrate",
+            "1000",
+            "--frames",
+            "1000",
+            "-o",
+            f"{workload_dir}/BuckBunny_New.264",
+            f"{workload_dir}/BuckBunny.yuv",
+            "1280x720",
+        ]
+
+    return all_args
+
+
 class CustomCore(BaseCPUCore):
     def __init__(self):
         super().__init__(ArmO3CPU(), ISA.ARM)
@@ -167,7 +241,14 @@ class CustomCore(BaseCPUCore):
         self.core.useMergeBuffer = True
         self.core.mergeBufferEntries = 32
         self.core.mergeBufferPrefetch = True
-        self.core.enableVersioning = True
+        versioning = _env_on_off("VERSIONING")
+        if versioning is None:
+            self.core.enableVersioning = True
+        else:
+            self.core.enableVersioning = versioning
+        zfence = _env_on_off("ZFENCE")
+        if zfence is not None:
+            self.core.zfenceEnable = zfence
         self.core.optimizeStoreRelease = False
         self.core.optimizeAcquirePC = False
         self.core.safeStlfLoadsBypassMBDrain = True
@@ -178,6 +259,116 @@ class CustomProcessor(BaseCPUProcessor):
     def __init__(self):
         cores = [CustomCore()]
         super().__init__(cores)
+
+
+class PrivateL1PrivateL2SharedL3CacheHierarchy(
+    AbstractClassicCacheHierarchy, AbstractThreeLevelCacheHierarchy
+):
+    """Classic private-L1, private-L2, shared-L3 hierarchy."""
+
+    def __init__(
+        self,
+        l1d_size: str,
+        l1i_size: str,
+        l2_size: str,
+        l3_size: str,
+    ) -> None:
+        AbstractClassicCacheHierarchy.__init__(self)
+        AbstractThreeLevelCacheHierarchy.__init__(
+            self,
+            l1i_size=l1i_size,
+            l1i_assoc=8,
+            l1d_size=l1d_size,
+            l1d_assoc=8,
+            l2_size=l2_size,
+            l2_assoc=16,
+            l3_size=l3_size,
+            l3_assoc=16,
+        )
+
+        self.membus = SystemXBar(width=64)
+        self.membus.badaddr_responder = BadAddr()
+        self.membus.default = self.membus.badaddr_responder.pio
+
+    def get_mem_side_port(self):
+        return self.membus.mem_side_ports
+
+    def get_cpu_side_port(self):
+        return self.membus.cpu_side_ports
+
+    def incorporate_cache(self, board: AbstractBoard) -> None:
+        board.connect_system_port(self.membus.cpu_side_ports)
+
+        for _, port in board.get_mem_ports():
+            self.membus.mem_side_ports = port
+
+        self.l3_bus = L2XBar()
+        l3_node = self.add_root_child(
+            "l3-cache",
+            L2Cache(
+                size=self._l3_size,
+                assoc=self._l3_assoc,
+                tag_latency=20,
+                data_latency=20,
+                response_latency=20,
+                clusivity="mostly_excl",
+            ),
+        )
+        self.l3_bus.mem_side_ports = l3_node.cache.cpu_side
+        self.membus.cpu_side_ports = l3_node.cache.mem_side
+
+        num_cores = board.get_processor().get_num_cores()
+        self._l2buses = []
+        for i in range(num_cores):
+            bus = L2XBar()
+            setattr(self, f"l2_bus_{i}", bus)
+            self._l2buses.append(bus)
+
+        for i, cpu in enumerate(board.get_processor().get_cores()):
+            l2_node = l3_node.add_child(
+                f"l2-cache-{i}",
+                L2Cache(size=self._l2_size, assoc=self._l2_assoc),
+            )
+            l1i_node = l2_node.add_child(
+                f"l1i-cache-{i}", L1ICache(size=self._l1i_size)
+            )
+            l1d_node = l2_node.add_child(
+                f"l1d-cache-{i}", L1DCache(size=self._l1d_size)
+            )
+
+            self._l2buses[i].mem_side_ports = l2_node.cache.cpu_side
+            self.l3_bus.cpu_side_ports = l2_node.cache.mem_side
+
+            l1i_node.cache.mem_side = self._l2buses[i].cpu_side_ports
+            l1d_node.cache.mem_side = self._l2buses[i].cpu_side_ports
+
+            cpu.connect_icache(l1i_node.cache.cpu_side)
+            cpu.connect_dcache(l1d_node.cache.cpu_side)
+            cpu.connect_walker_ports(
+                self._l2buses[i].cpu_side_ports,
+                self._l2buses[i].cpu_side_ports,
+            )
+
+            if board.get_processor().get_isa() == ISA.X86:
+                int_req_port = self.membus.mem_side_ports
+                int_resp_port = self.membus.cpu_side_ports
+                cpu.connect_interrupt(int_req_port, int_resp_port)
+            else:
+                cpu.connect_interrupt()
+
+        if board.has_coherent_io():
+            self._iocache = Cache(
+                assoc=8,
+                tag_latency=50,
+                data_latency=50,
+                response_latency=50,
+                mshrs=20,
+                size="1KiB",
+                tgts_per_mshr=12,
+                addr_ranges=board.mem_ranges,
+            )
+            self._iocache.mem_side = self.membus.cpu_side_ports
+            self._iocache.cpu_side = board.get_mem_side_coherent_io_port()
 
 
 def parse_simpoint_file(filename):
@@ -261,7 +452,7 @@ for workload in spec_rate_workloads:
 
     # print(binary_file, spec_rate_args[workload])
 
-    all_args = spec_rate_args[workload].split()
+    all_args = resolve_workload_args(workload, workload_dir)
     argv = [binary_file] + all_args
 
     # print(argv)
@@ -283,15 +474,16 @@ for workload in spec_rate_workloads:
 
         # The cache hierarchy can be different from the cache hierarchy used in taking
         # the checkpoints
-        cache_hierarchy = PrivateL1PrivateL2CacheHierarchy(
+        cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
             l1d_size="32KiB",
             l1i_size="32KiB",
-            l2_size="256KiB",
+            l2_size="2MiB",
+            l3_size="16MiB",
         )
 
         # The memory structure can be different from the memory structure used in
         # taking the checkpoints, but the size of the memory must be maintained
-        memory = DualChannelDDR4_2400(size="4GiB")
+        memory = DIMM_DDR5_4400(size="4GiB")
 
         workload_resource = BinaryResource(
             local_path=binary_file,
@@ -317,11 +509,21 @@ for workload in spec_rate_workloads:
                 # simpoint_interval=20000000,
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
-                warmup_interval=50000000,
+                warmup_interval=100000000,
                 # warmup_interval=5000,
             ),
             checkpoint=CheckpointResource(local_path=chkpt),
         )
+        # Ensure relative file accesses resolve inside the workload directory.
+        for core in processor.get_cores():
+            if not hasattr(core, "core") or not hasattr(core.core, "workload"):
+                continue
+            workload_obj = core.core.workload
+            if hasattr(workload_obj, "__iter__"):
+                for proc in workload_obj:
+                    proc.cwd = workload_dir
+            else:
+                workload_obj.cwd = workload_dir
 
         chkpt_id = f"chkpt_{workload_name}_{chkpt_idx}"
         simulator = Simulator(
