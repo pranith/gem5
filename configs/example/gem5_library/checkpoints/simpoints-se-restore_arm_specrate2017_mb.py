@@ -52,7 +52,9 @@ scons build/X86/gem5.opt
 
 """
 
+import os
 import shutil
+import sys
 from pathlib import Path
 
 import m5
@@ -98,6 +100,18 @@ requires(isa_required=ISA.ARM)
 import gem5.utils.multisim as multisim
 
 multisim.set_num_processes(24)
+
+
+def _env_on_off(name):
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if value == "on":
+        return True
+    if value == "off":
+        return False
+    raise ValueError(f"{name} must be set to 'on' or 'off'")
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64/{x_workload}"
 
@@ -172,7 +186,14 @@ class CustomCore(BaseCPUCore):
         self.core.mergeBufferRetireResetCycles = 4
         self.core.mergeBufferPrefetch = True
         self.core.speculativeBarrierIssue = True
-        self.core.enableVersioning = True
+        versioning = _env_on_off("VERSIONING")
+        if versioning is None:
+            self.core.enableVersioning = True
+        else:
+            self.core.enableVersioning = versioning
+        zfence = _env_on_off("ZFENCE")
+        if zfence is not None:
+            self.core.zfenceEnable = zfence
         # self.core.branchPred = Rancho_BP()
 
 
