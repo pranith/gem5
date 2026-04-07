@@ -196,10 +196,14 @@ def create(args):
             enable_versioning = args.versioning == "on"
             enable_store_release_opt = args.optimize_release == "on"
             enable_acquire_pc_opt = args.optimize_acquire_pc == "on"
+            enable_safe_stlf_loads_bypass_mb = args.safeStlfBypass == "on"
+            enable_safe_cache_loads_bypass_mb = args.safeCacheBypass == "on"
             for cpu in system.cpu_cluster.cpus:
                 cpu.enableVersioning = enable_versioning
                 cpu.optimizeStoreRelease = enable_store_release_opt
                 cpu.optimizeAcquirePC = enable_acquire_pc_opt
+                cpu.safeStlfLoadsBypassMBDrain = enable_safe_stlf_loads_bypass_mb
+                cpu.safeCacheLoadsBypassMBDrain = enable_safe_cache_loads_bypass_mb
 
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
@@ -251,6 +255,18 @@ def main():
         choices=["on", "off"],
         default=None,
         help="Enable/disable versioning",
+    )
+    parser.add_argument(
+        "--safeCacheBypass",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable safe loads from cache bypass MB drain",
+    )
+    parser.add_argument(
+        "--safeStlfBypass",
+        choices=["on", "off"],
+        default=None,
+        help="Enable/disable safe loads from SQ/MB bypass MB drain",
     )
     parser.add_argument(
         "--optimize-release",
