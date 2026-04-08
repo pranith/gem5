@@ -201,11 +201,11 @@ class BaseO3CPU(BaseCPU):
         "Enable zFence lock tracking on cache lines",
     )
     zfenceMbLockAcquireLatency = Param.Cycles(
-        12,
+        4,
         "Extra cycles after MB lock response before lock is considered acquired",
     )
     zfenceMbLockAcquireLatencyHit = Param.Cycles(
-        4,
+        0,
         "Extra cycles after an early zFence lock-only response before the "
         "lock is considered acquired",
     )
