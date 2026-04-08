@@ -131,6 +131,23 @@ def _env_workload_filter(name):
     workloads = [item.strip() for item in value.split(",") if item.strip()]
     return set(workloads) if workloads else None
 
+
+def _env_positive_int(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return parsed
+
+
+SIMPOINT_INTERVAL = _env_positive_int("MEASURE_INSTS", 200000000)
+SIMPOINT_WARMUP = _env_positive_int("WARMUP_INSTS", 100000000)
+
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers/{x_workload}"
 
 spec_rate_workloads = [
@@ -505,12 +522,10 @@ for workload in spec_rate_workloads:
             workload_resource,
             arguments=argv[1:],
             simpoint=SimpointResource(
-                simpoint_interval=200000000,
-                # simpoint_interval=20000000,
+                simpoint_interval=SIMPOINT_INTERVAL,
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
-                warmup_interval=100000000,
-                # warmup_interval=5000,
+                warmup_interval=SIMPOINT_WARMUP,
             ),
             checkpoint=CheckpointResource(local_path=chkpt),
         )
