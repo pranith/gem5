@@ -193,7 +193,8 @@ class PhysicalMemory : public Serializable
                    const std::vector<AbstractMemory *> &_memories,
                    bool mmap_using_noreserve,
                    const std::string &shared_backstore,
-                   bool auto_unlink_shared_backstore, bool is_sparse_restore);
+                   bool auto_unlink_shared_backstore,
+                   bool is_sparse_restore = false);
 
     /**
      * Unmap all the backing store we have used.
