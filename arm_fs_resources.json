@@ -21,7 +21,7 @@
             "24.1"
         ],
         "size": 152377808,
-        "url": "file:///arm_fs_tarball/binaries/vmlinux.arm",
+        "url": "file:///<path_to_arm32_kernel>/vmlinux.arm",
         "md5sum": "f8c42b97ed226163ed11c853e2fd5b9c",
         "is_zipped": false,
         "architecture": "ARM",
@@ -50,9 +50,8 @@
             "24.1"
         ],
         "size": 152377808,
-        "url":
-            "https://dist.gem5.org/dist/develop/kernels/arm/static/vmlinux-6.18.19.arm64-20260324",
-        "md5sum": "701704f4d15fd5502d965ee6f4f65b4d",
+        "url": "file:///<path_to_arm6.18.19_kernel>/vmlinux.arm64",
+        "md5sum": "3dfe5a1b196a332c1bdb368c827db48d",
         "is_zipped": false,
         "architecture": "ARM",
         "source": "src/linux-kernel"
