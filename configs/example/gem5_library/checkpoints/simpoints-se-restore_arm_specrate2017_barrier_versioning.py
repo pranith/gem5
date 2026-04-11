@@ -109,8 +109,6 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(24)
-
 
 def _env_on_off(name):
     value = os.environ.get(name)
@@ -144,6 +142,22 @@ def _env_positive_int(name, default):
         raise ValueError(f"{name} must be non-negative")
     return parsed
 
+
+def _env_optional_positive_int(name):
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return parsed
+
+
+MULTISIM_NUM_PROCESSES = _env_positive_int("MULTISIM_NUM_PROCESSES", 24)
+multisim.set_num_processes(MULTISIM_NUM_PROCESSES)
 
 SIMPOINT_INTERVAL = _env_positive_int("MEASURE_INSTS", 200000000)
 SIMPOINT_WARMUP = _env_positive_int("WARMUP_INSTS", 100000000)
@@ -266,6 +280,16 @@ class CustomCore(BaseCPUCore):
         zfence = _env_on_off("ZFENCE")
         if zfence is not None:
             self.core.zfenceEnable = zfence
+        zfence_lock_latency = _env_optional_positive_int(
+            "ZFENCE_MB_LOCK_ACQUIRE_LATENCY"
+        )
+        if zfence_lock_latency is not None:
+            self.core.zfenceMbLockAcquireLatency = zfence_lock_latency
+        zfence_lock_hit_latency = _env_optional_positive_int(
+            "ZFENCE_MB_LOCK_ACQUIRE_LATENCY_HIT"
+        )
+        if zfence_lock_hit_latency is not None:
+            self.core.zfenceMbLockAcquireLatencyHit = zfence_lock_hit_latency
         self.core.optimizeStoreRelease = False
         self.core.optimizeAcquirePC = False
         self.core.safeStlfLoadsBypassMBDrain = True

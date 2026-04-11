@@ -149,7 +149,9 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
                     entry->zfEligibleForRelaxedRetire =
                         zfenceRelaxRetire && entry->zfPermReady &&
                         entry->zfLineAddrValid;
+                    entry->zfLockReqPending = false;
                     entry->zfLockReqInFlight = false;
+                    entry->zfLockReadyCycle = Cycles(0);
                 }
             }
         }
@@ -3308,6 +3310,7 @@ LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
             entry.zfEligibleForRelaxedRetire =
                 lsqPtr->zfenceRelaxRetire && entry.zfPermReady &&
                 entry.zfLineAddrValid;
+            entry.zfLockReqPending = false;
             entry.zfLockReqInFlight = false;
             entry.zfLockReadyCycle = Cycles(0);
         }
@@ -3652,11 +3655,22 @@ LSQUnit::canRelaxFenceRetire(uint64_t, InstSeqNum)
 
     bool has_relevant_zf = false;
     if (hasUnprotectedStoresToWB(&has_relevant_zf)) {
+        DPRINTF(LSQUnit,
+                "zFence fence-retire fallback: hasUnprotectedStoresToWB "
+                "storesToWB:%d hasRelevantZF:%u\n",
+                storesToWB, has_relevant_zf ? 1 : 0);
+        if (mergeBufferEnabled) {
+            mergeBuffer.dumpWaitBits();
+        }
         ++stats.numFallbacks;
         return false;
     }
 
     if (!has_relevant_zf) {
+        DPRINTF(LSQUnit,
+                "zFence fence-retire fallback: no relevant protected MB "
+                "entries storesToWB:%d\n",
+                storesToWB);
         ++stats.numFallbacks;
         return false;
     }
@@ -3774,12 +3788,27 @@ LSQUnit::MergeBuffer::validateAllMBZFLocked(bool &has_relevant) const
         const auto &entry = entries[idx];
         has_relevant = true;
         if (entry.isAtomic) {
+            DPRINTF(LSQUnit,
+                    "validateAllMBZFLocked fail: MB[%llu] is atomic\n",
+                    (unsigned long long)idx);
             return false;
         }
         if (!(entry.zfPermReady && entry.zfLockAcquired &&
               entry.zfEligibleForRelaxedRetire && entry.zfLineAddrValid &&
               !entry.zfLockReqPending && !entry.zfLockReqInFlight &&
               entry.zfLockReadyCycle == Cycles(0))) {
+            DPRINTF(LSQUnit,
+                    "validateAllMBZFLocked fail: MB[%llu] "
+                    "zfPerm:%u zfLock:%u zfElig:%u zfLineValid:%u "
+                    "zfReqPend:%u zfReqInflight:%u zfReady:%llu\n",
+                    (unsigned long long)idx,
+                    entry.zfPermReady ? 1 : 0,
+                    entry.zfLockAcquired ? 1 : 0,
+                    entry.zfEligibleForRelaxedRetire ? 1 : 0,
+                    entry.zfLineAddrValid ? 1 : 0,
+                    entry.zfLockReqPending ? 1 : 0,
+                    entry.zfLockReqInFlight ? 1 : 0,
+                    (unsigned long long)entry.zfLockReadyCycle);
             return false;
         }
     }
