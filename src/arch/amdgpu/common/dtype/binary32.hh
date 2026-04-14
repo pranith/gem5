@@ -57,19 +57,16 @@ typedef union binary32_u
     };
 
     uint32_t storage;
-    float    fp32;
+    float fp32;
     struct
     {
         unsigned mant : 23;
-        unsigned exp  : 8;
+        unsigned exp : 8;
         unsigned sign : 1;
     };
 
     // To help with stdlib functions with T = float.
-    operator float() const
-    {
-        return fp32;
-    }
+    operator float() const { return fp32; }
 } binary32;
 static_assert(sizeof(binary32) == 4);
 
@@ -80,12 +77,12 @@ static_assert(sizeof(binary32) == 4);
 namespace std
 {
 
-template<>
-class numeric_limits<gem5::AMDGPU::binary32>
+template <> class numeric_limits<gem5::AMDGPU::binary32>
 {
   public:
     static constexpr bool has_quiet_NaN = true;
-    static gem5::AMDGPU::binary32 quiet_NaN()
+    static gem5::AMDGPU::binary32
+    quiet_NaN()
     {
         gem5::AMDGPU::binary32 tmp;
         tmp.fp32 = std::numeric_limits<float>::quiet_NaN();
@@ -93,14 +90,16 @@ class numeric_limits<gem5::AMDGPU::binary32>
     }
 
     static constexpr bool has_infinity = true;
-    static gem5::AMDGPU::binary32 infinity()
+    static gem5::AMDGPU::binary32
+    infinity()
     {
         gem5::AMDGPU::binary32 tmp;
         tmp.fp32 = std::numeric_limits<float>::infinity();
         return tmp;
     }
 
-    static gem5::AMDGPU::binary32 max()
+    static gem5::AMDGPU::binary32
+    max()
     {
         gem5::AMDGPU::binary32 tmp;
         tmp.fp32 = std::numeric_limits<float>::max();

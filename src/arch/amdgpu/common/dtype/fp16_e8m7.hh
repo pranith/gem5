@@ -60,7 +60,7 @@ typedef union
     {
         unsigned zero : zbits;
         unsigned mant : mbits;
-        unsigned exp  : ebits;
+        unsigned exp : ebits;
         unsigned sign : sbits;
     };
 } fp16_e8m7_info;
@@ -70,32 +70,34 @@ static_assert(sizeof(fp16_e8m7_info) == 4);
 
 } // namespace gem5
 
-
 // std library cmath definitions
 namespace std
 {
 
-constexpr bool isinf(gem5::AMDGPU::fp16_e8m7_info a)
+constexpr bool
+isinf(gem5::AMDGPU::fp16_e8m7_info a)
 {
     return a.exp == 0xFF && a.mant == 0;
 }
 
-constexpr bool isnan(gem5::AMDGPU::fp16_e8m7_info a)
+constexpr bool
+isnan(gem5::AMDGPU::fp16_e8m7_info a)
 {
     return a.exp == 0xFF && a.mant != 0;
 }
 
-constexpr bool isnormal(gem5::AMDGPU::fp16_e8m7_info a)
+constexpr bool
+isnormal(gem5::AMDGPU::fp16_e8m7_info a)
 {
     return !(a.exp == 0 && a.mant != 0);
 }
 
-template<>
-class numeric_limits<gem5::AMDGPU::fp16_e8m7_info>
+template <> class numeric_limits<gem5::AMDGPU::fp16_e8m7_info>
 {
   public:
     static constexpr bool has_quiet_NaN = true;
-    static gem5::AMDGPU::fp16_e8m7_info quiet_NaN()
+    static gem5::AMDGPU::fp16_e8m7_info
+    quiet_NaN()
     {
         assert(has_quiet_NaN);
         gem5::AMDGPU::fp16_e8m7_info tmp;
@@ -104,7 +106,8 @@ class numeric_limits<gem5::AMDGPU::fp16_e8m7_info>
     }
 
     static constexpr bool has_infinity = true;
-    static gem5::AMDGPU::fp16_e8m7_info infinity()
+    static gem5::AMDGPU::fp16_e8m7_info
+    infinity()
     {
         assert(has_infinity);
         gem5::AMDGPU::fp16_e8m7_info tmp;
@@ -112,7 +115,8 @@ class numeric_limits<gem5::AMDGPU::fp16_e8m7_info>
         return tmp;
     }
 
-    static gem5::AMDGPU::fp16_e8m7_info max()
+    static gem5::AMDGPU::fp16_e8m7_info
+    max()
     {
         gem5::AMDGPU::fp16_e8m7_info tmp;
         tmp.storage = gem5::AMDGPU::fp16_e8m7_info::max;
