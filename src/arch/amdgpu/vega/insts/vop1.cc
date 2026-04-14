@@ -1535,7 +1535,7 @@ Inst_VOP1__V_SIN_F32::execute(GPUDynInstPtr gpuDynInst)
 {
     Wavefront *wf = gpuDynInst->wavefront();
     ConstVecOperandF32 src(gpuDynInst, instData.SRC0);
-    ConstScalarOperandF32 pi(gpuDynInst, REG_PI);
+    ConstScalarOperandF32 pi(gpuDynInst, REG_2PI_RECIP);
     VecOperandF32 vdst(gpuDynInst, instData.VDST);
 
     src.readSrc();
@@ -1577,7 +1577,7 @@ Inst_VOP1__V_COS_F32::execute(GPUDynInstPtr gpuDynInst)
 {
     Wavefront *wf = gpuDynInst->wavefront();
     ConstVecOperandF32 src(gpuDynInst, instData.SRC0);
-    ConstScalarOperandF32 pi(gpuDynInst, REG_PI);
+    ConstScalarOperandF32 pi(gpuDynInst, REG_2PI_RECIP);
     VecOperandF32 vdst(gpuDynInst, instData.VDST);
 
     src.readSrc();

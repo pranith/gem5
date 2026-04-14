@@ -706,7 +706,7 @@ class ScalarOperand final : public Operand
                 std::memcpy((void *)srfData.data(), (void *)&neg_four,
                             sizeof(neg_four));
             } break;
-            case REG_PI: {
+            case REG_2PI_RECIP: {
                 assert(sizeof(DataType) == sizeof(ScalarRegF64) ||
                        sizeof(DataType) == sizeof(ScalarRegF32));
 
