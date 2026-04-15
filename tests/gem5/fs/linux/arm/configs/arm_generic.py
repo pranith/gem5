@@ -123,7 +123,7 @@ class LinuxArmSystemBuilder:
             else:  # VExpress_GEM5_V1
                 bootloader = [
                     obtain_resource(
-                        "arm64-bootloader", resource_version="1.0.0"
+                        "arm64-bootloader", resource_version="2.0.0"
                     ).get_local_path(),
                     obtain_resource(
                         "arm32-bootloader", resource_version="1.0.0"
