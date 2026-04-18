@@ -479,6 +479,16 @@ rspResp(CHIResponseType rsp)
 
 }
 
+::gem5::ArmISA::mpam::MpamBundle
+getMpam(const Payload &payload)
+{
+    ::gem5::ArmISA::mpam::MpamBundle bundle;
+    bundle._ns = payload.mpam.mpam_ns;
+    bundle._partitionID = payload.mpam.part_id;
+    bundle._partitionMonitoringID = payload.mpam.perf_mon_group;
+    return bundle;
+}
+
 Addr
 transactionSize(Size sz)
 {
