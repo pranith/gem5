@@ -111,16 +111,19 @@ class LinuxArmSystemBuilder:
 
     def create_system(self):
         if self.aarch64_kernel:
-            gem5_kernel = obtain_resource(
-                "arm64-linux-kernel-6.18.19", resource_version="1.0.0"
-            )
             if self.machine_type == "VExpress_GEM5_Foundation":
+                gem5_kernel = obtain_resource(
+                    "arm64-linux-kernel-6.18.19", resource_version="1.0.0"
+                )
                 bootloader = [
                     obtain_resource(
                         "arm64-bootloader-foundation", resource_version="2.0.0"
                     ).get_local_path()
                 ]
             else:  # VExpress_GEM5_V1
+                gem5_kernel = obtain_resource(
+                    "arm64-linux-kernel-4.18.0", resource_version="1.0.0"
+                )
                 bootloader = [
                     obtain_resource(
                         "arm64-bootloader", resource_version="2.0.0"
@@ -146,7 +149,7 @@ class LinuxArmSystemBuilder:
                 )
         else:
             gem5_kernel = obtain_resource(
-                "arm32-linux-kernel", resource_version="1.0.0"
+                "arm32-linux-kernel-4.18.0", resource_version="1.0.0"
             )
             disk_image = obtain_resource(
                 "arm32-m5-exit-squashfs-img", resource_version="1.0.0"
