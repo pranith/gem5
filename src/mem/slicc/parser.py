@@ -175,6 +175,7 @@ class SLICC(Grammar):
         "OOD": "OOD",
         "defer_enqueueing": "DEFER_ENQUEUEING",
         "public": "PUBLIC",
+        "this": "THIS",
     }
 
     literals = ":[]{}(),="
@@ -790,6 +791,10 @@ class SLICC(Grammar):
     def p_expr__new(self, p):
         "aexpr : NEW type"
         p[0] = ast.NewExprAST(self, p[2])
+
+    def p_expr__this(self, p):
+        "aexpr : THIS"
+        p[0] = ast.ThisExprAST(self)
 
     def p_expr__null(self, p):
         "aexpr : OOD"
