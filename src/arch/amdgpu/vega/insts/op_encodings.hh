@@ -1559,7 +1559,7 @@ class Inst_FLAT : public VEGAGPUStaticInst
             } else {
                 // In Scratch-ST mode (saddr == NULL (0x7f) and SVE==0),
                 // inst_offset must not be negative.
-                assert(offset > 0);
+                assert(offset >= 0);
             }
 
             Addr flat_scratch_addr = readFlatScratch(gpuDynInst);
