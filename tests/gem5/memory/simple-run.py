@@ -63,7 +63,7 @@ class MyMem(SimpleMemory):
     if args.latency:
         latency = args.latency
     if args.latency_var:
-        latency_var = args.latency_var
+        latency_dist_param = args.latency_var
 
 
 # system simulated
