@@ -130,6 +130,31 @@ def checked_read(generator, address, txn_id, req, resp):
     return tran
 
 
+def checked_read_separate_data_resp(
+    generator, address, txn_id, req, expected_resp
+):
+    payload = payload_gen(address)
+    phase = phase_gen(txn_id, req=req)
+
+    tran = generator.inject(payload, phase)
+    tran.EXPECT(channel_check_gen(Channel.RSP))
+    tran.EXPECT(opcode_check_gen(RspOpcode.RESP_SEP_DATA))
+    tran.EXPECT(cacheline_check(Resp.RESP_I))
+    tran.DO_WAIT(wait_data)
+    tran.EXPECT(channel_check_gen(Channel.DAT))
+    tran.EXPECT(opcode_check_gen(DatOpcode.DATA_SEP_RESP))
+    tran.EXPECT(cacheline_check(expected_resp))
+    tran.EXPECT(data_id_check_gen(0))
+    tran.DO_WAIT(wait_data)
+    tran.EXPECT(channel_check_gen(Channel.DAT))
+    tran.EXPECT(opcode_check_gen(DatOpcode.DATA_SEP_RESP))
+    tran.EXPECT(cacheline_check(expected_resp))
+    tran.EXPECT(data_id_check_gen(2))
+    tran.DO(do_comp_ack)
+
+    return tran
+
+
 def read_shared(generator, address, txn_id, resp):
     return checked_read(
         generator, address, txn_id, ReqOpcode.READ_SHARED, resp
