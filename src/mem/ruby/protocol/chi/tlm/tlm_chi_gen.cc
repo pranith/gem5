@@ -74,10 +74,16 @@ tlm_chi_generator_pybind(pybind11::module_ &m_tlm_chi)
                     cb.attr("__name__").cast<std::string>(),
                     cb.cast<Callback>()));
             })
-        .def("ASSERT",
+        .def("ASSERT_STR",
              [](tlm::chi::TlmGenerator::Transaction &self, std::string name,
                 Callback cb) {
                  self.addCallback(std::make_unique<Assertion>(name, cb));
+             })
+        .def("ASSERT",
+             [](tlm::chi::TlmGenerator::Transaction &self, py::function cb) {
+                 self.addCallback(std::make_unique<Assertion>(
+                     cb.attr("__name__").cast<std::string>(),
+                     cb.cast<Callback>()));
              })
         .def("DO",
              [](tlm::chi::TlmGenerator::Transaction &self, Callback cb) {
