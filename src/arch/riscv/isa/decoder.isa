@@ -1677,7 +1677,7 @@ decode QUADRANT default Unknown::unknown() {
             0x1: decode FUNCT3 {
                 format IOp {
                     0x0: addiw({{
-                        Rd_sd =szext<32>(Rs1_sw + imm);
+                        Rd_sd = szext<32>(Rs1_sw + imm);
                     }}, int32_t);
                     0x1: decode FS3 {
                         0x0: slliw({{
@@ -2622,7 +2622,7 @@ decode QUADRANT default Unknown::unknown() {
                 format ROp {
                     0x0: decode FUNCT7 {
                         0x0: addw({{
-                            Rd_sd =szext<32>(Rs1_sw + Rs2_sw);
+                            Rd_sd = szext<32>(Rs1_sw + Rs2_sw);
                         }});
                         0x1: mulw({{
                             Rd_sd = szext<32>((int32_t)(Rs1_sw*Rs2_sw));
