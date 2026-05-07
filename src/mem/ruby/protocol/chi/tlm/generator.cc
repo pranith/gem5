@@ -71,7 +71,13 @@ TlmGenerator::Transaction::Assertion::run(Transaction *tran)
 
 TlmGenerator::Transaction::Transaction(ARM::CHI::Payload *pa,
                                        ARM::CHI::Phase &ph)
-    : passed(true), parent(nullptr), _payload(pa), _phase(ph), _start(0)
+    : runCallbacksEvent([this] { runCallbacks(); }, "Transaction runCallback",
+                        false, Event::CPU_Tick_Pri),
+      passed(true),
+      parent(nullptr),
+      _payload(pa),
+      _phase(ph),
+      _start(0)
 {
     _payload->ref();
 }
@@ -135,9 +141,14 @@ TlmGenerator::Transaction::runCallbacks()
         }
         bool wait = (*it)->wait();
 
+        unsigned timeout = (*it)->waitCycles();
+
         it = actions.erase(it);
 
         if (wait) {
+            if (timeout) {
+                parent->scheduleEvaluation(timeout, this);
+            }
             break;
         }
     }
@@ -257,6 +268,10 @@ TlmGenerator::terminate(Transaction *transaction)
 
         // If the transaction has failed, mark the suite as failure
         suiteFailure = suiteFailure || transaction->failed();
+
+        if (!isActive()) {
+            exitSimLoop("TlmGenerator done");
+        }
     } else {
         panic("%u: Can't find transaction id.\n", phase.txn_id);
     }
@@ -302,10 +317,14 @@ TlmGenerator::recv(ARM::CHI::Payload *payload, ARM::CHI::Phase *phase)
     } else {
         warn("%u: Transaction untested\n", phase->txn_id);
     }
+}
 
-    if (!isActive()) {
-        exitSimLoop("TlmGenerator done");
-    }
+void
+TlmGenerator::scheduleEvaluation(unsigned cycles, Transaction *transaction)
+{
+    auto &event = transaction->runCallbacksEvent;
+    panic_if(event.scheduled(), "Already scheduled\n");
+    schedule(event, clockEdge(Cycles(cycles)));
 }
 
 bool
