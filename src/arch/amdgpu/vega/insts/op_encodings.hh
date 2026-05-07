@@ -403,6 +403,111 @@ class Inst_VOP1 : public VEGAGPUStaticInst
     InstFormat extData;
     uint32_t varSize;
 
+    template <typename T>
+    T
+    sdwaSrcHelper(GPUDynInstPtr gpuDynInst)
+    {
+        T src0_sdwa(gpuDynInst, extData.iFmt_VOP_SDWA.SRC0);
+        // use copies of original src and dest during selecting
+        T origSrc0_sdwa(gpuDynInst, extData.iFmt_VOP_SDWA.SRC0);
+
+        src0_sdwa.read();
+        origSrc0_sdwa.read();
+
+        DPRINTF(
+            VEGA,
+            "Handling %s SRC SDWA. SRC0: register v[%d], "
+            "DST_SEL: %d, DST_U: %d, CLMP: %d, SRC0_SEL: %d, SRC0_SEXT: "
+            "%d, SRC0_NEG: %d, SRC0_ABS: %d, SRC1_SEL: %d, SRC1_SEXT: %d, "
+            "SRC1_NEG: %d, SRC1_ABS: %d\n",
+            opcode().c_str(), extData.iFmt_VOP_SDWA.SRC0,
+            extData.iFmt_VOP_SDWA.DST_SEL, extData.iFmt_VOP_SDWA.DST_U,
+            extData.iFmt_VOP_SDWA.CLMP, extData.iFmt_VOP_SDWA.SRC0_SEL,
+            extData.iFmt_VOP_SDWA.SRC0_SEXT, extData.iFmt_VOP_SDWA.SRC0_NEG,
+            extData.iFmt_VOP_SDWA.SRC0_ABS, extData.iFmt_VOP_SDWA.SRC1_SEL,
+            extData.iFmt_VOP_SDWA.SRC1_SEXT, extData.iFmt_VOP_SDWA.SRC1_NEG,
+            extData.iFmt_VOP_SDWA.SRC1_ABS);
+
+        processSDWA_src(extData.iFmt_VOP_SDWA, src0_sdwa, origSrc0_sdwa);
+
+        return src0_sdwa;
+    }
+
+    template <typename T>
+    void
+    sdwaDstHelper(GPUDynInstPtr gpuDynInst, T &vdst)
+    {
+        T origVdst(gpuDynInst, instData.VDST);
+
+        Wavefront *wf = gpuDynInst->wavefront();
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            if (wf->execMask(lane)) {
+                origVdst[lane] = vdst[lane]; // keep copy consistent
+            }
+        }
+
+        processSDWA_dst(extData.iFmt_VOP_SDWA, vdst, origVdst);
+    }
+
+    template <typename T>
+    T
+    dppHelper(GPUDynInstPtr gpuDynInst)
+    {
+        T src_dpp(gpuDynInst, extData.iFmt_VOP_DPP.SRC0);
+        src_dpp.read();
+
+        DPRINTF(VEGA,
+                "Handling %s SRC DPP. SRC0: register v[%d], "
+                "DPP_CTRL: 0x%#x, SRC0_ABS: %d, SRC0_NEG: %d, SRC1_ABS: %d, "
+                "SRC1_NEG: %d, BC: %d, BANK_MASK: %d, ROW_MASK: %d\n",
+                opcode().c_str(), extData.iFmt_VOP_DPP.SRC0,
+                extData.iFmt_VOP_DPP.DPP_CTRL, extData.iFmt_VOP_DPP.SRC0_ABS,
+                extData.iFmt_VOP_DPP.SRC0_NEG, extData.iFmt_VOP_DPP.SRC1_ABS,
+                extData.iFmt_VOP_DPP.SRC1_NEG, extData.iFmt_VOP_DPP.BC,
+                extData.iFmt_VOP_DPP.BANK_MASK, extData.iFmt_VOP_DPP.ROW_MASK);
+
+        processDPP(gpuDynInst, extData.iFmt_VOP_DPP, src_dpp);
+
+        return src_dpp;
+    }
+
+    template <typename ConstT, typename T>
+    void
+    vop1Helper(GPUDynInstPtr gpuDynInst,
+               void (*fOpImpl)(T &, T &, Wavefront *))
+    {
+        Wavefront *wf = gpuDynInst->wavefront();
+        T src(gpuDynInst, instData.SRC0);
+        T vdst(gpuDynInst, instData.VDST);
+
+        src.readSrc();
+
+        if (isSDWAInst()) {
+            T src_sdwa = sdwaSrcHelper<T>(gpuDynInst);
+            fOpImpl(src_sdwa, vdst, wf);
+            sdwaDstHelper(gpuDynInst, vdst);
+        } else if (isDPPInst()) {
+            T src_dpp = dppHelper<T>(gpuDynInst);
+            fOpImpl(src_dpp, vdst, wf);
+        } else {
+            // src is unmodified. We need to use the const container
+            // type to allow reading scalar operands from src. Only
+            // src can index scalar operands. We copy this to vdst
+            // temporarily to pass to the lambda so the instruction
+            // does not need to write two lambda functions (one for
+            // a const src and one of a mutable src).
+            ConstT const_src(gpuDynInst, instData.SRC0);
+            const_src.readSrc();
+
+            for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+                vdst[lane] = const_src[lane];
+            }
+            fOpImpl(vdst, vdst, wf);
+        }
+
+        vdst.write();
+    }
+
   private:
     bool hasSecondDword(InFmt_VOP1 *);
 }; // Inst_VOP1

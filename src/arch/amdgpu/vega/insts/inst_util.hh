@@ -788,6 +788,29 @@ sdwaInstDstImpl(T &dstOper, T &origDstOper, const bool clamp,
 }
 
 /**
+ * sdwaInstFpDstImpl is a helper function that selects the appropriate
+ * dword/qword for floating point types. These are handled specially since
+ * only a few fields make sense and because the sdwaInstDstImpl relies on
+ * bitwise operations which cannot be performed on FP types.
+ */
+template <typename T>
+void
+sdwaInstFpDstImpl(T &dstOper, T &origDstOper, const bool clamp,
+                  const SDWASelVals sel, const SDWADstVals unusedBits_format)
+{
+    // Only can select dword. At this size, there are no unused bits
+    // so unusedBits_format does not matter. We might still want to
+    // clamp though.
+    assert(sel == SDWA_DWORD);
+
+    if (clamp) {
+        for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
+            dstOper[lane] = std::clamp(dstOper[lane], 0.0f, 1.0f);
+        }
+    }
+}
+
+/**
  * processSDWA_srcHelper is a helper function for implementing sub d-word
  * addressing instructions for the src operands.  This function may be
  * called by many different VOP1/VOP2/VOPC instructions to do operations
@@ -897,7 +920,11 @@ processSDWA_dst(InFmt_VOP_SDWA sdwaInst, T &dst, T &origDst)
      * STEP 1: select the appropriate bits for dst and pad/sign-extend as
      * appropriate.
      */
-    sdwaInstDstImpl(dst, origDst, clamp, dst_sel, dst_unusedBits_format);
+    if constexpr (T::isIntegral()) {
+        sdwaInstDstImpl(dst, origDst, clamp, dst_sel, dst_unusedBits_format);
+    } else {
+        sdwaInstFpDstImpl(dst, origDst, clamp, dst_sel, dst_unusedBits_format);
+    }
 }
 
 /**
