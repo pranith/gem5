@@ -46,6 +46,7 @@
 #include "mem/packet.hh"
 #include "mem/packet_access.hh"
 #include "params/AMDGPUDevice.hh"
+#include "sim/bufval.hh"
 #include "sim/byteswap.hh"
 #include "sim/sim_exit.hh"
 
@@ -775,10 +776,16 @@ AMDGPUDevice::writeDevice(PacketPtr pkt)
 
     // Record only if there is non-zero value, or a value to be overwritten.
     // Reads return 0 by default.
-    uint64_t data = pkt->getUintX(ByteOrder::little);
+    auto [data, success] = gem5::getUintX(pkt->getConstPtr<void>(),
+                                          pkt->getSize(), ByteOrder::little);
 
-    DPRINTF(AMDGPUDevice, "PCI Write to %#lx data %#lx\n", pkt->getAddr(),
-            data);
+    if (!success) {
+        DPRINTF(AMDGPUDevice, "PCI Write to %#lx (%d bytes)\n", pkt->getAddr(),
+                pkt->getSize());
+    } else {
+        DPRINTF(AMDGPUDevice, "PCI Write to %#lx data %#lx\n", pkt->getAddr(),
+                data);
+    }
 
     dispatchAccess(pkt, false);
 

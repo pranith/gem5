@@ -58,6 +58,9 @@ opSelectorToRegSym(int idx, int numRegs)
             reg_sym = "v" + std::to_string(idx - REG_VGPR_MIN);
         }
         return reg_sym;
+    } else if (idx >= REG_TTMP_0 && idx <= REG_TTMP_15) {
+        reg_sym = "ttmp" + std::to_string(idx - REG_TTMP_0);
+        return reg_sym;
     } else if (idx >= REG_INT_CONST_POS_MIN && idx <= REG_INT_CONST_POS_MAX) {
         reg_sym = std::to_string(idx - REG_INT_CONST_POS_MIN + 1);
         return reg_sym;
@@ -79,6 +82,12 @@ opSelectorToRegSym(int idx, int numRegs)
             break;
         case REG_VCC_HI:
             reg_sym = "vcc_hi";
+            break;
+        case REG_XNACK_MASK_LO:
+            reg_sym = "xnack_mask_lo";
+            break;
+        case REG_XNACK_MASK_HI:
+            reg_sym = "xnack_mask_hi";
             break;
         case REG_M0:
             reg_sym = "m0";
@@ -127,6 +136,25 @@ opSelectorToRegSym(int idx, int numRegs)
             break;
         case REG_NEG_FOUR:
             reg_sym = "-4";
+            break;
+        case REG_2PI_RECIP:
+            // Note: This is how this SGPR would show in assembly.
+            reg_sym = "0.15915494";
+            break;
+        case REG_SRC_SWDA:
+            reg_sym = "src_swda";
+            break;
+        case REG_SRC_DPP:
+            reg_sym = "src_dpp";
+            break;
+        case REG_VCCZ:
+            reg_sym = "vccz";
+            break;
+        case REG_EXECZ:
+            reg_sym = "execz";
+            break;
+        case REG_SCC:
+            reg_sym = "scc";
             break;
         default:
             fatal("VEGA ISA instruction has unknown register index %u\n", idx);
