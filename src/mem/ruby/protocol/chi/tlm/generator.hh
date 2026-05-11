@@ -137,8 +137,16 @@ class TlmGenerator : public ClockedObject
             >;
 
             Action(Callback _cb, bool waiting)
-              : cb(_cb), _wait(waiting)
+                : cb(_cb), _wait(waiting), _waitCycles(0)
             {}
+
+            Action(Callback _cb, unsigned cycles)
+                : cb(_cb), _wait(true), _waitCycles(cycles)
+            {
+                panic_if(cycles == 0,
+                         "waiting time should be bigger than 0\n");
+            }
+
             virtual ~Action() {};
 
             /* A basic action always returns true */
@@ -155,9 +163,19 @@ class TlmGenerator : public ClockedObject
              */
             bool wait() const { return _wait; }
 
+            /**
+             * Returning a value != 0 means we are waiting and
+             */
+            unsigned
+            waitCycles() const
+            {
+                return _waitCycles;
+            }
+
           protected:
             Callback cb;
-            bool _wait;
+            bool _wait = false;
+            unsigned _waitCycles = 0;
         };
 
         /**
@@ -250,6 +268,8 @@ class TlmGenerator : public ClockedObject
          */
         void runCallbacks();
 
+        EventFunctionWrapper runCallbacksEvent;
+
         ARM::CHI::Payload* payload() const { return _payload; }
         ARM::CHI::Phase& phase() { return _phase; }
         Tick
@@ -321,6 +341,8 @@ class TlmGenerator : public ClockedObject
     void inject(Transaction *transaction);
     void send(Transaction *transaction);
     void terminate(Transaction *transaction);
+    void scheduleEvaluation(unsigned cycles, Transaction *transaction);
+
     void recv(ARM::CHI::Payload *payload, ARM::CHI::Phase *phase);
     void passFailCheck();
 
