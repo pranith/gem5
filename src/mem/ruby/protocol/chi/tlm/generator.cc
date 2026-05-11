@@ -177,7 +177,8 @@ TlmGenerator::TlmGenerator(const Params &p)
                 Event::CPU_Tick_Pri),
       outPort(name() + ".out_port", 0, this),
       inPort(name() + ".in_port", 0, this),
-      suiteFailure(false)
+      suiteFailure(false),
+      stats(this)
 {
     inPort.onChange([this](const TlmData &data) {
         auto payload = data.first;
@@ -255,6 +256,8 @@ TlmGenerator::send(Transaction *transaction)
 
     auto tlm_data = TlmData(payload, &phase);
     outPort.send(tlm_data);
+
+    stats.reqOut++;
 }
 
 void
@@ -352,6 +355,8 @@ TlmGenerator::handlePCredit(ARM::CHI::Phase *phase)
         } else {
             pCredit++;
         }
+
+        stats.pcrdGrant++;
         return true;
     } else if (isRetryAck(phase)) {
         auto it = pendingTransactions.find(phase->txn_id);
@@ -368,6 +373,8 @@ TlmGenerator::handlePCredit(ARM::CHI::Phase *phase)
         } else {
             waitingForPCrd.push_back(tran);
         }
+
+        stats.retryAck++;
         return true;
     } else {
         return false;
@@ -403,6 +410,16 @@ TlmGenerator::getPort(const std::string &if_name, PortID idx)
         return SimObject::getPort(if_name, idx);
     }
 }
+
+TlmGenerator::Stats::Stats(statistics::Group *_parent)
+    : statistics::Group(_parent),
+      ADD_STAT(reqOut, statistics::units::Count::get(),
+               "Number of transactions sent in the REQ channel"),
+      ADD_STAT(retryAck, statistics::units::Count::get(),
+               "Number of RetryAck received"),
+      ADD_STAT(pcrdGrant, statistics::units::Count::get(),
+               "Number of PCrdGrant received")
+{}
 
 } // namespace tlm::chi
 

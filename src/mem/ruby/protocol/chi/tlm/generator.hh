@@ -408,6 +408,18 @@ class TlmGenerator : public ClockedObject
 
     /** Has any transaction of the suite failed? */
     bool suiteFailure;
+
+    struct Stats : public statistics::Group
+    {
+        Stats(statistics::Group *parent);
+
+        /* Number of transactions sent in the REQ channel */
+        statistics::Scalar reqOut;
+        /* Number of RetryAck received */
+        statistics::Scalar retryAck;
+        /* Number of PCrdGrant received */
+        statistics::Scalar pcrdGrant;
+    } stats;
 };
 
 } // namespace tlm::chi
