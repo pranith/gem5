@@ -185,6 +185,8 @@ class Simulator:
 
         self._last_exit_event = None
         self._exit_event_count = 0
+        self._on_exit_event = on_exit_event
+        self._expected_execution_order = expected_execution_order
 
         # Set up the classic event generators.
         ClassicGeneratorExitHandler.set_exit_event_map(
@@ -636,6 +638,16 @@ class Simulator:
 
         # We instantiate the board if it has not already been instantiated.
         self._instantiate()
+
+        # A process may construct multiple Simulator instances before selecting
+        # one to run, as MultiSim does. Restore this instance's handlers because
+        # the classic handler stores them at class scope.
+        if self._exit_event_count == 0:
+            ClassicGeneratorExitHandler.set_exit_event_map(
+                self._on_exit_event,
+                self._expected_execution_order,
+                self._board,
+            )
 
         # This while loop will continue until an a generator yields True.
         while True:

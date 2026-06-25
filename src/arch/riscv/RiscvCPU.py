@@ -27,7 +27,9 @@ from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
+from m5.objects.PO3Config import set_po3_pipeline_defaults
 from m5.objects.RiscvDecoder import RiscvDecoder
 from m5.objects.RiscvInterrupts import RiscvInterrupts
 from m5.objects.RiscvISA import RiscvISA
@@ -55,6 +57,13 @@ class RiscvTimingSimpleCPU(BaseTimingSimpleCPU, RiscvCPU):
 
 class RiscvO3CPU(BaseO3CPU, RiscvCPU):
     mmu = RiscvMMU()
+
+
+class RiscvPO3CPU(BasePO3CPU, RiscvCPU):
+    mmu = RiscvMMU()
+
+
+set_po3_pipeline_defaults(RiscvPO3CPU)
 
 
 class RiscvMinorCPU(BaseMinorCPU, RiscvCPU):
