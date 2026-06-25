@@ -32,7 +32,10 @@ from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3Checker import BaseO3Checker
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3Checker import BasePO3Checker
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
+from m5.objects.PO3Config import set_po3_pipeline_defaults
 from m5.proxy import Self
 
 
@@ -80,6 +83,29 @@ class ArmO3CPU(BaseO3CPU, ArmCPU):
         self.checker.mmu.itb.size = self.mmu.itb.size
         self.checker.mmu.dtb.size = self.mmu.dtb.size
         self.checker.cpu_id = self.cpu_id
+
+
+class ArmPO3Checker(BasePO3Checker, ArmCPU):
+    mmu = ArmMMU()
+
+
+class ArmPO3CPU(BasePO3CPU, ArmCPU):
+    mmu = ArmMMU()
+    numPhysCCRegs = Self.numPhysIntRegs * 5
+
+    def addCheckerCpu(self):
+        self.checker = ArmPO3Checker(
+            workload=self.workload,
+            exitOnError=False,
+            updateOnError=True,
+            warnOnlyOnLoadError=True,
+        )
+        self.checker.mmu.itb.size = self.mmu.itb.size
+        self.checker.mmu.dtb.size = self.mmu.dtb.size
+        self.checker.cpu_id = self.cpu_id
+
+
+set_po3_pipeline_defaults(ArmPO3CPU)
 
 
 class ArmMinorCPU(BaseMinorCPU, ArmCPU):

@@ -23,48 +23,20 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
-from m5.objects.BaseMinorCPU import BaseMinorCPU
-from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
-from m5.objects.BaseO3CPU import BaseO3CPU
-from m5.objects.BasePO3CPU import BasePO3CPU
-from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
-from m5.objects.MipsDecoder import MipsDecoder
-from m5.objects.MipsInterrupts import MipsInterrupts
-from m5.objects.MipsISA import MipsISA
-from m5.objects.MipsMMU import MipsMMU
-from m5.objects.PO3Config import set_po3_pipeline_defaults
+import m5.defines
 
+arch_vars = [
+    "USE_ARM_ISA",
+    "USE_MIPS_ISA",
+    "USE_POWER_ISA",
+    "USE_RISCV_ISA",
+    "USE_SPARC_ISA",
+    "USE_X86_ISA",
+]
 
-class MipsCPU:
-    ArchDecoder = MipsDecoder
-    ArchMMU = MipsMMU
-    ArchInterrupts = MipsInterrupts
-    ArchISA = MipsISA
+enabled = list(filter(lambda var: m5.defines.buildEnv[var], arch_vars))
 
-
-class MipsAtomicSimpleCPU(BaseAtomicSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsNonCachingSimpleCPU(BaseNonCachingSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsTimingSimpleCPU(BaseTimingSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsO3CPU(BaseO3CPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsPO3CPU(BasePO3CPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-set_po3_pipeline_defaults(MipsPO3CPU)
-
-
-class MipsMinorCPU(BaseMinorCPU, MipsCPU):
-    mmu = MipsMMU()
+if len(enabled) == 1:
+    arch = enabled[0]
+    if arch == "USE_ARM_ISA":
+        from m5.objects.ArmCPU import ArmPO3Checker as PO3Checker

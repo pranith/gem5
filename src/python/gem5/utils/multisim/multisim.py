@@ -187,7 +187,11 @@ def _run(module_path: Path, id: str, pipe: Pipe) -> None:
     except Exception as e:
         inform(f"Error running simulator {id}: {e}")
 
-    pipe.send(sim_list[0].get_stats())
+    try:
+        pipe.send(sim_list[0].get_stats())
+    except Exception as e:
+        inform(f"Unable to collect simulator stats for {id}: {e}")
+        pipe.send({})
     pipe.close()
 
 

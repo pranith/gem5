@@ -51,21 +51,17 @@ def _gem5_args_for_multiprocessing(name):
         options.verbose,
         options.debug_break,
         options.debug_help,
-        options.debug_flags,
-        options.debug_start,
-        options.debug_end,
-        options.debug_ignore,
         options.list_sim_objects,
     ]
     if any(disallowed):
         raise Exception(
             f"Disallowed option for multiprocessing. "
-            f"See {__file__} for details."
+            "See gem5.utils.multiprocessing._command_line for details."
         )
 
     # Options not forwarded:
     # --allow-remote-connections, --listener-mode, --dump-config, --json-config
-    # --dot-config, --dot-dvfs-config, --debug-file, --remote-gdb-port, -c
+    # --dot-config, --dot-dvfs-config, --remote-gdb-port, -c
 
     arguments = [
         # Keep the original outdir. This will be overridden by multisim
@@ -88,6 +84,19 @@ def _gem5_args_for_multiprocessing(name):
         arguments.append(f"--path={':'.join(options.path)}")
     if options.quiet:
         arguments.append("--quiet")
+    if options.debug_flags:
+        for flag in options.debug_flags:
+            arguments.append(f"--debug-flags={flag}")
+    if options.debug_start:
+        arguments.append(f"--debug-start={options.debug_start}")
+    if options.debug_end:
+        arguments.append(f"--debug-end={options.debug_end}")
+    if options.debug_file:
+        arguments.append(f"--debug-file={options.debug_file}")
+    for activate in options.debug_activate:
+        arguments.append(f"--debug-activate={activate}")
+    for ignore in options.debug_ignore:
+        arguments.append(f"--debug-ignore={ignore}")
 
     return arguments
 

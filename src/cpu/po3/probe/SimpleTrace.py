@@ -1,4 +1,14 @@
-# Copyright 2021 Google, Inc.
+# Copyright (c) 2013 ARM Limited
+# All rights reserved.
+#
+# The license below extends only to copyright in the software and shall
+# not be construed as granting a license to any other intellectual
+# property including but not limited to intellectual property relating
+# to a hardware implementation of the functionality of the software
+# licensed hereunder.  You may use the software subject to the license
+# terms below provided that you ensure that this notice is replicated
+# unmodified and in its entirety in all distributions of the software,
+# modified or unmodified, in source code or in binary form.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -23,48 +33,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
-from m5.objects.BaseMinorCPU import BaseMinorCPU
-from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
-from m5.objects.BaseO3CPU import BaseO3CPU
-from m5.objects.BasePO3CPU import BasePO3CPU
-from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
-from m5.objects.MipsDecoder import MipsDecoder
-from m5.objects.MipsInterrupts import MipsInterrupts
-from m5.objects.MipsISA import MipsISA
-from m5.objects.MipsMMU import MipsMMU
-from m5.objects.PO3Config import set_po3_pipeline_defaults
+from m5.objects.Probe import *
 
 
-class MipsCPU:
-    ArchDecoder = MipsDecoder
-    ArchMMU = MipsMMU
-    ArchInterrupts = MipsInterrupts
-    ArchISA = MipsISA
-
-
-class MipsAtomicSimpleCPU(BaseAtomicSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsNonCachingSimpleCPU(BaseNonCachingSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsTimingSimpleCPU(BaseTimingSimpleCPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsO3CPU(BaseO3CPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-class MipsPO3CPU(BasePO3CPU, MipsCPU):
-    mmu = MipsMMU()
-
-
-set_po3_pipeline_defaults(MipsPO3CPU)
-
-
-class MipsMinorCPU(BaseMinorCPU, MipsCPU):
-    mmu = MipsMMU()
+class SimpleTrace(ProbeListenerObject):
+    type = "SimpleTrace"
+    cxx_class = "gem5::po3::SimpleTrace"
+    cxx_header = "cpu/po3/probe/simple_trace.hh"

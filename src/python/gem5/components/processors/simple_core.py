@@ -80,6 +80,7 @@ class SimpleCore(BaseCPUCore):
         _cpu_types_string_map = {
             CPUTypes.ATOMIC: "AtomicSimpleCPU",
             CPUTypes.O3: "O3CPU",
+            CPUTypes.PO3: "PO3CPU",
             CPUTypes.TIMING: "TimingSimpleCPU",
             CPUTypes.KVM: "KvmCPU",
             CPUTypes.MINOR: "MinorCPU",
