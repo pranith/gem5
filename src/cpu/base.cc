@@ -57,6 +57,7 @@
 #include "base/trace.hh"
 #include "cpu/checker/cpu.hh"
 #include "cpu/thread_context.hh"
+#include "debug/Heartbeat.hh"
 #include "debug/Mwait.hh"
 #include "debug/SyscallVerbose.hh"
 #include "debug/Thread.hh"
@@ -104,6 +105,11 @@ CPUProgressEvent::process()
     if (cpu->switchedOut()) {
         return;
     }
+
+    DPRINTF(Heartbeat,
+            "%s heartbeat, total committed:%llu, interval committed:%llu\n",
+            cpu->name(), static_cast<unsigned long long>(temp),
+            static_cast<unsigned long long>(temp - lastNumInst));
 
 #ifndef NDEBUG
     double ipc = double(temp - lastNumInst) / (_interval / cpu->clockPeriod());
