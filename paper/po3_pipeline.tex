@@ -1,0 +1,264 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[letterpaper,margin=0.72in,columnsep=0.24in]{geometry}
+\usepackage{times}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+
+\setlength{\parskip}{0.25em}
+\setlength{\parindent}{1em}
+\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.1em}
+\setlist[enumerate]{leftmargin=*,topsep=0.25em,itemsep=0.1em}
+\lstdefinestyle{po3}{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  backgroundcolor=\color{black!2}
+}
+\lstset{style=po3}
+
+\newcommand{\po}{\textsc{PO3}}
+\newcommand{\oo}{\textsc{O3}}
+\newcommand{\gem}{gem5}
+\newcommand{\stage}[1]{\textsf{#1}}
+
+\title{\vspace{-1.25em}\textbf{\po: An Extensible Cycle-by-Cycle Pipelined Out-of-Order CPU Model}}
+\author{Anonymous Artifact Paper}
+\date{}
+
+\begin{document}
+\twocolumn[
+\maketitle
+\vspace{-1.4em}
+\begin{abstract}
+Modern high-performance cores are both out-of-order and deeply pipelined, yet many architectural simulators expose out-of-order behavior through event-driven stage boundaries rather than through explicit cycle-by-cycle internal pipeline registers.  This paper presents \po, a new \gem{} CPU model derived from the existing \oo{} model but placed in a separate source tree.  \po{} preserves the familiar out-of-order front-end, rename, scheduling, memory dependence, load-store queue, reorder buffer, and commit machinery of \oo{}, while adding an explicit, configurable, cycle-advanced pipeline between and within those mechanisms.  The current implementation introduces independent stage enable knobs, latencies, and widths for PC generation, fetch prediction/iTLB lookup, instruction-cache access, fetch-to-decode delivery, decode, rename, ROB dispatch/allocation, IQ/LSQ dispatch, issue select, register read, execute, writeback, commit, redirect recovery, and a load/store execute sub-pipeline comprising address generation, TLB lookup, cache access, and memory writeback.  The result is an out-of-order simulator that can model pipeline depth and placement decisions without rewriting the core correctness substrate of \oo{}.
+\end{abstract}
+\vspace{1.0em}
+]
+
+\section{Introduction}
+Out-of-order simulation often begins with a key abstraction: instructions move through a small number of logically named stages, while detailed timing is represented by queues, events, or stage-to-stage delays.  This abstraction is productive, but it can obscure the timing consequences of pipeline placement.  For example, changing a load pipeline from a single execute event to address generation, TLB lookup, data-cache access, and writeback stages changes load-use latency, replay timing, memory-order violation recovery, and the overlap available to independent instructions.  Similarly, splitting fetch into branch prediction, instruction translation, instruction-cache access, and decode delivery changes branch miss penalties and front-end bandwidth bottlenecks.
+
+This work introduces \po{}, a pipelined out-of-order model built as a copy of \gem{}'s \oo{} CPU model.  The design goal is not to replace \oo{}'s validated out-of-order substrate.  Instead, \po{} keeps \oo{}'s instruction representation, speculative state, ROB, IQ, LSQ, branch recovery protocol, and memory-system interface, while making selected timing boundaries explicit and extensible.  Each new stage has a small pipeline entry, a per-cycle advancement routine, and configurable latency and width parameters exposed as SimObject knobs.
+
+The contributions are:
+\begin{itemize}
+  \item \textbf{A separate \po{} CPU model.}  \po{} lives under \texttt{src/cpu/po3/}, uses \texttt{gem5::po3}, and leaves \texttt{src/cpu/o3/} unchanged.
+  \item \textbf{An explicit cycle-by-cycle front-end.}  Fetch is split into PC generation/FTQ readiness, combined BTB/branch-predictor and iTLB lookup, instruction-cache access, and decode-feed stages.
+  \item \textbf{A pipelined mid-core.}  Decode, rename, ROB dispatch/allocation, IQ/LSQ dispatch, issue select, register read, execute, writeback, commit, and redirect recovery are individually controllable.
+  \item \textbf{A load/store execute sub-pipeline.}  Memory operations traverse address generation, TLB lookup, cache access, and memory writeback timing stages.
+  \item \textbf{A practical extension mechanism.}  New stages are represented as stage-entry queues with local countdowns and retire widths, allowing microarchitectural pipeline studies without wholesale CPU-model rewrites.
+\end{itemize}
+
+\section{Background and Motivation}
+\subsection{The Baseline \oo{} Model}
+The baseline \oo{} CPU in \gem{} is an aggressive timing model with speculative fetch, branch prediction, decode, rename, issue/execute/writeback, LSQ-based memory ordering, ROB-based in-order commit, and configurable time-buffer delays between major blocks.  It accurately captures many out-of-order effects, including register renaming, wakeup/select, memory dependence handling, branch squashes, and commit serialization.  However, many activities inside a major block are modeled as work performed during that block's tick or as delayed events rather than as independently inspectable pipeline registers.
+
+This is a useful default for general-purpose architectural simulation, but it makes some studies awkward:
+\begin{itemize}
+  \item \textbf{Pipeline-depth sensitivity.}  Changing the number of cycles between prediction, i-cache access, rename, select, execute, and commit requires edits spread across stage code or coarse-grain delay parameters.
+  \item \textbf{Sub-stage bottlenecks.}  Width restrictions inside a nominal stage, such as one address-generation slot or one TLB lookup per cycle, are difficult to express independently from the enclosing stage width.
+  \item \textbf{Recovery timing.}  Branch and memory-order redirects can be modeled as delayed delivery events, but exposing the recovery stage as a named pipeline component makes front-end refill studies clearer.
+  \item \textbf{Teaching and artifact clarity.}  A cycle-by-cycle pipeline is easier to reason about when every named stage has an explicit queue and advance function.
+\end{itemize}
+
+\subsection{Design Requirements}
+\po{} is guided by four requirements.  First, it must remain an out-of-order CPU: instructions should still be renamed, scheduled dynamically, executed when operands and resources become ready, and committed in program order.  Second, it must be pipelined at cycle granularity: stage occupancy and transfer should be visible and advanced once per cycle.  Third, it must be extensible: researchers should be able to split a stage further by adding a stage-entry type and a stage advancement function.  Fourth, it must not perturb the original \oo{} source files, so that comparisons against \oo{} remain clean.
+
+\section{PO3 Architecture Overview}
+Figure~\ref{fig:pipeline} shows the logical \po{} pipeline.  The model is intentionally more detailed than a classic five-stage in-order pipeline, because it remains out-of-order: fetch, decode, rename, dispatch, issue, execute, memory, writeback, and commit are separate control points.  The ``classic five-stage'' idea is retained as a visible sequence of per-cycle pipeline boundaries, but out-of-order structures sit between those boundaries.
+
+\begin{figure}[t]
+\centering
+\fbox{\begin{minipage}{0.94\linewidth}
+\footnotesize
+\centering
+\stage{PCGen/FTQ} $\rightarrow$ \stage{Pred+iTLB} $\rightarrow$ \stage{I\$ Access} $\rightarrow$ \stage{Decode Feed}
+$\rightarrow$ \stage{Decode} $\rightarrow$ \stage{Rename}
+$\rightarrow$ \stage{ROB Dispatch} $\parallel$ \stage{IQ/LSQ Dispatch}
+$\rightarrow$ \stage{Issue Select} $\rightarrow$ \stage{Reg Read}
+$\rightarrow$ \stage{Execute} $\rightarrow$ \stage{Writeback}
+$\rightarrow$ \stage{Commit}
+
+\vspace{0.45em}
+Load/store execute: \stage{AddrGen} $\rightarrow$ \stage{dTLB} $\rightarrow$ \stage{D\$ Access} $\rightarrow$ \stage{Mem WB}
+\end{minipage}}
+\caption{Logical \po{} pipeline.  The core remains out-of-order: rename feeds the ROB and scheduler, issue select chooses ready instructions, and commit retires in program order.}
+\label{fig:pipeline}
+\end{figure}
+
+The central mechanism is a stage entry:
+\begin{lstlisting}[language=C++]
+struct PO3StageEntry {
+    ThreadID tid;
+    DynInstPtr inst;
+    Cycles cyclesLeft;
+};
+\end{lstlisting}
+Each explicit stage stores entries in a FIFO-like container, decrements \texttt{cyclesLeft} on each tick, and retires up to a configurable stage width when the countdown reaches the transfer point.  Retiring a stage entry invokes the original \oo{} action that used to occur immediately, such as inserting an instruction into the rename-to-IEW wire, sending a memory request, or moving a cache-line response toward decode.
+
+\section{Front-End Pipeline}
+The front-end is split into four timing regions.  The intent is to make instruction supply latency and bandwidth independently tunable, which is critical for branch-prediction and instruction-cache studies.
+
+\subsection{PC Generation and FTQ Readiness}
+The \stage{PCGen/FTQ} stage gates the start of a fetch transaction.  When \texttt{po3PCGenPipeline} is enabled, each active thread has a \texttt{po3PCGenCyclesLeft} counter.  Fetch cannot query the FTQ or begin a new cache-line fetch until the counter drains.  This stage approximates the latency of next-PC generation, FTQ arbitration, and redirect restart logic.
+
+\subsection{Prediction and iTLB Lookup}
+The first fetch queue combines branch-target-buffer/branch-predictor lookup with instruction translation initiation.  It is controlled by \texttt{po3FetchPredTLBLatency} and \texttt{po3FetchPredTLBWidth}.  An entry contains the thread and memory request for a fetch block.  On retirement, \po{} calls the existing translation path.  This preserves \oo{}'s fault handling and MMU interaction while giving predictor/translation lookup a visible stage boundary.
+
+\subsection{Instruction-Cache Access}
+When translation completes, \po{} enqueues a \stage{FetchCacheAccess} entry rather than immediately accessing the instruction cache.  The stage is controlled by \texttt{po3FetchCacheAccessLatency} and \texttt{po3FetchCacheAccessWidth}.  On retirement, the existing \oo{} fetch-cache access path is used.  Thus, misses, cache blocking, and packet creation remain delegated to the original memory-system interface.
+
+\subsection{Decode Feed}
+Fetched dynamic instructions are next placed in a \stage{DecodeFeed} queue controlled by \texttt{po3FetchDecodeFeedLatency} and \texttt{po3FetchDecodeFeedWidth}.  Retiring this queue moves instructions into the ordinary fetch-to-decode queue.  Separating this stage makes the final front-end latch visible and allows experiments that distinguish cache response timing from decode input bandwidth.
+
+\section{Mid-Core Pipeline}
+The mid-core introduces explicit stages for the path from decoded instructions to out-of-order scheduling.  The design keeps \oo{}'s rename maps, free list, scoreboarding, dependency graph, ROB, and IQ/LSQ data structures intact.
+
+\subsection{Decode}
+The \stage{Decode} stage receives instructions from fetch and delays their transfer to rename.  \texttt{po3DecodeLatency} controls the stage depth, and \texttt{po3DecodeStageWidth} controls how many decoded instructions can retire into the rename input per cycle.  Squashes and drain checks clear or inspect this queue, so speculative wrong-path instructions do not leak into later stages.
+
+\subsection{Rename}
+The \stage{Rename} stage models rename-map and free-list latency.  The original rename logic still performs source and destination physical-register mapping, serialization checks, and resource checks.  After successful rename, \po{} can hold the renamed instruction in \texttt{po3RenameStage} before feeding downstream consumers.  This makes rename latency explicit without changing architectural register mapping semantics.
+
+\subsection{Dispatch and Allocation}
+\po{} separates the renamed instruction fanout into two visible paths.  The ROB path passes through \stage{ROBDispatch}, controlled by \texttt{po3DispatchLatency} and \texttt{po3DispatchStageWidth}; on retirement, it inserts the instruction into the ROB.  The scheduler path passes through \stage{IQ/LSQDispatch}, controlled by \texttt{po3IssueLatency} and \texttt{po3IssueStageWidth}; on retirement, it inserts the instruction into the IQ and, when appropriate, the LSQ.  This split reflects real designs in which allocation, queue insertion, and scheduler visibility may have distinct timing, while preserving the existing \oo{} interfaces for each destination.
+
+\subsection{Issue Select}
+The \stage{IssueSelect} stage controls the cadence of scheduler selection.  When enabled, the call that selects ready instructions is gated by \texttt{po3IssueSelectLatency}.  This models wakeup/select or arbitration latency without replacing the proven IQ dependency tracking.  The stage is especially useful when studying whether an additional select cycle changes critical-path behavior or memory-level parallelism.
+
+\subsection{Register Read and Execute}
+Ready instructions selected by the IQ pass through a combined configurable register-read/execute delay.  \texttt{po3RegReadLatency} and \texttt{po3ExecuteLatency} can be enabled independently and sum into a countdown before the existing execute loop consumes selected instructions.  Functional-unit availability, operand readiness, memory-order checks, and branch resolution remain handled by the inherited \oo{} execute logic.
+
+\subsection{Writeback, Commit, and Redirect}
+For non-memory operations, \stage{Writeback} can add \texttt{po3WritebackLatency} before the instruction becomes visible to commit and dependent wakeup paths.  The \stage{Commit} stage adds a per-ROB-head countdown controlled by \texttt{po3CommitLatency}; \texttt{po3CommitStageWidth} limits retirement bandwidth independently of the baseline commit width.  Redirect recovery is modeled by delivering branch and memory-order squash information through a future time-buffer slot selected by \texttt{po3RedirectLatency}.  This exposes recovery latency as a first-class pipeline parameter.
+
+\section{Load/Store Execute Sub-Pipeline}
+The memory pipeline is the most explicit sub-pipeline in \po{}.  Memory instructions are tracked in \texttt{po3MemPipelineInsts} and flow through three internal queues plus a response-side writeback delay:
+\begin{enumerate}
+  \item \stage{AddrGen}: computes or initiates effective-address generation using the original instruction access path.
+  \item \stage{dTLB}: represents translation lookup latency after address generation and before cache access.
+  \item \stage{D\$Access}: issues the translated load or store request to the memory system subject to per-cycle width.
+  \item \stage{MemWB}: applies \texttt{po3MemWritebackLatency} after a cache response before the instruction completes its memory writeback path.
+\end{enumerate}
+
+The corresponding configuration parameters are \texttt{po3MemAddrGenLatency}, \texttt{po3MemTLBLookupLatency}, \texttt{po3MemCacheAccessLatency}, \texttt{po3MemWritebackLatency}, and width controls for address generation, TLB lookup, and cache access.  This decomposition allows load-use latency to be modeled as a sum of named components rather than as a single opaque execute delay.  It also enables bottleneck experiments, such as limiting address-generation bandwidth while keeping TLB and cache bandwidth wide, or vice versa.
+
+The current implementation intentionally reuses \oo{}'s LSQ correctness protocol.  Store address generation and store-queue bookkeeping are still performed by the inherited access routines, while the \po{} stages delay when cache-side work and completion are observed.  This choice minimizes correctness risk: memory dependence checks, violation detection, blocked-cache handling, and replay mechanisms remain under the mature LSQ implementation.
+
+\section{Configuration Interface}
+Table~\ref{tab:params} summarizes the major \po{} knobs.  All stages are exposed as SimObject parameters in \texttt{BasePO3CPU.py}; \texttt{PO3Config.py} provides a default configuration that enables the new stages with one-cycle latency and one-entry-per-cycle stage transfer widths.  Researchers can disable any stage to recover behavior closer to \oo{} for that component, or sweep individual latencies and widths to emulate deeper or narrower pipelines.
+
+\begin{table*}[t]
+\centering
+\caption{Representative \po{} pipeline parameters.  Each group has an enable bit and latency; selected FIFO stages also expose independent retire widths.}
+\label{tab:params}
+\begin{tabular}{lll}
+\toprule
+Pipeline region & Parameters & Modeled component \\
+\midrule
+PC generation & \texttt{po3PCGenPipeline}, \texttt{po3PCGenLatency} & next-PC/FTQ readiness \\
+Fetch prediction/iTLB & \texttt{po3FetchPredTLBLatency}, \texttt{po3FetchPredTLBWidth} & BTB, branch predictor, iTLB lookup \\
+Fetch cache & \texttt{po3FetchCacheAccessLatency}, \texttt{po3FetchCacheAccessWidth} & instruction-cache access launch \\
+Fetch delivery & \texttt{po3FetchDecodeFeedLatency}, \texttt{po3FetchDecodeFeedWidth} & latch into decode input \\
+Decode & \texttt{po3DecodeLatency}, \texttt{po3DecodeStageWidth} & decode-to-rename transfer \\
+Rename & \texttt{po3RenameLatency}, \texttt{po3RenameStageWidth} & rename-to-downstream transfer \\
+ROB dispatch & \texttt{po3DispatchLatency}, \texttt{po3DispatchStageWidth} & ROB allocation latency/bandwidth \\
+IQ/LSQ dispatch & \texttt{po3IssueLatency}, \texttt{po3IssueStageWidth} & scheduler and LSQ insertion \\
+Issue select & \texttt{po3IssueSelectLatency} & wakeup/select cadence \\
+Reg read/execute & \texttt{po3RegReadLatency}, \texttt{po3ExecuteLatency} & selected-instruction execution delay \\
+Writeback & \texttt{po3WritebackLatency} & non-memory writeback delay \\
+Commit & \texttt{po3CommitLatency}, \texttt{po3CommitStageWidth} & in-order retirement latency/bandwidth \\
+Redirect & \texttt{po3RedirectLatency} & branch/memory-order recovery delay \\
+Memory execute & \texttt{po3MemAddrGen*}, \texttt{po3MemTLBLookup*}, \texttt{po3MemCacheAccess*}, \texttt{po3MemWritebackLatency} & load/store sub-stages \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+A minimal configuration fragment is:
+\begin{lstlisting}[language=Python]
+from m5.objects import PO3CPU
+from m5.objects.PO3Config import applyPO3PipelineDefaults
+
+cpu = PO3CPU()
+applyPO3PipelineDefaults(cpu)
+cpu.po3FetchPredTLBLatency = 2
+cpu.po3MemAddrGenWidth = 2
+cpu.po3MemTLBLookupWidth = 1
+cpu.po3CommitStageWidth = 4
+\end{lstlisting}
+This example makes front-end prediction/translation deeper, allows two address generations per cycle, limits the memory translation stage to one operation per cycle, and permits four commits per cycle after the commit-stage latency has elapsed.
+
+\section{Implementation}
+\subsection{Source Organization}
+\po{} is implemented by duplicating the \oo{} source tree into \texttt{src/cpu/po3/}.  Includes, namespaces, SimObject names, SCons sources, and standard-library CPU-type mappings are renamed to \po{} equivalents.  This organization has two benefits.  First, the baseline \oo{} model remains available and unmodified for A/B comparison.  Second, \po{} can evolve aggressively without imposing risk on users who rely on the original \oo{} CPU.
+
+\subsection{Stage Advancement Protocol}
+Each explicit queue follows the same protocol:
+\begin{enumerate}
+  \item The producing stage calls an \texttt{enqueuePO3*} helper instead of invoking the consumer action immediately.
+  \item The stage's \texttt{tick()} path calls \texttt{advancePO3*Pipeline()} once per simulated cycle.
+  \item The advance routine decrements counters, retires ready entries up to the configured width, and invokes the inherited \oo{} consumer action.
+  \item Squash, drain, and takeover paths call \texttt{clearPO3*Pipeline()} or assert that no speculative entries remain.
+\end{enumerate}
+The protocol is deliberately simple.  It treats each stage as a local timing wrapper around existing correctness logic.  This reduces the surface area of changes and makes the model easy to extend.
+
+\subsection{Interaction with Out-of-Order State}
+The key correctness constraint is that pipeline timing must not violate \oo{}'s architectural ordering.  \po{} therefore delays transfers into and out of structures, but it does not replace the structures themselves.  Rename still owns register mapping and free-list allocation.  The IQ still owns dependency tracking and ready-instruction selection.  The LSQ still owns memory ordering and blocked-request handling.  The ROB still owns in-order retirement and squash propagation.  \po{} adds queues around these mechanisms, so timing changes are visible while correctness responsibility remains localized.
+
+\subsection{Squash and Drain Handling}
+Speculation requires careful cleanup.  Front-end, decode, rename, dispatch, issue, and memory stage queues all participate in squash handling by removing entries associated with the squashed thread or by resetting per-thread counters.  Drain logic treats non-empty \po{} queues as activity, preventing the CPU from declaring quiescence while instructions are resident in an added pipeline latch.  This is essential for deterministic switching, checkpointing, and clean simulation termination.
+
+\subsection{Granularity and Current Limitations}
+\po{} currently provides two implementation granularities.  Fetch, decode, rename, dispatch, IQ/LSQ dispatch, and the load/store execute sub-pipeline use explicit per-entry queues.  Issue select, register read, execute, writeback, commit, redirect, and PC generation are represented as cycle gates or per-head countdowns around existing \oo{} mechanisms.  This choice is intentional for the first version: it exposes the latency knobs most commonly needed for pipeline studies while avoiding a full rewrite of IQ select, functional-unit pipelines, and ROB retirement.  Future versions can refine any gated stage into a per-instruction queue using the same stage-entry protocol.
+
+\section{Using PO3 for Microarchitectural Studies}
+\subsection{Pipeline-Depth Sweeps}
+Because stages are independently controlled, \po{} supports direct sweeps over front-end depth, rename depth, select latency, load-use latency, and commit latency.  For example, a branch-penalty study can vary \texttt{po3PCGenLatency}, \texttt{po3FetchPredTLBLatency}, \texttt{po3FetchCacheAccessLatency}, and \texttt{po3RedirectLatency} while leaving the back end unchanged.  A memory-pipeline study can vary address-generation, dTLB, data-cache, and memory-writeback stages independently.
+
+\subsection{Bandwidth Bottleneck Experiments}
+Widths are equally important.  A model with a wide decode stage but a narrow rename stage exposes rename backpressure; a wide address-generation stage with a narrow TLB stage creates a translation bottleneck; and a wide ROB commit path with a narrow writeback path separates retirement bandwidth from producer wakeup bandwidth.  These experiments are cumbersome with only coarse global issue or commit widths.
+
+\subsection{Comparing Against O3}
+A clean comparison uses identical ISA, cache hierarchy, branch predictor, workload, clock, and baseline \oo{} widths.  Researchers can then run \oo{} and \po{} with all added latencies set to one cycle, followed by sweeps that increase only one region at a time.  Useful metrics include IPC, fetch bubbles, rename stalls, IQ occupancy, LSQ occupancy, load-to-use latency, branch recovery cycles, writeback rate, commit rate, and squash counts.  Because \po{} is source-separated from \oo{}, differences can be attributed to explicit pipeline modeling rather than accidental modifications to the baseline model.
+
+\section{Evaluation Plan}
+This paper describes the implementation artifact and does not report performance numbers.  A full evaluation should answer three questions:
+\begin{enumerate}
+  \item \textbf{Fidelity:} Does \po{} reproduce \oo{} behavior when the added stages are disabled or minimized?
+  \item \textbf{Sensitivity:} Do predicted IPC and stall breakdowns respond monotonically and plausibly to deeper front-end, scheduler, memory, and commit pipelines?
+  \item \textbf{Utility:} Can \po{} express timing hypotheses that require invasive source edits in \oo{}, such as a split load pipeline or a delayed redirect path?
+\end{enumerate}
+Suggested workloads include pointer-chasing and array-streaming kernels for memory latency, branch-heavy microbenchmarks for front-end recovery, dependency-chain integer kernels for select/reg-read/execute latency, and full applications for aggregate IPC impact.  The most important validation is paired \oo{}/\po{} simulation with controlled configuration deltas.
+
+\section{Related Work}
+Tomasulo's algorithm established dynamic scheduling with register renaming and common-data-bus wakeup as a practical out-of-order execution mechanism~\cite{tomasulo1967}.  The MIPS R10000 demonstrated a highly influential commercial out-of-order microarchitecture with speculative register renaming, queues, and in-order retirement~\cite{yeager1996}.  \gem{} provides a widely used full-system simulation infrastructure and includes the \oo{} CPU model that serves as \po{}'s correctness and implementation substrate~\cite{binkert2011gem5,lowepower2020gem5}.  \po{} is complementary to these efforts: it is not a new scheduling algorithm, but a timing-structure refactoring that makes pipeline stages explicit inside an existing out-of-order simulator.
+
+\section{Conclusion}
+\po{} is a cycle-by-cycle, extensible, pipelined out-of-order CPU model derived from \gem{}'s \oo{} model and isolated under \texttt{src/cpu/po3/}.  It adds named timing stages throughout the front-end, mid-core, commit path, redirect path, and load/store execute path while preserving \oo{}'s proven out-of-order structures.  The resulting model is designed for studies where the placement, latency, and bandwidth of individual pipeline stages matter.  By exposing those choices as SimObject parameters and using a uniform stage-entry protocol, \po{} provides a practical path from event-oriented out-of-order timing toward detailed pipeline-structure exploration.
+
+\begin{thebibliography}{9}
+\bibitem{tomasulo1967}
+R. M. Tomasulo, ``An efficient algorithm for exploiting multiple arithmetic units,'' \emph{IBM Journal of Research and Development}, vol. 11, no. 1, pp. 25--33, 1967.
+
+\bibitem{yeager1996}
+K. C. Yeager, ``The MIPS R10000 superscalar microprocessor,'' \emph{IEEE Micro}, vol. 16, no. 2, pp. 28--40, 1996.
+
+\bibitem{binkert2011gem5}
+N. Binkert et al., ``The gem5 simulator,'' \emph{ACM SIGARCH Computer Architecture News}, vol. 39, no. 2, pp. 1--7, 2011.
+
+\bibitem{lowepower2020gem5}
+J. Lowe-Power et al., ``The gem5 simulator: Version 20.0+,'' \emph{arXiv:2007.03152}, 2020.
+\end{thebibliography}
+
+\end{document}
