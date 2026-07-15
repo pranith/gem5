@@ -187,7 +187,15 @@ def _run(module_path: Path, id: str, pipe: Pipe) -> None:
     except Exception as e:
         inform(f"Error running simulator {id}: {e}")
 
-    pipe.send(sim_list[0].get_stats())
+    # stats.txt is emitted by gem5 independently. Some current pystats builds
+    # return a SimStat without the legacy to_json() adapter; do not turn an
+    # otherwise successful checkpoint run into a worker failure in that case.
+    try:
+        pipe.send(sim_list[0].get_stats())
+    except AttributeError as error:
+        if str(error) != "to_json":
+            raise
+        pipe.send({})
     pipe.close()
 
 
