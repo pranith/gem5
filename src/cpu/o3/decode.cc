@@ -99,6 +99,7 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
       fetchToDecodeDelay(params.fetchToDecodeDelay),
       decodeWidth(params.decodeWidth),
       optimizeStoreRelease(params.optimizeStoreRelease),
+      needsTSO(params.needsTSO),
       numThreads(params.numThreads),
       stats(_cpu)
 {
@@ -738,24 +739,28 @@ Decode::decodeInsts(ThreadID tid)
         }
 
         if (cpu->versioningEnabled()) {
-            // Increment the per-thread memory version on barriers so that
-            // following memory ops can be tagged with a new epoch. Store
-            // releases only skip the bump when optimizeStoreRelease is on.
-            bool bump_version =
+            // In RC mode, barriers create ordering epochs. In static TSO mode,
+            // each ordinary store also starts a new epoch so the merge buffer
+            // drains stores in program order without requiring inserted
+            // fences.
+            const bool barrier_bump =
                 (inst->isWriteBarrier() || inst->isReadBarrier()) &&
                 (!(inst->staticInst->isAcquire() ||
                    (inst->staticInst->isRelease() && optimizeStoreRelease)));
+            const bool tso_store_bump =
+                needsTSO && inst->isStore() && !inst->isDataPrefetch();
+            const bool bump_version = barrier_bump || tso_store_bump;
 
             if (bump_version) {
                 ++memOrderVersion[tid];
 
-                DPRINTF(Decode,
-                        "[tid:%i] Decoded a barrier instruction %i with PC:"
-                        "%s %s. Mem Order version is %i\n",
-                        tid, inst->seqNum, inst->pcState(),
-                        inst->staticInst->disassemble(
-                            inst->pcState().instAddr()),
-                        memOrderVersion[tid]);
+                DPRINTF(
+                    Decode,
+                    "[tid:%i] Decoded memory-order boundary instruction "
+                    "%i with PC:%s %s. Mem Order version is %i\n",
+                    tid, inst->seqNum, inst->pcState(),
+                    inst->staticInst->disassemble(inst->pcState().instAddr()),
+                    memOrderVersion[tid]);
             }
 
             inst->setMemOrderVersion(memOrderVersion[tid]);

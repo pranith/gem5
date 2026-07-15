@@ -148,6 +148,11 @@ class BaseO3CPU(BaseCPU):
     mergeBufferEntries = Param.Unsigned(
         32, "Number of entries in " "the merge buffer"
     )
+    mergeBufferEntryBytes = Param.Unsigned(
+        0,
+        "Bytes tracked by each merge buffer entry; zero uses the cache "
+        "block size",
+    )
     mergeBufferPrefetch = Param.Bool(
         True,
         "Prefetch cache line on merge buffer allocation to speed up drains",

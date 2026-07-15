@@ -376,6 +376,8 @@ class LSQUnit
         }
 
         void recordAllocVersion(uint64_t version, bool is_release_store);
+        void recordMergedVersion(uint64_t old_version, uint64_t new_version,
+                                 bool is_release_store);
         void recordInvalidateVersion(uint64_t version);
     };
 
