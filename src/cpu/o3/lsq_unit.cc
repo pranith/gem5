@@ -374,6 +374,7 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params,
     depCheckShift = params.LSQDepCheckShift;
     checkLoads = params.LSQCheckLoads;
     needsTSO = params.needsTSO;
+    tsoConsecutiveStoreMerging = params.tsoConsecutiveStoreMerging;
 
     mergeBufferEnabled = params.useMergeBuffer;
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
@@ -2733,9 +2734,10 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             if (entry.isAtomic) {
                 return nullptr;
             }
-            const bool consecutive_tso_version = lsqPtr && lsqPtr->needsTSO &&
-                                                 version > entry.version &&
-                                                 version - entry.version == 1;
+            const bool consecutive_tso_version =
+                lsqPtr && lsqPtr->needsTSO &&
+                lsqPtr->tsoConsecutiveStoreMerging &&
+                version > entry.version && version - entry.version == 1;
             if (entry.version == version || consecutive_tso_version) {
                 found_idx = idx;
                 break;
@@ -2799,7 +2801,9 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     return nullptr;
                 }
                 const bool consecutive_tso_version =
-                    lsqPtr && lsqPtr->needsTSO && version > e.version &&
+                    lsqPtr && lsqPtr->needsTSO &&
+                    lsqPtr->tsoConsecutiveStoreMerging &&
+                    version > e.version &&
                     version - e.version == 1;
                 if (e.version == version || consecutive_tso_version) {
                     found_idx = idx;
@@ -3041,9 +3045,10 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
             if (e.isAtomic) {
                 return false;
             }
-            const bool consecutive_tso_version = lsqPtr && lsqPtr->needsTSO &&
-                                                 version > e.version &&
-                                                 version - e.version == 1;
+            const bool consecutive_tso_version =
+                lsqPtr && lsqPtr->needsTSO &&
+                lsqPtr->tsoConsecutiveStoreMerging && version > e.version &&
+                version - e.version == 1;
             if (e.version == version || consecutive_tso_version) {
                 found_idx = idx;
                 break;

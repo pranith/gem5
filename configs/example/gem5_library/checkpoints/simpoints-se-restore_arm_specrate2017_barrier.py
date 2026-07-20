@@ -99,9 +99,9 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(12)
+multisim.set_num_processes(20)
 
-spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers/{x_workload}"
+spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers_gem5_20260710_hardlink/{x_workload}"
 
 spec_rate_workloads = [
     "500.perlbench_r_checkspam",
@@ -151,7 +151,7 @@ spec_rate_args = {
     "505.mcf_r": "inp.in",
     "520.omnetpp_r": "-c General -r 0",
     "523.xalancbmk_r": "-v t5.xml xalanc.xsl",
-    "525.x264_r": "--pass 1 --stats x264_stats.log --bitrate 1000 --frames 1000 -o BuckBunny_New.264 BuckBunny.yuv 1280x720",
+    "525.x264_r": "--pass 1 --stats x264_stats.log --bitrate 1000 --frames 1000 -o BuckBunny_New.264 /home/pranith/work/spec2017_chkpts_r_arm64_barriers_gem5_20260710_hardlink/525.x264_r/BuckBunny.yuv 1280x720",
     "531.deepsjeng_r": "ref.txt",
     "541.leela_r": "ref.sgf",
     "557.xz_r": "cld.tar.xz 160 19cf30ae51eddcbefda78dd06014b4b96281456e078ca7c13e1c0c9e6aaea8dff3efb4ad6b0456697718cede6bd5454852652806a657bb56e07d61128434b474 59796407 61004416 6",

@@ -266,6 +266,10 @@ class BaseO3CPU(BaseCPU):
         "Branch Predictor",
     )
     needsTSO = Param.Bool(False, "Enable TSO Memory model")
+    tsoConsecutiveStoreMerging = Param.Bool(
+        True,
+        "Allow TSO stores with consecutive ordering tags to merge",
+    )
 
     recvRespThrottling = Param.Bool(
         False, "Enable load receive response throttling in the LSQ"

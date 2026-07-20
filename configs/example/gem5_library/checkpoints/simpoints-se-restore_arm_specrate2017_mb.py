@@ -173,6 +173,7 @@ class CustomCore(BaseCPUCore):
         self.core.mergeBufferPrefetch = True
         self.core.speculativeBarrierIssue = True
         self.core.enableVersioning = True
+        self.core.needsTSO = True
         # self.core.branchPred = Rancho_BP()
 
 

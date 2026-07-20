@@ -205,6 +205,14 @@ def create(args):
                 cpu.safeStlfLoadsBypassMBDrain = enable_safe_stlf_loads_bypass_mb
                 cpu.safeCacheLoadsBypassMBDrain = enable_safe_cache_loads_bypass_mb
 
+        if args.tso_mode is not None:
+            enable_tso = args.tso_mode == "on"
+            for cpu in system.cpu_cluster.cpus:
+                cpu.needsTSO = enable_tso
+                if enable_tso:
+                    cpu.useMergeBuffer = True
+                    cpu.enableVersioning = True
+
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts
@@ -255,6 +263,15 @@ def main():
         choices=["on", "off"],
         default=None,
         help="Enable/disable versioning",
+    )
+    parser.add_argument(
+        "--tso-mode",
+        choices=["on", "off"],
+        default=None,
+        help=(
+            "Enable/disable static hardware TSO mode. Enabling TSO mode also "
+            "enables the merge buffer and ordering-tag versioning substrate."
+        ),
     )
     parser.add_argument(
         "--safeCacheBypass",

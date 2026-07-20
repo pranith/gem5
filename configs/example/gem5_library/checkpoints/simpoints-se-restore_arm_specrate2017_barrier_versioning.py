@@ -99,9 +99,9 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(24)
+multisim.set_num_processes(15)
 
-spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers/{x_workload}"
+spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_barriers_gem5_20260710_hardlink/{x_workload}"
 
 spec_rate_workloads = [
     "500.perlbench_r_checkspam",
@@ -151,7 +151,7 @@ spec_rate_args = {
     "505.mcf_r": "inp.in",
     "520.omnetpp_r": "-c General -r 0",
     "523.xalancbmk_r": "-v t5.xml xalanc.xsl",
-    "525.x264_r": "--pass 1 --stats x264_stats.log --bitrate 1000 --frames 1000 -o BuckBunny_New.264 BuckBunny.yuv 1280x720",
+    "525.x264_r": "--pass 1 --stats x264_stats.log --bitrate 1000 --frames 1000 -o BuckBunny_New.264 /home/pranith/work/spec2017_chkpts_r_arm64_barriers_gem5_20260710_hardlink/525.x264_r/BuckBunny.yuv 1280x720",
     "531.deepsjeng_r": "ref.txt",
     "541.leela_r": "ref.sgf",
     "557.xz_r": "cld.tar.xz 160 19cf30ae51eddcbefda78dd06014b4b96281456e078ca7c13e1c0c9e6aaea8dff3efb4ad6b0456697718cede6bd5454852652806a657bb56e07d61128434b474 59796407 61004416 6",
@@ -250,6 +250,36 @@ class CheckpointRun:
         return True
 
 
+class CheckpointSimulator(Simulator):
+    """Rebind this simulation's exit callbacks in its MultiSim worker."""
+
+    def __init__(self, board, checkpoint, id):
+        super().__init__(board=board, id=id)
+        self.checkpoint_run = CheckpointRun(checkpoint, self, board)
+
+    def run(self, max_ticks=None):
+        # MultiSim imports this module and constructs every Simulator in each
+        # worker. ClassicGeneratorExitHandler stores its callback map at class
+        # scope, so configuring callbacks while constructing the simulations
+        # leaves the map bound to the final Simulator. Rebind it only after
+        # MultiSim has selected this worker's Simulator.
+        self.set_on_exit_handler(
+            {
+                ExitEvent.MAX_INSTS: (
+                    func()
+                    for func in [
+                        self.checkpoint_run.simpoint_warmup_end,
+                        self.checkpoint_run.simpoint_interval_end,
+                    ]
+                )
+            }
+        )
+        self.schedule_max_insts(
+            self._board.get_simpoint().get_warmup_list()[0]
+        )
+        return super().run(max_ticks=max_ticks)
+
+
 for workload in spec_rate_workloads:
     workload_dir = spec_dir.format(x_workload=workload)
     # print(workload_dir)
@@ -324,25 +354,11 @@ for workload in spec_rate_workloads:
         )
 
         chkpt_id = f"chkpt_{workload_name}_{chkpt_idx}"
-        simulator = Simulator(
+        simulator = CheckpointSimulator(
             board=board,
+            checkpoint=chkpt,
             id=chkpt_id,
         )
-
-        chkpt_run = CheckpointRun(chkpt, simulator, board)
-
-        on_exit_event = {
-            ExitEvent.MAX_INSTS: (
-                func()
-                for func in [
-                    chkpt_run.simpoint_warmup_end,
-                    chkpt_run.simpoint_interval_end,
-                ]
-            )
-        }
-
-        simulator.set_on_exit_event(on_exit_event)
-        simulator.schedule_max_insts(board.get_simpoint().get_warmup_list()[0])
         multisim.add_simulator(simulator)
         chkpt_idx = chkpt_idx + 1
 

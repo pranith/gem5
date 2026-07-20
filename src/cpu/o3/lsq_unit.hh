@@ -916,6 +916,8 @@ class LSQUnit
 
     /** Flag for memory model. */
     bool needsTSO;
+    /** Allow consecutive TSO ordering epochs to coalesce in the merge buffer. */
+    bool tsoConsecutiveStoreMerging;
 
   protected:
     // Will also need how many read/write ports the Dcache has.  Or keep track
