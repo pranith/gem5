@@ -193,6 +193,39 @@ class BaseO3CPU(BaseCPU):
         False,
         "Allow AcquirePC loads at ROB head to commit without draining MB",
     )
+    zfenceEnable = Param.Bool(
+        False,
+        "Enable zFence early-permission tracking",
+    )
+    zfenceRelaxRetire = Param.Bool(
+        False,
+        "Enable zFence relaxed-retire paths",
+    )
+    zfenceLockLines = Param.Bool(
+        False,
+        "Enable zFence lock tracking on cache lines",
+    )
+    zfenceMbLockAcquireLatency = Param.Cycles(
+        4,
+        "Extra cycles after MB lock response before lock is considered acquired",
+    )
+    tsoTagCompleteStoreMerging = Param.Bool(
+        False,
+        "Merge non-consecutive TSO stores after their complete tag interval is locked",
+    )
+    tsoTagCompleteOutOfOrderDrain = Param.Bool(
+        False,
+        "Allow frozen tag-complete groups to issue younger members first",
+    )
+    tsoTagCompleteWindow = Param.Unsigned(
+        16, "Maximum number of ordering tags in a tag-complete merge group"
+    )
+    tsoTagCompleteRetryCycles = Param.Cycles(
+        4, "Cycles to wait for an incomplete tag interval before allocating normally"
+    )
+    tsoTagCompleteLockLease = Param.Cycles(
+        128, "Maximum time an unfrozen merge-buffer prelock may be retained"
+    )
     safeStlfLoadsBypassMBDrain = Param.Bool(
         True,
         "Allow STLF loads at ROB head to bypass MB version stall",

@@ -849,6 +849,7 @@ class LSQ
 
     /** Returns whether or not there are any stores to write back to memory. */
     bool hasStoresToWB();
+    bool hasStoreToLine(Addr line_addr);
 
     /** Returns whether or not a specific thread has any stores to write back
      * to memory.
@@ -866,6 +867,12 @@ class LSQ
     /** Checks if a load must wait for older release store queue entries. */
     bool loadBlockedByReleaseSQ(ThreadID tid, uint64_t load_version,
                                 InstSeqNum load_seq);
+    /** zFence: fence can retire if older stores are permReady+protected. */
+    bool canRelaxFenceRetire(ThreadID tid, uint64_t version,
+                             InstSeqNum fence_seq);
+    /** zFence: load can retire if older stores are permReady+protected. */
+    bool canRelaxUnsafeLoadRetire(ThreadID tid, uint64_t load_version,
+                                  InstSeqNum load_seq);
 
     /** Returns the number of stores a specific thread has to write back. */
     int numStoresToWB(ThreadID tid);

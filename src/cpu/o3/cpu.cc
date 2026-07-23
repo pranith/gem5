@@ -448,9 +448,8 @@ CPU::heartbeat() const
                   (*head_inst)->pcState(),
                   disasm);
         } else {
-            panic("IPC 0 in heartbeat on CPU %i and ROB is empty across "
-                  "threads.\n",
-                  cpuId());
+            warn("IPC 0 in heartbeat on CPU %i with empty ROB across "
+                 "threads; continuing\n", cpuId());
         }
     }
 }

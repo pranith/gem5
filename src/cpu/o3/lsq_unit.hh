@@ -103,11 +103,17 @@ class LSQEntry
     LSQRequest *
     request()
     { return _request; }
+    const LSQRequest *
+    request() const
+    { return _request; }
     void
     setRequest(LSQRequest *r)
     { _request = r; }
     bool
     hasRequest()
+    { return _request != nullptr; }
+    bool
+    hasRequest() const
     { return _request != nullptr; }
     /** Member accessors. */
     /** @{ */
@@ -142,6 +148,24 @@ class SQEntry : public LSQEntry
      * style instructs (ARM DC ZVA; ALPHA WH64)
      */
     bool _isAllZeros = false;
+    /** Whether the store has early-permission visibility. */
+    bool _permReady = false;
+    /** Whether a zFence line lock has been acquired for this store. */
+    bool _lockAcquired = false;
+    /** Whether this store is eligible for relaxed retirement. */
+    bool _eligibleForRelaxedRetire = false;
+    /** Whether this store has a valid zFence line address recorded. */
+    bool _zfLineAddrValid = false;
+    /** zFence-tracked cache line address. */
+    Addr _zfLineAddr = 0;
+    /** A commit-time prelock should be attempted before MB allocation. */
+    bool _earlyPrelockPending = false;
+    /** A commit-time prelock request is awaiting its response. */
+    bool _earlyPrelockInFlight = false;
+    /** Cycle when the returned commit-time prelock becomes usable. */
+    Cycles _earlyPrelockReadyCycle = Cycles(0);
+    /** Coherence revoked this prelock before transfer to the MB. */
+    bool _earlyPrelockConflict = false;
 
   public:
     static constexpr size_t DataSize = sizeof(_data);
@@ -178,6 +202,48 @@ class SQEntry : public LSQEntry
     const bool &
     isAllZeros() const
     { return _isAllZeros; }
+    bool &
+    permReady()
+    { return _permReady; }
+    const bool &
+    permReady() const
+    { return _permReady; }
+    bool &
+    lockAcquired()
+    { return _lockAcquired; }
+    const bool &
+    lockAcquired() const
+    { return _lockAcquired; }
+    bool &
+    eligibleForRelaxedRetire()
+    { return _eligibleForRelaxedRetire; }
+    const bool &
+    eligibleForRelaxedRetire() const
+    { return _eligibleForRelaxedRetire; }
+    bool &
+    zfLineAddrValid()
+    { return _zfLineAddrValid; }
+    const bool &
+    zfLineAddrValid() const
+    { return _zfLineAddrValid; }
+    Addr &
+    zfLineAddr()
+    { return _zfLineAddr; }
+    const Addr &
+    zfLineAddr() const
+    { return _zfLineAddr; }
+    bool &
+    earlyPrelockPending()
+    { return _earlyPrelockPending; }
+    bool &
+    earlyPrelockInFlight()
+    { return _earlyPrelockInFlight; }
+    Cycles &
+    earlyPrelockReadyCycle()
+    { return _earlyPrelockReadyCycle; }
+    bool &
+    earlyPrelockConflict()
+    { return _earlyPrelockConflict; }
     char *
     data()
     { return _data; }
@@ -241,11 +307,43 @@ class LSQUnit
             Cycles allocCycle;
             unsigned unretireCount;
             uint64_t version;
+            /** Youngest ordering tag represented by this entry's data. */
+            uint64_t lastVersion;
+            /** Tags whose stores were absorbed without allocating entries. */
+            std::vector<uint64_t> absorbedVersions;
+            /** Nonzero while the entry belongs to a frozen atomic group. */
+            uint64_t tagCompleteGroup = 0;
             InstSeqNum seqNum = 0;
             bool isRelease = false;
             bool isAtomic = false;
             LSQRequest *atomicReq = nullptr;
             std::vector<bool> waitBits;
+            /** zFence: early-permission visibility for this entry. */
+            bool zfPermReady = false;
+            /** zFence: line lock has been issued/acquired for this entry. */
+            bool zfLockAcquired = false;
+            /** zFence: entry can participate in relaxed-retire checks. */
+            bool zfEligibleForRelaxedRetire = false;
+            /** zFence: tracked line address validity. */
+            bool zfLineAddrValid = false;
+            /** zFence: tracked line address for this MB entry. */
+            Addr zfLineAddr = 0;
+            /** zFence: a line-lock request should be (re)attempted. */
+            bool zfLockReqPending = false;
+            /** zFence: a line-lock request is currently in-flight. */
+            bool zfLockReqInFlight = false;
+            /** zFence: cycle when MB line lock becomes usable. */
+            Cycles zfLockReadyCycle = Cycles(0);
+            /** Lease expiry for an acquired, but not frozen, prelock. */
+            Cycles zfLeaseExpireCycle = Cycles(0);
+            /** A coherence conflict permanently aborted this prelock attempt. */
+            bool zfPrelockConflictRevoked = false;
+            /** The line data prefetch must finish before an early prelock. */
+            bool zfPrefetchInFlight = false;
+            /** The one-shot initial prelock prefetch has not completed. */
+            bool zfInitialPrefetchNeeded = true;
+            /** A revoked prelock must rejoin the cache after snoop replay. */
+            bool zfConflictRefetchPending = false;
 
             MergeBufferEntry(size_t size, uint64_t ver)
                 : byteValids(size, false),
@@ -255,6 +353,7 @@ class LSQUnit
                   allocCycle(0),
                   unretireCount(0),
                   version(ver),
+                  lastVersion(ver),
                   seqNum(0)
             {}
         };
@@ -279,6 +378,25 @@ class LSQUnit
         };
         /** Tracks counts of outstanding entries per version in order. */
         std::deque<VersionCountEntry> versionCounts;
+
+        struct TagCompleteGroup
+        {
+            uint64_t id = 0;
+            uint64_t firstVersion = 0;
+            uint64_t lastVersion = 0;
+            std::vector<size_t> members;
+            std::vector<size_t> lockOwners;
+            std::vector<bool> writeIssued;
+            size_t writesIssued = 0;
+            size_t writeResponses = 0;
+            size_t nextUnlock = 0;
+            size_t unlockResponses = 0;
+            bool unlocking = false;
+        };
+        std::unordered_map<uint64_t, TagCompleteGroup> tagCompleteGroups;
+        uint64_t nextTagCompleteGroup = 1;
+        uint64_t publishingTagCompleteGroup = 0;
+        std::unordered_map<InstSeqNum, Cycles> tagCompleteWaitStart;
 
         LSQUnit *lsqPtr;
         bool resetRetireOnMerge;
@@ -308,7 +426,8 @@ class LSQUnit
                                    size_t size,
                                    typename StoreQueue::iterator store_it,
                                    bool is_all_zero,
-                                   uint64_t version);
+                                   uint64_t version,
+                                   bool allow_tag_complete = true);
         MergeBufferEntry *addAtomic(Cycles now, LSQRequest *request,
                                     typename StoreQueue::iterator store_it,
                                     uint64_t version);
@@ -316,6 +435,9 @@ class LSQUnit
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
+        void handleTagCompleteUnlockResp(uint64_t group_id);
+        bool completeSQEarlyPrelock(InstSeqNum seq_num, Addr line_addr,
+                                    Cycles ready_cycle);
         void forceRetireVersionsBefore(uint64_t version);
         std::optional<uint64_t> youngestVersion() const;
         std::optional<uint64_t> oldestVersion() const;
@@ -333,6 +455,10 @@ class LSQUnit
                 entry.version = 0;
             }
             versionCounts.clear();
+            tagCompleteGroups.clear();
+            tagCompleteWaitStart.clear();
+            nextTagCompleteGroup = 1;
+            publishingTagCompleteGroup = 0;
             if (lsqPtr) {
                 lsqPtr->stats.mbAvgOccupancy = 0.0;
             }
@@ -343,6 +469,7 @@ class LSQUnit
         bool forwardData(Addr paddr, uint8_t *dst, size_t size,
                          uint64_t &stlf_version) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        bool hasEntryForLine(Addr line_addr) const;
         bool
         isEmpty() const
         {
@@ -356,6 +483,28 @@ class LSQUnit
                                [](bool v) { return v; });
         }
         bool hasReleaseOlderThan(uint64_t version) const;
+        /**
+         * Invalidate zFence lock/eligibility state for entries tracking
+         * the provided cache line address.
+         * @return Number of entries that were previously eligible and got
+         *         invalidated by this snoop conflict.
+         */
+        unsigned invalidateZFLine(Addr line_addr);
+        /**
+         * Validate that all valid MB entries have zBit permission set.
+         * @param has_relevant Set true if any MB entry is present.
+         * @return true if all present entries have zBit set.
+         */
+        bool validateAllMBZFLocked(bool &has_relevant) const;
+        /**
+         * Validate that all MB entries with version lower than threshold
+         * have zBit permission set.
+         * @param version Load version threshold.
+         * @param has_relevant Set true if any lower-version MB entry exists.
+         * @return true if all relevant entries have zBit set.
+         */
+        bool validateLowerVersionMBZFLocked(uint64_t version,
+                                            bool &has_relevant) const;
 
         std::string
         name() const
@@ -364,6 +513,13 @@ class LSQUnit
         }
 
       private:
+        void requestZFLineLock(MergeBufferEntry &entry);
+        bool requestZFLineUnlock(MergeBufferEntry &entry, uint64_t group_id);
+        MergeBufferEntry *tryTagCompleteMerge(
+            Cycles now, Addr addr, uint8_t *data, size_t size,
+            typename StoreQueue::iterator store_it, bool is_all_zero,
+            uint64_t version, bool &wait_for_locks);
+        bool issueTagCompleteGroup(TagCompleteGroup &group, LSQUnit *lsq_ptr);
         void
         updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
                     size_t size, bool is_all_zero)
@@ -533,9 +689,9 @@ class LSQUnit
     Fault checkViolations(typename LoadQueue::iterator& loadIt,
             const DynInstPtr& inst);
 
-    /** Check if an incoming invalidate hits in the lsq on a load
-     * that might have issued out of order wrt another load beacuse
-     * of the intermediate invalidate.
+    /** Record an invalidation hazard on a completed load. A later invalidation
+     * targeting a completed program-order-older load detects a hazardous
+     * completed younger load and requests precise TSO recovery.
      */
     void checkSnoop(PacketPtr pkt);
     /** Mark loads that saw external snoops for re-execution after a barrier.
@@ -671,6 +827,10 @@ class LSQUnit
     bool loadBlockedByReleaseMB(uint64_t version);
     /** Returns true if a load must wait for older release SQ entries. */
     bool loadBlockedByReleaseSQ(uint64_t version, InstSeqNum load_seq) const;
+    /** zFence: fence can retire despite older stores if all are protected. */
+    bool canRelaxFenceRetire(uint64_t version, InstSeqNum fence_seq);
+    /** zFence: unsafe-load can retire despite MB wait if all are protected. */
+    bool canRelaxUnsafeLoadRetire(uint64_t version, InstSeqNum load_seq);
 
     /** Returns the number of instructions in the LSQ. */
     unsigned getCount() { return loadQueue.size() + storeQueue.size(); }
@@ -679,8 +839,12 @@ class LSQUnit
     bool
     hasStoresToWB()
     {
-        return !mbEmpty() || (storesToWB > 0);
+        return hasUnprotectedStoresToWB();
     }
+    bool hasStoreToLine(Addr line_addr) const;
+    /** Returns whether there are outstanding stores that cannot rely on
+     *  relaxed retirement. */
+    bool hasUnprotectedStoresToWB(bool *has_protected_mb = nullptr) const;
 
     /** Advance merge buffer retirement independent of store writeback. */
     void updateMergeBufferRetire();
@@ -707,6 +871,7 @@ class LSQUnit
 
     /** Handles merge buffer drain completion. */
     void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
+    void handleMBDrain(Addr block_addr);
 
     unsigned int cacheLineSize();
   private:
@@ -724,6 +889,13 @@ class LSQUnit
 
     /** Handles completing the send of a store to memory. */
     void storePostSend();
+
+    /** Mark store request fragments to hold zFence line locks in cache. */
+    void markRequestZFLineLock(LSQRequest *request) const;
+
+    /** Launch a non-speculative SQ prelock before merge-buffer allocation. */
+    void prepareSQEarlyPrelock(SQEntry &entry);
+    void trySendSQEarlyPrelock(SQEntry &entry);
 
     void sendLockedRMWAbort(LSQRequest *request);
     void retryLockedRMWAborts();
@@ -801,7 +973,47 @@ class LSQUnit
     struct MergeBufferPrefetchSenderState : public Packet::SenderState
     {
         LSQUnit *lsqUnit;
-        MergeBufferPrefetchSenderState(LSQUnit *unit) : lsqUnit(unit) {}
+        MergeBuffer::MergeBufferEntry *entry;
+        Addr expectedBlockAddr;
+        Cycles expectedAllocCycle;
+        bool conflictRecovery;
+        MergeBufferPrefetchSenderState(
+            LSQUnit *unit, MergeBuffer::MergeBufferEntry *e,
+            Addr block_addr, Cycles alloc_cycle, bool recovery)
+            : lsqUnit(unit), entry(e), expectedBlockAddr(block_addr),
+              expectedAllocCycle(alloc_cycle), conflictRecovery(recovery)
+        {}
+    };
+
+    /** Sender state for merge-buffer zFence lock-only requests. */
+    struct MergeBufferZFLineLockSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        uint64_t expectedVersion;
+        Addr expectedBlockAddr;
+        bool release;
+        uint64_t groupId;
+        MergeBufferZFLineLockSenderState(MergeBuffer::MergeBufferEntry *e,
+                                         LSQUnit *unit,
+                                         uint64_t v, Addr a,
+                                         bool rel = false, uint64_t gid = 0)
+            : entry(e), lsqUnit(unit), expectedVersion(v),
+              expectedBlockAddr(a), release(rel), groupId(gid)
+        {}
+    };
+
+    /** Sender state for a commit-time store-queue prelock. */
+    struct SQEarlyPrelockSenderState : public Packet::SenderState
+    {
+        LSQUnit *lsqUnit;
+        InstSeqNum expectedSeqNum;
+        Addr expectedBlockAddr;
+        SQEarlyPrelockSenderState(
+            LSQUnit *unit, InstSeqNum sn, Addr block)
+            : lsqUnit(unit), expectedSeqNum(sn),
+              expectedBlockAddr(block)
+        {}
     };
 
   public:
@@ -913,11 +1125,26 @@ class LSQUnit
     bool optimizeStoreRelease = false;
     /** Allow AcquirePC loads to bypass some release-handling checks. */
     bool optimizeAcquirePC = false;
+    /** Enable zFence infrastructure. */
+    bool zfenceEnable = false;
+    /** Enable relaxed retirement using permReady and zFence state. */
+    bool zfenceRelaxRetire = false;
+    /** Enable zFence line locking in cache metadata. */
+    bool zfenceLockLines = false;
+    /** Additional latency before MB lock is treated as acquired. */
+    Cycles zfenceMbLockAcquireLatency = Cycles(0);
 
     /** Flag for memory model. */
     bool needsTSO;
     /** Allow consecutive TSO ordering epochs to coalesce in the merge buffer. */
     bool tsoConsecutiveStoreMerging;
+    /** Enable non-consecutive TSO merging over complete locked tag ranges. */
+    bool tsoTagCompleteStoreMerging = false;
+    /** Allow frozen tag-complete groups to drain out of tag order. */
+    bool tsoTagCompleteOutOfOrderDrain = false;
+    unsigned tsoTagCompleteWindow = 0;
+    Cycles tsoTagCompleteRetryCycles = Cycles(0);
+    Cycles tsoTagCompleteLockLease = Cycles(0);
 
   protected:
     // Will also need how many read/write ports the Dcache has.  Or keep track
@@ -975,6 +1202,11 @@ class LSQUnit
         statistics::Scalar mbAllocations;
         /** Merge buffer merges into existing entries */
         statistics::Scalar mbMerges;
+        statistics::Scalar mbTagCompleteMerges;
+        statistics::Scalar mbTagCompleteFallbacks;
+        statistics::Scalar mbTagCompleteWaitCycles;
+        statistics::Scalar mbTagCompleteGroups;
+        statistics::Scalar mbTagCompleteOutOfOrderDrains;
         /** Merge buffer entries retired */
         statistics::Scalar mbRetired;
         /** Merge buffer drains issued */
@@ -1005,6 +1237,18 @@ class LSQUnit
         statistics::Scalar mbReleaseMaxOutstanding;
         /** Insts rescheduled/replayed due to barrier handling in LSQ. */
         statistics::Scalar barrierReschedulesLSQ;
+        /** Number of store queue entries marked with early permission. */
+        statistics::Scalar numPermReadySet;
+        /** Cycles saved by fence relaxed-retirement decisions. */
+        statistics::Scalar numFenceWaitCyclesSaved;
+        /** Cycles saved by unsafe-load relaxed-retirement decisions. */
+        statistics::Scalar numUnsafeLoadWaitCyclesSaved;
+        /** Number of zFence lock conflicts that triggered fallback. */
+        statistics::Scalar numLockConflicts;
+        /** Number of deferred snoop events under zFence lock. */
+        statistics::Scalar numDeferredSnoops;
+        /** Number of times zFence falls back to baseline behavior. */
+        statistics::Scalar numFallbacks;
     } stats;
 
   public:

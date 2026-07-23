@@ -470,8 +470,16 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
 
     // Start by determining if we will eventually respond or not,
     // matching the conditions checked in Cache::handleSnoop
+    // A revoked merge-buffer drain is the recovery transaction for a
+    // prelock conflict.  An in-flight sibling-cache miss may itself be
+    // waiting for the response that revocation releases; letting that MSHR
+    // claim this recovery request as a cache-to-cache responder creates a
+    // cycle (the crossbar sinks the recovery request while the MSHR waits).
+    // Still record the snoop below so the pending fill is invalidated, but
+    // let the recovery request continue to the next ordering point.
     const bool will_respond = isPendingModified() && pkt->needsResponse() &&
-        !pkt->isClean();
+        !pkt->isClean() && !pkt->cacheResponding() &&
+        !pkt->req->isMBRevokedDrain();
     if (isPendingModified() || pkt->isInvalidate()) {
         // We need to save and replay the packet in two cases:
         // 1. We're awaiting a writable copy (Modified or Exclusive),

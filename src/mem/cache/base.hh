@@ -48,7 +48,9 @@
 
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <string>
+#include <unordered_map>
 
 #include "base/addr_range.hh"
 #include "base/compiler.hh"
@@ -411,6 +413,35 @@ class BaseCache : public ClockedObject
      */
     std::unique_ptr<Packet> pendingDelete;
 
+    /** zFence lock counts by block address (+secure bit in key LSB). */
+    std::unordered_map<uint64_t, uint32_t> zfLineLockMap;
+    /**
+     * Count of acquire-only zFence lock probes by block. These are lock
+     * requests with all-byte-masked writes and are released by later draining
+     * write responses on the same block.
+     */
+    std::unordered_map<uint64_t, uint32_t> zfLineAcquireOnlyMap;
+    /** Number of retained group writes installed on each protected line. */
+    std::unordered_map<uint64_t, uint32_t> zfLineGroupWrittenMap;
+    /** Unique zBit owner per block address (+secure bit in key LSB). */
+    std::unordered_map<uint64_t, RequestorID> zfLineOwnerMap;
+    /** Deferred acquire-only zBit requests waiting for current owner release. */
+    std::unordered_map<uint64_t, std::deque<PacketPtr>> zfDeferredAcquireReqs;
+    /** Replay event for deferred acquire-only zBit requests. */
+    EventFunctionWrapper zfDeferredAcquireReqEvent;
+
+
+    uint64_t zfenceLockKey(Addr block_addr, bool is_secure) const;
+    bool isZFLineLocked(Addr block_addr, bool is_secure) const;
+    bool isZFLineReadBlocked(Addr block_addr, bool is_secure) const;
+    bool acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void clearZFLineLock(Addr block_addr, bool is_secure,
+                         CacheBlk *blk = nullptr);
+    void scheduleDeferredZFLineLockReqReplay();
+    void processDeferredZFLineLockReqs();
+
     /**
      * Mark a request as in service (sent downstream in the memory
      * system), effectively making this MSHR the ordering point.
@@ -556,6 +587,10 @@ class BaseCache : public ClockedObject
      */
     virtual void serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt,
                                     CacheBlk *blk) = 0;
+
+    /** Complete implementation-specific waiters when an MSHR is about to be
+     * finally deallocated (after all deferred targets have drained). */
+    virtual void completeMSHRWaiters(MSHR *mshr) {}
 
     /**
      * Handles a response (cache line fill/write ack) from the bus.
@@ -1154,6 +1189,7 @@ class BaseCache : public ClockedObject
   public:
     BaseCache(const BaseCacheParams &p, unsigned blk_size);
     ~BaseCache();
+
 
     void init() override;
 

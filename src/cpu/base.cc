@@ -97,7 +97,6 @@ void
 CPUProgressEvent::process()
 {
     Counter temp = cpu->totalOps();
-
     if (_repeatEvent)
         cpu->schedule(this, curTick() + _interval);
 

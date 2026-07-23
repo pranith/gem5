@@ -151,6 +151,10 @@ class CacheBlk : public TaggedEntry
     /** List of thread contexts that have performed a load-locked (LL)
      * on the block since the last store. */
     std::list<Lock> lockList;
+    /** Whether this line is currently locked for zFence acceleration. */
+    bool _zfLocked = false;
+    /** Reference count for nested zFence line locks. */
+    uint32_t _zfLockCount = 0;
 
   public:
     CacheBlk() : TaggedEntry()
@@ -189,6 +193,10 @@ class CacheBlk : public TaggedEntry
         setRefCount(other.getRefCount());
         setSrcRequestorId(other.getSrcRequestorId());
         std::swap(lockList, other.lockList);
+        _zfLocked = other._zfLocked;
+        _zfLockCount = other._zfLockCount;
+        other._zfLocked = false;
+        other._zfLockCount = 0;
 
         other.invalidate();
 
@@ -212,6 +220,8 @@ class CacheBlk : public TaggedEntry
         setRefCount(0);
         setSrcRequestorId(Request::invldRequestorId);
         lockList.clear();
+        _zfLocked = false;
+        _zfLockCount = 0;
     }
 
     /**
@@ -359,6 +369,36 @@ class CacheBlk : public TaggedEntry
             } else {
                 ++l;
             }
+        }
+    }
+
+    bool
+    zfLineLocked() const
+    {
+        return _zfLocked;
+    }
+
+    uint32_t
+    zfLockCount() const
+    {
+        return _zfLockCount;
+    }
+
+    void
+    setZFLineLocked()
+    {
+        _zfLocked = true;
+        ++_zfLockCount;
+    }
+
+    void
+    clearZFLineLocked()
+    {
+        if (_zfLockCount != 0) {
+            --_zfLockCount;
+        }
+        if (_zfLockCount == 0) {
+            _zfLocked = false;
         }
     }
 

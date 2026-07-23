@@ -52,6 +52,7 @@ scons build/X86/gem5.opt
 
 """
 
+import os
 import shutil
 from pathlib import Path
 
@@ -98,6 +99,12 @@ requires(isa_required=ISA.ARM)
 import gem5.utils.multisim as multisim
 
 multisim.set_num_processes(15)
+
+checkpoint_filter = {
+    item.strip()
+    for item in os.environ.get("SPEC_CHECKPOINT_FILTER", "").split(",")
+    if item.strip()
+}
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_gem5_20260710_hardlink/{x_workload}"
 
@@ -345,6 +352,9 @@ for workload in spec_rate_workloads:
         )
 
         chkpt_id = f"chkpt_{workload_name}_{chkpt_idx}"
+        if checkpoint_filter and chkpt_id not in checkpoint_filter:
+            chkpt_idx = chkpt_idx + 1
+            continue
         simulator = CheckpointSimulator(
             board=board,
             checkpoint=chkpt,

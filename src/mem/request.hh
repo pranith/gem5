@@ -194,6 +194,20 @@ class Request : public Extensible<Request>
         INVALIDATE                  = 0x0000000100000000,
         /** The request cleans a memory location */
         CLEAN                       = 0x0000000200000000,
+        /** Keep a zFence line lock for this store request lifetime. */
+        ZFENCE_LOCK_LINE            = 0x0000000400000000,
+        /** Retain a pre-acquired zFence lock after a group write.  On an
+         * all-byte-masked request this explicitly releases the prelock. */
+        ZFENCE_RETAIN_LINE          = 0x0000000800000000,
+        /** Metadata-only notification that a coherence invalidation was
+         * blocked by a zFence line lock. */
+        ZFENCE_PRELOCK_CONFLICT     = 0x0000004000000000,
+        /** A merge-buffer software prefetch must acknowledge only after the
+         * matching MSHR transaction completes. */
+        MB_PREFETCH_COMPLETION      = 0x0000008000000000,
+
+        /** This request drains an entry revoked by a prelock conflict. */
+        MB_REVOKED_DRAIN            = 0x0002000000000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -1044,6 +1058,13 @@ class Request : public Extensible<Request>
     bool isSecure() const { return _flags.isSet(SECURE); }
     bool isPTWalk() const { return _flags.isSet(PT_WALK); }
     bool isRelease() const { return _flags.isSet(RELEASE); }
+    bool isZFenceLockLine() const { return _flags.isSet(ZFENCE_LOCK_LINE); }
+    bool isZFenceRetainLine() const { return _flags.isSet(ZFENCE_RETAIN_LINE); }
+    bool isZFencePrelockConflict() const
+    { return _flags.isSet(ZFENCE_PRELOCK_CONFLICT); }
+    bool isMBPrefetchCompletion() const
+    { return _flags.isSet(MB_PREFETCH_COMPLETION); }
+    bool isMBRevokedDrain() const { return _flags.isSet(MB_REVOKED_DRAIN); }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }
     bool isAtomicNoReturn() const { return _flags.isSet(ATOMIC_NO_RETURN_OP); }

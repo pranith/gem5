@@ -46,6 +46,7 @@
 
 #include "mem/cache/cache.hh"
 
+#include <algorithm>
 #include <cassert>
 
 #include "base/compiler.hh"
@@ -67,12 +68,166 @@
 namespace gem5
 {
 
+namespace
+{
+
+bool
+isAcquireOnlyZFLineLockReq(const PacketPtr pkt)
+{
+    if (!pkt || !pkt->req || !pkt->isWrite() ||
+        !pkt->req->isZFenceLockLine()) {
+        return false;
+    }
+
+    const auto &byte_en = pkt->req->getByteEnable();
+    return !byte_en.empty() &&
+        std::none_of(byte_en.begin(), byte_en.end(),
+                     [](bool enabled) { return enabled; });
+}
+
+bool
+isReleaseOnlyZFLineLockReq(const PacketPtr pkt)
+{
+    return isAcquireOnlyZFLineLockReq(pkt) &&
+           pkt->req->isZFenceRetainLine();
+}
+
+} // anonymous namespace
+
 Cache::Cache(const CacheParams &p)
     : BaseCache(p, p.system->cacheLineSize()),
-      doFastWrites(true)
+      doFastWrites(true),
+      zfDeferredReplayEvent(
+          [this]{ processZFDeferredSnoops(); },
+          name() + ".zf_deferred_snoop_replay")
 {
     assert(p.tags);
     assert(p.replacement_policy);
+}
+
+void
+Cache::enqueueZFDeferredSnoop(const PacketPtr pkt, bool can_respond)
+{
+    assert(pkt);
+    assert(pkt->req);
+
+    const Addr blk_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const uint64_t key = zfenceLockKey(blk_addr, is_secure);
+
+    auto &queue = zfDeferredSnoops[key];
+    for (auto &queued_entry : queue) {
+        PacketPtr queued_pkt = queued_entry.first;
+        if (queued_pkt && queued_pkt->req == pkt->req) {
+            if (can_respond && !queued_entry.second) {
+                queued_entry.second = true;
+                DPRINTF(Cache,
+                        "%s: upgraded zFence-deferred snoop to "
+                        "responding for block %#llx (%s), depth=%u, pkt=%s\n",
+                        __func__, blk_addr, is_secure ? "s" : "ns",
+                        static_cast<unsigned>(queue.size()), pkt->print());
+                return;
+            }
+            DPRINTF(Cache,
+                    "%s: deduped zFence-deferred snoop for "
+                    "block %#llx (%s), depth=%u, pkt=%s\n",
+                    __func__, blk_addr, is_secure ? "s" : "ns",
+                    static_cast<unsigned>(queue.size()), pkt->print());
+            return;
+        }
+    }
+
+    PacketPtr cp_pkt = new Packet(pkt, true, true);
+    cp_pkt->headerDelay = 0;
+    cp_pkt->payloadDelay = 0;
+    queue.push_back(std::make_pair(cp_pkt, can_respond));
+
+    DPRINTF(Cache,
+            "%s: queued zFence-deferred snoop for block %#llx "
+            "(%s), depth=%u, canRespond=%u, pkt=%s\n",
+            __func__, blk_addr, is_secure ? "s" : "ns",
+            static_cast<unsigned>(queue.size()), can_respond ? 1 : 0,
+            pkt->print());
+}
+
+void
+Cache::drainZFDeferredSnoops(Addr blk_addr, bool is_secure)
+{
+    const uint64_t key = zfenceLockKey(blk_addr, is_secure);
+    auto map_it = zfDeferredSnoops.find(key);
+    if (map_it != zfDeferredSnoops.end() && !map_it->second.empty()) {
+        scheduleZFDeferredReplay();
+    }
+}
+
+void
+Cache::scheduleZFDeferredReplay()
+{
+    if (!zfDeferredReplayEvent.scheduled()) {
+        schedule(zfDeferredReplayEvent, curTick() + 1);
+    }
+}
+
+void
+Cache::processZFDeferredSnoops()
+{
+    std::deque<std::pair<PacketPtr, bool>> ready;
+
+    for (auto it = zfDeferredSnoops.begin();
+         it != zfDeferredSnoops.end(); ) {
+        const uint64_t key = it->first;
+        const Addr blk_addr = key & ~1ULL;
+        const bool is_secure = key & 1ULL;
+
+        auto queue = std::move(it->second);
+        std::deque<std::pair<PacketPtr, bool>> retained;
+
+        while (!queue.empty()) {
+            auto deferred_entry = queue.front();
+            queue.pop_front();
+            PacketPtr deferred_pkt = deferred_entry.first;
+            const bool locked = isZFLineLocked(blk_addr, is_secure);
+            const bool still_blocked = deferred_pkt && locked &&
+                (deferred_pkt->isInvalidate() ||
+                 (deferred_pkt->isRead() &&
+                  isZFLineReadBlocked(blk_addr, is_secure)));
+            (still_blocked ? retained : ready).push_back(deferred_entry);
+        }
+
+        if (retained.empty()) {
+            it = zfDeferredSnoops.erase(it);
+        } else {
+            it->second = std::move(retained);
+            ++it;
+        }
+    }
+
+    std::unordered_set<RequestPtr> replayed_reqs;
+    while (!ready.empty()) {
+        auto deferred_entry = ready.front();
+        ready.pop_front();
+        PacketPtr deferred_pkt = deferred_entry.first;
+        bool can_respond = deferred_entry.second;
+
+        if (deferred_pkt && deferred_pkt->req &&
+            replayed_reqs.find(deferred_pkt->req) != replayed_reqs.end()) {
+            DPRINTF(Cache,
+                    "%s: skipping duplicate replay for zFence-deferred "
+                    "snoop, pkt=%s\n", __func__, deferred_pkt->print());
+            delete deferred_pkt;
+            continue;
+        }
+
+        if (deferred_pkt && deferred_pkt->req) {
+            replayed_reqs.insert(deferred_pkt->req);
+        }
+        DPRINTF(Cache,
+                "%s: replaying zFence-deferred snoop, canRespond=%u, "
+                "pkt=%s\n", __func__, can_respond ? 1 : 0,
+                deferred_pkt->print());
+        zfDeferredReplayCanRespond[deferred_pkt] = can_respond;
+        recvTimingSnoopReq(deferred_pkt);
+    }
 }
 
 void
@@ -325,7 +480,6 @@ void
 Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
                            Tick request_time)
 {
-
     // These should always hit due to the earlier Locked Read
     assert(pkt->cmd != MemCmd::LockedRMWWriteReq);
     if (pkt->req->isUncacheable()) {
@@ -378,7 +532,8 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
     // processing happens before any MSHR munging on the behalf of
     // this request because this new Request will be the one stored
     // into the MSHRs, not the original.
-    if (pkt->cmd.isSWPrefetch()) {
+    if (pkt->cmd.isSWPrefetch() &&
+        !pkt->req->isMBPrefetchCompletion()) {
         assert(pkt->needsResponse());
         assert(pkt->req->hasPaddr());
         assert(!pkt->req->isUncacheable());
@@ -419,6 +574,18 @@ void
 Cache::recvTimingReq(PacketPtr pkt)
 {
     DPRINTF(CacheTags, "%s tags:\n%s\n", __func__, tags->print());
+
+    const bool releases_zf_prelock = isReleaseOnlyZFLineLockReq(pkt);
+    const Addr release_blk_addr = releases_zf_prelock ?
+        pkt->getBlockAddr(blkSize) : 0;
+    const bool release_is_secure = releases_zf_prelock && pkt->isSecure();
+    const bool completes_zf_write = pkt && pkt->req &&
+        pkt->isWrite() && pkt->req->isZFenceLockLine() &&
+        !isAcquireOnlyZFLineLockReq(pkt);
+    const Addr completed_write_blk_addr = completes_zf_write ?
+        pkt->getBlockAddr(blkSize) : 0;
+    const bool completed_write_is_secure =
+        completes_zf_write && pkt->isSecure();
 
     promoteWholeLineWrites(pkt);
 
@@ -487,6 +654,19 @@ Cache::recvTimingReq(PacketPtr pkt)
     }
 
     BaseCache::recvTimingReq(pkt);
+    if (releases_zf_prelock) {
+        drainZFDeferredSnoops(release_blk_addr, release_is_secure);
+    }
+    if (completes_zf_write) {
+        // Every non-acquire-only zFence write consumes/releases a line-lock
+        // reference in satisfyRequest().  On a hit that happens
+        // synchronously, so deferred snoops must be reconsidered here.
+        // Otherwise an ordinary (non-retained) drain can leave an I-cache
+        // miss deferred forever even though the final lock was released.
+        // On a miss this is harmless; target service retries after the fill.
+        drainZFDeferredSnoops(completed_write_blk_addr,
+                              completed_write_is_secure);
+    }
 }
 
 PacketPtr
@@ -735,13 +915,20 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
           case MSHR::Target::FromCPU:
             from_core = true;
 
+            if (tgt_pkt->cmd.isSWPrefetch() &&
+                tgt_pkt->req->isMBPrefetchCompletion()) {
+                mbPrefetchCompletionWaiters[mshr].push_back(tgt_pkt);
+                break;
+            }
+
             Tick completion_time;
             // Here we charge on completion_time the delay of the xbar if the
             // packet comes from it, charged on headerDelay.
             completion_time = pkt->headerDelay;
 
             // Software prefetch handling for cache closest to core
-            if (tgt_pkt->cmd.isSWPrefetch()) {
+            if (tgt_pkt->cmd.isSWPrefetch() &&
+                !tgt_pkt->req->isMBPrefetchCompletion()) {
                 if (tgt_pkt->needsWritable()) {
                     // All other copies of the block were invalidated and we
                     // have an exclusive copy.
@@ -905,6 +1092,9 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             // Reset the bus additional time as it is now accounted for
             tgt_pkt->headerDelay = tgt_pkt->payloadDelay = 0;
             cpuSidePort.schedTimingResp(tgt_pkt, completion_time);
+            releaseZFLineLock(tgt_pkt, blk);
+            drainZFDeferredSnoops(tgt_pkt->getBlockAddr(blkSize),
+                                  tgt_pkt->isSecure());
             break;
 
           case MSHR::Target::FromPrefetcher:
@@ -957,6 +1147,24 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             }
         }
     }
+}
+
+void
+Cache::completeMSHRWaiters(MSHR *mshr)
+{
+    auto it = mbPrefetchCompletionWaiters.find(mshr);
+    if (it == mbPrefetchCompletionWaiters.end()) {
+        return;
+    }
+
+    const Tick completion_time = clockEdge(responseLatency);
+    for (PacketPtr pkt : it->second) {
+        assert(pkt && pkt->cmd.isSWPrefetch());
+        pkt->makeTimingResponse();
+        pkt->headerDelay = pkt->payloadDelay = 0;
+        cpuSidePort.schedTimingResp(pkt, completion_time);
+    }
+    mbPrefetchCompletionWaiters.erase(it);
 }
 
 PacketPtr
@@ -1045,7 +1253,7 @@ Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
 
 uint32_t
 Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
-                   bool is_deferred, bool pending_inval)
+                   bool is_deferred, bool pending_inval, bool allow_respond)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
     // deferred snoops can only happen in timing mode
@@ -1165,7 +1373,9 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // invalidation itself is taken care of below. We don't respond to
         // cache maintenance operations as this is done by the destination
         // xbar.
-        respond = blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse();
+        respond = allow_respond &&
+                  blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse() &&
+                  !pkt->cacheResponding();
 
         gem5_assert(!(isReadOnly && blk->isSet(CacheBlk::DirtyBit)),
             "Should never have a dirty block in a read-only cache %s\n",
@@ -1203,12 +1413,16 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // prevent anyone else from responding, cache as well as
         // memory, and also prevent any memory from even seeing the
         // request
-        pkt->setCacheResponding();
+        if (!pkt->cacheResponding()) {
+            pkt->setCacheResponding();
+        }
         if (!pkt->isClean() && blk->isSet(CacheBlk::WritableBit)) {
             // inform the cache hierarchy that this cache had the line
             // in the Modified state so that we avoid unnecessary
             // invalidations (see Packet::setResponderHadWritable)
-            pkt->setResponderHadWritable();
+            if (!pkt->responderHadWritable()) {
+                pkt->setResponderHadWritable();
+            }
 
             // in the case of an uncacheable request there is no point
             // in setting the responderHadWritable flag, but since the
@@ -1227,7 +1441,13 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
                  "but keeping the block", name(), pkt->print());
 
         if (is_timing) {
-            doTimingSupplyResponse(pkt, blk->data, is_deferred, pending_inval);
+            // Deferred snoops may carry a copied packet without data storage
+            // (e.g., when the original MSHR path did not elect a responder).
+            // Reuse the deferred packet only if it is safe to do so.
+            const bool can_reuse_deferred_pkt =
+                is_deferred && (!pkt->isRead() || pkt->hasData());
+            doTimingSupplyResponse(pkt, blk->data, can_reuse_deferred_pkt,
+                                   pending_inval);
         } else {
             pkt->makeAtomicResponse();
             // packets such as upgrades do not actually have any data
@@ -1264,8 +1484,24 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
 
+    bool zf_replay_can_respond = true;
+    auto replay_it = zfDeferredReplayCanRespond.find(pkt);
+    if (replay_it != zfDeferredReplayCanRespond.end()) {
+        zf_replay_can_respond = replay_it->second;
+        zfDeferredReplayCanRespond.erase(replay_it);
+    }
+
     // no need to snoop requests that are not in range
     if (!inRange(pkt->getAddr())) {
+        return;
+    }
+
+    // This packet reports that the original invalidation was blocked by
+    // zFence protection. It carries no coherence action of its own; forward
+    // it only far enough for the owning core to classify the protection as
+    // revocable or frozen.
+    if (pkt->req && pkt->req->isZFencePrelockConflict()) {
+        cpuSidePort.sendTimingSnoopReq(pkt);
         return;
     }
 
@@ -1274,6 +1510,69 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 
     Addr blk_addr = pkt->getBlockAddr(blkSize);
     MSHR *mshr = mshrQueue.findMatch(blk_addr, is_secure);
+
+    const bool zf_snoop_blocked = isZFLineLocked(blk_addr, is_secure) &&
+        (pkt->isInvalidate() ||
+         (pkt->isRead() && isZFLineReadBlocked(blk_addr, is_secure)));
+    if (zf_snoop_blocked) {
+        // A HardPFReq snoop is only asking whether the line is cached above.
+        // It never consumes data from the upper cache: sendMSHRQueuePacket()
+        // squashes the prefetch as soon as BlockCached is returned.  Electing
+        // a deferred responder here instead makes the requesting cache mark
+        // its prefetch MSHR in service and wait for a data response that the
+        // mustCheckAbove path deliberately never sends.
+        if (pkt->mustCheckAbove()) {
+            pkt->setBlockCached();
+            DPRINTF(Cache,
+                    "%s: reporting zFence-locked block %#llx (%s) cached "
+                    "above for %s\n",
+                    __func__, blk_addr, is_secure ? "s" : "ns",
+                    pkt->print());
+            return;
+        }
+
+        // If we would have eventually responded to this snoop, mark the
+        // response intent now so the xbar records routing/outstanding state
+        // for the later deferred snoop response.
+        const bool blk_will_respond = blk && blk->isValid() &&
+            blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse() &&
+            !pkt->isClean();
+        const bool mshr_will_respond = mshr && mshr->inService &&
+            mshr->isPendingModified() &&
+            pkt->needsResponse() && !pkt->isClean();
+
+        bool elected_responder = blk_will_respond || mshr_will_respond;
+        if (elected_responder) {
+            if (!pkt->cacheResponding()) {
+                pkt->setCacheResponding();
+                if (blk && blk->isValid() &&
+                    blk->isSet(CacheBlk::WritableBit)) {
+                    pkt->setResponderHadWritable();
+                }
+            } else {
+                elected_responder = false;
+            }
+        }
+
+        enqueueZFDeferredSnoop(pkt, elected_responder);
+        // Any observing snoop blocked behind a speculative prelock must ask
+        // the owner to revoke that speculation, not just invalidations.  In
+        // particular, a ReadShared from the sibling I-cache can otherwise
+        // wait on the prelock while the eventual D-cache write waits on the
+        // I-cache MSHR.  Frozen tag-complete entries ignore this notification
+        // and retain atomic publication; ordinary entries release and replay.
+        RequestPtr conflict_req = std::make_shared<Request>(*pkt->req);
+        conflict_req->setFlags(Request::ZFENCE_PRELOCK_CONFLICT);
+        Packet conflict_pkt(pkt, true, false);
+        conflict_pkt.req = conflict_req;
+        cpuSidePort.sendTimingSnoopReq(&conflict_pkt);
+        DPRINTF(Cache,
+                "%s: deferring observing snoop on zFence-locked block "
+                "%#llx (%s) before MSHR snoop handling for %s\n",
+                __func__, blk_addr, is_secure ? "s" : "ns", pkt->print());
+        pkt->setBlockCached();
+        return;
+    }
 
     // Update the latency cost of the snoop so that the crossbar can
     // account for it. Do not overwrite what other neighbouring caches
@@ -1351,7 +1650,7 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
             wb_pkt->setHasSharers();
         }
 
-        if (respond) {
+        if (respond && !pkt->cacheResponding()) {
             pkt->setCacheResponding();
 
             if (have_writable) {
@@ -1375,7 +1674,8 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
     // We could be more selective and return here if the
     // request is non-exclusive or if the writeback is
     // exclusive.
-    uint32_t snoop_delay = handleSnoop(pkt, blk, true, false, false);
+    uint32_t snoop_delay =
+        handleSnoop(pkt, blk, true, false, false, zf_replay_can_respond);
 
     // Override what we did when we first saw the snoop, as we now
     // also have the cost of the upwards snoops to account for
@@ -1392,7 +1692,8 @@ Cache::recvAtomicSnoop(PacketPtr pkt)
     }
 
     CacheBlk *blk = tags->findBlock({pkt->getAddr(), pkt->isSecure()});
-    uint32_t snoop_delay = handleSnoop(pkt, blk, false, false, false);
+    uint32_t snoop_delay =
+        handleSnoop(pkt, blk, false, false, false, true);
     return snoop_delay + lookupLatency * clockPeriod();
 }
 

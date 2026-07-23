@@ -224,6 +224,7 @@ class IEW
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB() { return ldstQueue.hasStoresToWB(); }
+    bool hasStoreToLine(Addr line_addr) { return ldstQueue.hasStoreToLine(line_addr); }
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB(ThreadID tid) { return ldstQueue.hasStoresToWB(tid); }
@@ -259,6 +260,19 @@ class IEW
                            InstSeqNum load_seq)
     {
         return ldstQueue.loadBlockedByReleaseSQ(tid, load_version, load_seq);
+    }
+
+    bool
+    canRelaxFenceRetire(ThreadID tid, uint64_t version, InstSeqNum fence_seq)
+    {
+        return ldstQueue.canRelaxFenceRetire(tid, version, fence_seq);
+    }
+
+    bool
+    canRelaxUnsafeLoadRetire(ThreadID tid, uint64_t load_version,
+                             InstSeqNum load_seq)
+    {
+        return ldstQueue.canRelaxUnsafeLoadRetire(tid, load_version, load_seq);
     }
 
     /** Mark the merge buffer entries for drain */

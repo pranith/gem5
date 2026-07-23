@@ -3,11 +3,10 @@
 #
 # Modified local copy for PARSEC ROI runs with Rancho caches enabled.
 
-"""SE mode runner for Rancho with ROI-based stats reset/stop.
+"""SE mode runner with Atomic warmup and Rancho ROI execution.
 
-This variant keeps execution on Rancho throughout the run so L1/L2 cache
-statistics are available in stats.txt, then resets stats at ROI begin and
-stops at ROI end.
+This variant starts benchmarks on Atomic CPUs. On ROI begin, it switches to
+Rancho CPUs, resets stats, and continues until ROI end (or maxinsts, if set).
 """
 
 import argparse
@@ -83,6 +82,10 @@ def _configure_rancho_cluster(cpus, args):
         cpu.speculativeBarrierIssue = True
         cpu.cacheOrderingTagEntries = args.cache_ordering_tag_entries
 
+    if args.sq_entries is not None:
+        for cpu in cpus:
+            cpu.SQEntries = args.sq_entries
+
     if args.merge_buffer is not None:
         use_mb = args.merge_buffer == "on"
         for cpu in cpus:
@@ -118,17 +121,44 @@ def _configure_rancho_cluster(cpus, args):
                 cpu.useMergeBuffer = True
                 cpu.enableVersioning = True
 
+    if args.tag_complete_coalescing is not None:
+        enable_tag_complete = args.tag_complete_coalescing == "on"
+        for cpu in cpus:
+            cpu.tsoTagCompleteStoreMerging = enable_tag_complete
+            cpu.tsoTagCompleteWindow = args.tag_complete_window
+            cpu.tsoTagCompleteRetryCycles = args.tag_complete_retry
+            cpu.tsoTagCompleteLockLease = args.tag_complete_lease
+            if enable_tag_complete:
+                cpu.needsTSO = True
+                cpu.useMergeBuffer = True
+                cpu.enableVersioning = True
+                cpu.zfenceEnable = True
+                cpu.zfenceLockLines = True
+
 
 def create(args):
     """Create and configure the system object."""
 
+    # Warmup on Atomic; switch to Rancho O3 at ROI begin.
     system = devices.SimpleSeSystem(
-        mem_mode=cpu_types["rancho"][0].memory_mode()
+        mem_mode=cpu_types["atomic"][0].memory_mode()
     )
     system.work_begin_exit_count = 1
     system.work_end_exit_count = 1
 
-    # Single Rancho cluster with private L1 and shared L2 caches.
+    # Build caches on the active (atomic) CPUs so switched-out Rancho CPUs
+    # can safely take over already-connected cache ports at ROI begin.
+    system.atomic_cluster = devices.ArmCpuCluster(
+        system,
+        args.num_cpus,
+        args.cpu_freq,
+        "1.2V",
+        AtomicSimpleCPU,
+        devices.L1I,
+        devices.L1D,
+        devices.L2,
+    )
+
     system.rancho_cluster = devices.ArmCpuCluster(
         system,
         args.num_cpus,
@@ -138,7 +168,22 @@ def create(args):
         tarmac_gen=args.tarmac_gen,
         tarmac_dest=args.tarmac_dest,
     )
-    system.addCaches(need_caches=True, last_cache_level=2)
+
+    for cpu in system.rancho_cluster.cpus:
+        cpu.switched_out = True
+
+    # CPU handover requires matching CPU ids.
+    for old_cpu, new_cpu in zip(
+        system.atomic_cluster.cpus, system.rancho_cluster.cpus
+    ):
+        new_cpu.cpu_id = old_cpu.cpu_id
+
+    # Attach a private L1 + shared L2 hierarchy to the currently-active
+    # atomic cluster. On switch, Rancho CPUs inherit these cache-connected
+    # ports via takeOverFrom().
+    system.atomic_cluster.addL1()
+    system.atomic_cluster.addL2(system.atomic_cluster.clk_domain)
+    system.atomic_cluster.connectMemSide(system.membus)
 
     system.mem_ranges = [AddrRange(start=0, size=args.mem_size)]
     MemConfig.config_mem(args, system)
@@ -168,9 +213,13 @@ def create(args):
     system.workload = SEWorkload.init_compatible(processes[0].executable)
 
     if len(processes) == 1:
+        for cpu in system.atomic_cluster.cpus:
+            cpu.workload = processes[0]
         for cpu in system.rancho_cluster.cpus:
             cpu.workload = processes[0]
     else:
+        for cpu, workload in zip(system.atomic_cluster.cpus, processes):
+            cpu.workload = workload
         for cpu, workload in zip(system.rancho_cluster.cpus, processes):
             cpu.workload = workload
 
@@ -180,7 +229,10 @@ def create(args):
         for cpu in system.rancho_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts
 
-    return system
+    switch_cpu_list = list(
+        zip(system.atomic_cluster.cpus, system.rancho_cluster.cpus)
+    )
+    return system, switch_cpu_list
 
 
 def main():
@@ -203,7 +255,7 @@ def main():
         type=str,
         choices=list(cpu_types.keys()),
         default="rancho",
-        help="Kept for compatibility; this script executes on rancho.",
+        help="Kept for compatibility; starts atomic and switches to rancho at ROI.",
     )
     parser.add_argument("--cpu-freq", type=str, default="3GHz")
     parser.add_argument(
@@ -243,10 +295,25 @@ def main():
         ),
     )
     parser.add_argument(
+        "--tag-complete-coalescing",
+        choices=["on", "off"],
+        default=None,
+        help="Enable non-consecutive TSO coalescing over locked tag intervals",
+    )
+    parser.add_argument("--tag-complete-window", type=int, default=16)
+    parser.add_argument("--tag-complete-retry", type=int, default=4)
+    parser.add_argument("--tag-complete-lease", type=int, default=128)
+    parser.add_argument(
         "--safeCacheBypass",
         choices=["on", "off"],
         default=None,
         help="Enable/disable safe loads from cache bypass MB drain",
+    )
+    parser.add_argument(
+        "--sq-entries",
+        type=int,
+        default=None,
+        help="Override number of store queue entries (SQEntries)",
     )
     parser.add_argument(
         "--cache-ordering-tag-entries",
@@ -312,10 +379,11 @@ def main():
     args = parser.parse_args()
 
     root = Root(full_system=False)
-    root.system = create(args)
+    root.system, switch_cpu_list = create(args)
 
     m5.instantiate()
 
+    switched = False
     saw_roi_begin = False
     while True:
         event = m5.simulate()
@@ -323,8 +391,12 @@ def main():
         lcause = cause.lower()
         print(f"{cause} ({event.getCode()}) @ {m5.curTick()}")
 
-        if "workbegin" in lcause or "work started" in lcause:
-            print("info: ROI begin detected on rancho, resetting stats")
+        if not switched and (
+            "workbegin" in lcause or "work started" in lcause
+        ):
+            print("info: ROI begin detected, switching from atomic to rancho")
+            m5.switchCpus(root.system, switch_cpu_list)
+            switched = True
             saw_roi_begin = True
             m5.stats.reset()
             continue
@@ -348,7 +420,7 @@ def main():
 
     if not saw_roi_begin:
         print(
-            "warning: ROI workbegin was never seen; run completed without ROI reset"
+            "warning: ROI workbegin was never seen; run completed without CPU switch"
         )
     sys.exit(event.getCode())
 

@@ -96,6 +96,7 @@
 #include "base/trace.hh"
 #include "base/types.hh"
 #include "cpu/base.hh"
+#include "cpu/o3/cpu.hh"
 #include "cpu/thread_context.hh"
 #include "kern/linux/linux.hh"
 #include "mem/page_table.hh"
@@ -392,13 +393,45 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
     op &= ~OS::TGT_FUTEX_PRIVATE_FLAG;
     op &= ~OS::TGT_FUTEX_CLOCK_REALTIME_FLAG;
 
-    FutexMap &futex_map = tc->getSystemPtr()->futexMap;
+    System *system = tc->getSystemPtr();
+    FutexMap &futex_map = system->futexMap;
+    const Addr futex_line = roundDown((Addr)uaddr, system->cacheLineSize());
+    const Addr futex_line2 = roundDown((Addr)uaddr2, system->cacheLineSize());
+    const auto anyOutstandingO3StoresToLine = [system](Addr line_addr) {
+        for (BaseCPU *cpu : BaseCPU::getCpuList()) {
+            if (!cpu || cpu->system != system || cpu->switchedOut()) {
+                continue;
+            }
+
+            auto *o3_cpu = dynamic_cast<o3::CPU *>(cpu);
+            if (o3_cpu && o3_cpu->hasStoreToLine(line_addr)) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+    const auto currentO3HasStores = [tc]() {
+        auto *o3_cpu = dynamic_cast<o3::CPU *>(tc->getCpuPtr());
+        return o3_cpu && o3_cpu->hasStoresToWB();
+    };
 
     if (OS::TGT_FUTEX_WAIT == op || OS::TGT_FUTEX_WAIT_BITSET == op) {
+        if (anyOutstandingO3StoresToLine(futex_line)) {
+            DPRINTF_SYSCALL(Base,
+                    "futex retry op=%d ctx=%d uaddr=%#x uaddr2=%#x "
+                    "remote_line_blocked=1 before_wait_read\n",
+                    op, tc->contextId(), (Addr)uaddr, (Addr)uaddr2);
+            return SyscallReturn::retry();
+        }
+
         // Ensure futex system call accessed atomically.
         BufferArg buf(uaddr, sizeof(int));
         buf.copyIn(SETranslatingPortProxy(tc));
         int mem_val = *(int*)buf.bufferPtr();
+        DPRINTF_SYSCALL(Base,
+                "futex wait op=%d ctx=%d uaddr=%#x expected=%d mem=%d\n",
+                op, tc->contextId(), (Addr)uaddr, val, mem_val);
 
         /*
          * The value in memory at uaddr is not equal with the expected val
@@ -408,6 +441,14 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         if (val != mem_val)
             return -OS::TGT_EWOULDBLOCK;
 
+        if (currentO3HasStores()) {
+            DPRINTF_SYSCALL(Base,
+                    "futex retry op=%d ctx=%d uaddr=%#x "
+                    "local_store_blocked=1 before_wait_sleep\n",
+                    op, tc->contextId(), (Addr)uaddr);
+            return SyscallReturn::retry();
+        }
+
         if (OS::TGT_FUTEX_WAIT == op) {
             futex_map.suspend(uaddr, process->tgid(), tc);
         } else {
@@ -416,24 +457,56 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
 
         return 0;
     } else if (OS::TGT_FUTEX_WAKE == op) {
+        DPRINTF_SYSCALL(Base,
+                "futex wake ctx=%d uaddr=%#x nr=%d\n",
+                tc->contextId(), (Addr)uaddr, val);
         return futex_map.wakeup(uaddr, process->tgid(), val);
     } else if (OS::TGT_FUTEX_WAKE_BITSET == op) {
+        DPRINTF_SYSCALL(Base,
+                "futex wake_bitset ctx=%d uaddr=%#x mask=%#x\n",
+                tc->contextId(), (Addr)uaddr, val3);
         return futex_map.wakeup_bitset(uaddr, process->tgid(), val3);
     } else if (OS::TGT_FUTEX_REQUEUE == op ||
                OS::TGT_FUTEX_CMP_REQUEUE == op) {
-
+        if (anyOutstandingO3StoresToLine(futex_line)) {
+            DPRINTF_SYSCALL(Base,
+                    "futex retry op=%d ctx=%d uaddr=%#x uaddr2=%#x "
+                    "remote_line_blocked=1 before_requeue_read\n",
+                    op, tc->contextId(), (Addr)uaddr, (Addr)uaddr2);
+            return SyscallReturn::retry();
+        }
         // Ensure futex system call accessed atomically.
         BufferArg buf(uaddr, sizeof(int));
         buf.copyIn(SETranslatingPortProxy(tc));
         int mem_val = *(int*)buf.bufferPtr();
+        DPRINTF_SYSCALL(Base,
+                "futex requeue op=%d ctx=%d uaddr=%#x uaddr2=%#x "
+                "cmp=%d mem=%d wake=%d requeue=%d\n",
+                op, tc->contextId(), (Addr)uaddr, (Addr)uaddr2,
+                val3, mem_val, val, timeout);
         /*
          * For CMP_REQUEUE, the whole operation is only started only if
          * val3 is still the value of the futex pointed to by uaddr.
          */
         if (OS::TGT_FUTEX_CMP_REQUEUE && val3 != mem_val)
             return -OS::TGT_EWOULDBLOCK;
+        if (currentO3HasStores()) {
+            DPRINTF_SYSCALL(Base,
+                    "futex retry op=%d ctx=%d uaddr=%#x "
+                    "local_store_blocked=1 before_requeue\n",
+                    op, tc->contextId(), (Addr)uaddr);
+            return SyscallReturn::retry();
+        }
         return futex_map.requeue(uaddr, process->tgid(), val, timeout, uaddr2);
     } else if (OS::TGT_FUTEX_WAKE_OP == op) {
+        if (anyOutstandingO3StoresToLine(futex_line) ||
+            anyOutstandingO3StoresToLine(futex_line2)) {
+            DPRINTF_SYSCALL(Base,
+                    "futex retry op=%d ctx=%d uaddr=%#x uaddr2=%#x "
+                    "wake_op_line_blocked=1 before_wake_op_read\n",
+                    op, tc->contextId(), (Addr)uaddr, (Addr)uaddr2);
+            return SyscallReturn::retry();
+        }
         /*
          * The FUTEX_WAKE_OP operation is equivalent to executing the
          * following code atomically and totally ordered with respect to
@@ -460,6 +533,11 @@ futexFunc(SyscallDesc *desc, ThreadContext *tc,
         buf.copyIn(SETranslatingPortProxy(tc));
         int oldval = *(int*)buf.bufferPtr();
         int newval = oldval;
+        DPRINTF_SYSCALL(Base,
+                "futex wake_op ctx=%d uaddr=%#x uaddr2=%#x oldval=%d val=%d "
+                "timeout=%d val3=%#x\n",
+                tc->contextId(), (Addr)uaddr, (Addr)uaddr2, oldval,
+                val, timeout, val3);
         // extract op, oparg, cmp, cmparg from val3
         int wake_cmparg =  val3 & 0xfff;
         int wake_oparg  = (val3 & 0xfff000)   >> 12;

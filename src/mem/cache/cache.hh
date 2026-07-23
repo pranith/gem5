@@ -46,13 +46,18 @@
 #ifndef __MEM_CACHE_CACHE_HH__
 #define __MEM_CACHE_CACHE_HH__
 
+#include <deque>
 #include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "base/compiler.hh"
 #include "base/types.hh"
 #include "mem/cache/base.hh"
 #include "mem/packet.hh"
+#include "sim/eventq.hh"
 
 namespace gem5
 {
@@ -79,6 +84,38 @@ class Cache : public BaseCache
      */
     std::unordered_set<RequestPtr> outstandingSnoop;
 
+    /**
+     * zFence: observing coherence snoops that arrived while a line lock was
+     * held.
+     * Keyed by block address (+ secure bit in key LSB).
+     */
+    std::unordered_map<uint64_t,
+        std::deque<std::pair<PacketPtr, bool>>> zfDeferredSnoops;
+    std::unordered_map<const Packet*, bool> zfDeferredReplayCanRespond;
+
+    /** MB software prefetches whose callback must wait for final MSHR
+     * deallocation rather than merely becoming a serviceable target. */
+    std::unordered_map<MSHR*, std::vector<PacketPtr>>
+        mbPrefetchCompletionWaiters;
+
+    /**
+     * Queue an observing snoop for replay once the zFence line lock drains.
+     */
+    void enqueueZFDeferredSnoop(const PacketPtr pkt, bool can_respond);
+
+    /**
+     * Replay queued observing snoops for an unlocked zFence line.
+     */
+    void drainZFDeferredSnoops(Addr blk_addr, bool is_secure);
+
+    /** Schedule deferred snoop replay. */
+    void scheduleZFDeferredReplay();
+
+    /** Replay callback run outside transient MSHR service context. */
+    void processZFDeferredSnoops();
+
+    EventFunctionWrapper zfDeferredReplayEvent;
+
   protected:
     /**
      * Turn line-sized writes into WriteInvalidate transactions.
@@ -103,6 +140,8 @@ class Cache : public BaseCache
 
     void serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt,
                             CacheBlk *blk) override;
+
+    void completeMSHRWaiters(MSHR *mshr) override;
 
     void recvTimingSnoopReq(PacketPtr pkt) override;
 
@@ -135,7 +174,8 @@ class Cache : public BaseCache
      * @return The snoop delay incurred by the upwards snoop
      */
     uint32_t handleSnoop(PacketPtr pkt, CacheBlk *blk,
-                         bool is_timing, bool is_deferred, bool pending_inval);
+                         bool is_timing, bool is_deferred,
+                         bool pending_inval, bool allow_respond = true);
 
     [[nodiscard]] PacketPtr evictBlock(CacheBlk *blk) override;
 

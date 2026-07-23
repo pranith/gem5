@@ -213,6 +213,21 @@ def create(args):
                     cpu.useMergeBuffer = True
                     cpu.enableVersioning = True
 
+        if args.tag_complete_coalescing is not None:
+            enable_tag_complete = args.tag_complete_coalescing == "on"
+            for cpu in system.cpu_cluster.cpus:
+                cpu.tsoTagCompleteStoreMerging = enable_tag_complete
+                cpu.tsoTagCompleteWindow = args.tag_complete_window
+                cpu.tsoTagCompleteRetryCycles = args.tag_complete_retry
+                cpu.tsoTagCompleteLockLease = args.tag_complete_lease
+                if enable_tag_complete:
+                    cpu.needsTSO = True
+                    cpu.useMergeBuffer = True
+                    cpu.enableVersioning = True
+                    cpu.zfenceEnable = True
+                    cpu.zfenceLockLines = True
+
+
     if args.maxinsts:
         for cpu in system.cpu_cluster.cpus:
             cpu.max_insts_any_thread = args.maxinsts
@@ -273,6 +288,15 @@ def main():
             "enables the merge buffer and ordering-tag versioning substrate."
         ),
     )
+    parser.add_argument(
+        "--tag-complete-coalescing",
+        choices=["on", "off"],
+        default=None,
+        help="Enable non-consecutive TSO coalescing over locked tag intervals",
+    )
+    parser.add_argument("--tag-complete-window", type=int, default=16)
+    parser.add_argument("--tag-complete-retry", type=int, default=4)
+    parser.add_argument("--tag-complete-lease", type=int, default=128)
     parser.add_argument(
         "--safeCacheBypass",
         choices=["on", "off"],
