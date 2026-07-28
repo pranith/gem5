@@ -279,6 +279,11 @@ class Decode
 
     /** Per-thread memory ordering version used for loads/stores. */
     std::array<uint64_t, MaxThreads> memOrderVersion;
+    /**
+     * Per-thread ordering version assigned to TSO loads. Unlike the global
+     * store-tag allocator, this advances only at a fence.
+     */
+    std::array<uint64_t, MaxThreads> loadMemOrderVersion;
     /** Enable optimized store-release handling. */
     bool optimizeStoreRelease;
     /** Enable static TSO store-order tagging. */

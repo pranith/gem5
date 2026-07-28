@@ -306,13 +306,32 @@ class LSQUnit
             Cycles retireCycle;
             Cycles allocCycle;
             unsigned unretireCount;
+            /** Oldest ordering tag represented by this entry's data. */
+            uint64_t firstVersion;
+            /** Tag used by the resident-tag drain frontier. */
             uint64_t version;
             /** Youngest ordering tag represented by this entry's data. */
             uint64_t lastVersion;
+            /**
+             * False if a represented store was split across cache lines.
+             * One fragment may drain independently, so a surviving fragment
+             * cannot certify whole-tag residency from its numeric range.
+             */
+            bool tagCompleteRangeEligible = true;
             /** Tags whose stores were absorbed without allocating entries. */
             std::vector<uint64_t> absorbedVersions;
             /** Nonzero while the entry belongs to a frozen atomic group. */
             uint64_t tagCompleteGroup = 0;
+            /** Number of writes in the frozen atomic group. */
+            uint32_t tagCompleteGroupSize = 0;
+            /**
+             * Youngest ordering tag absorbed by this group. Replicated in
+             * every resident member so the frontier survives early
+             * deallocation of already-issued members.
+             */
+            uint64_t tagCompleteGroupLastVersion = 0;
+            /** Store owning an on-demand tag-complete lock candidate. */
+            InstSeqNum tagCompleteCandidate = 0;
             InstSeqNum seqNum = 0;
             bool isRelease = false;
             bool isAtomic = false;
@@ -342,6 +361,8 @@ class LSQUnit
             bool zfPrefetchInFlight = false;
             /** The one-shot initial prelock prefetch has not completed. */
             bool zfInitialPrefetchNeeded = true;
+            /** The line is resident and writable for short publication. */
+            bool zfPublicationReady = false;
             /** A revoked prelock must rejoin the cache after snoop replay. */
             bool zfConflictRefetchPending = false;
 
@@ -352,6 +373,7 @@ class LSQUnit
                   retireCycle(0),
                   allocCycle(0),
                   unretireCount(0),
+                  firstVersion(ver),
                   version(ver),
                   lastVersion(ver),
                   seqNum(0)
@@ -379,23 +401,13 @@ class LSQUnit
         /** Tracks counts of outstanding entries per version in order. */
         std::deque<VersionCountEntry> versionCounts;
 
-        struct TagCompleteGroup
-        {
-            uint64_t id = 0;
-            uint64_t firstVersion = 0;
-            uint64_t lastVersion = 0;
-            std::vector<size_t> members;
-            std::vector<size_t> lockOwners;
-            std::vector<bool> writeIssued;
-            size_t writesIssued = 0;
-            size_t writeResponses = 0;
-            size_t nextUnlock = 0;
-            size_t unlockResponses = 0;
-            bool unlocking = false;
-        };
-        std::unordered_map<uint64_t, TagCompleteGroup> tagCompleteGroups;
-        uint64_t nextTagCompleteGroup = 1;
-        uint64_t publishingTagCompleteGroup = 0;
+        uint64_t nextAtomicPublication = 1;
+        uint64_t publishingAtomicPublication = 0;
+        /** Groups accepted by the cache but not yet completely installed. */
+        uint64_t outstandingAtomicPublications = 0;
+        /** Start of the single active atomic publication's end-to-end timer. */
+        Cycles atomicPublicationStartCycle = Cycles(0);
+        bool atomicPublicationTimerActive = false;
         std::unordered_map<InstSeqNum, Cycles> tagCompleteWaitStart;
 
         LSQUnit *lsqPtr;
@@ -431,18 +443,20 @@ class LSQUnit
         MergeBufferEntry *addAtomic(Cycles now, LSQRequest *request,
                                     typename StoreQueue::iterator store_it,
                                     uint64_t version);
-        void invalidateEntry(size_t idx);
+        void invalidateEntry(size_t idx, bool retire_versions = true);
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
-        void handleTagCompleteUnlockResp(uint64_t group_id);
+        void handleAtomicPublicationResp(bool publication_complete);
         bool completeSQEarlyPrelock(InstSeqNum seq_num, Addr line_addr,
                                     Cycles ready_cycle);
         void forceRetireVersionsBefore(uint64_t version);
+        void forceRetireStoresBefore(InstSeqNum seq_num);
         std::optional<uint64_t> youngestVersion() const;
         std::optional<uint64_t> oldestVersion() const;
         std::vector<bool> validVector() const { return entryValid; }
         void dumpWaitBits() const;
+        void dumpState() const;
         size_t indexOf(const MergeBufferEntry *entry) const;
         void
         reset()
@@ -455,10 +469,12 @@ class LSQUnit
                 entry.version = 0;
             }
             versionCounts.clear();
-            tagCompleteGroups.clear();
             tagCompleteWaitStart.clear();
-            nextTagCompleteGroup = 1;
-            publishingTagCompleteGroup = 0;
+            nextAtomicPublication = 1;
+            publishingAtomicPublication = 0;
+            outstandingAtomicPublications = 0;
+            atomicPublicationStartCycle = Cycles(0);
+            atomicPublicationTimerActive = false;
             if (lsqPtr) {
                 lsqPtr->stats.mbAvgOccupancy = 0.0;
             }
@@ -469,12 +485,14 @@ class LSQUnit
         bool forwardData(Addr paddr, uint8_t *dst, size_t size,
                          uint64_t &stlf_version) const;
         AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        unsigned forceRetireThroughLine(Addr line_addr);
         bool hasEntryForLine(Addr line_addr) const;
         bool
         isEmpty() const
         {
             return std::none_of(entryValid.begin(), entryValid.end(),
-                                [](bool v) { return v; });
+                                [](bool v) { return v; }) &&
+                outstandingAtomicPublications == 0;
         }
         bool
         isFull() const
@@ -490,6 +508,8 @@ class LSQUnit
          *         invalidated by this snoop conflict.
          */
         unsigned invalidateZFLine(Addr line_addr);
+        /** Clear publication readiness when L1 evicts a candidate line. */
+        void invalidatePublicationReady(Addr line_addr);
         /**
          * Validate that all valid MB entries have zBit permission set.
          * @param has_relevant Set true if any MB entry is present.
@@ -519,7 +539,14 @@ class LSQUnit
             Cycles now, Addr addr, uint8_t *data, size_t size,
             typename StoreQueue::iterator store_it, bool is_all_zero,
             uint64_t version, bool &wait_for_locks);
-        bool issueTagCompleteGroup(TagCompleteGroup &group, LSQUnit *lsq_ptr);
+        bool issueAtomicPublication(uint64_t publication_id,
+                                    LSQUnit *lsq_ptr);
+        MergeBufferEntry *tryMergeIntoUnissuedAtomicMember(
+            Addr addr, uint8_t *data, size_t size,
+            typename StoreQueue::iterator store_it, bool is_all_zero,
+            uint64_t version);
+        bool tryExtendAtomicPublication(MergeBufferEntry *entry,
+                                        uint64_t version);
         void
         updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
                     size_t size, bool is_all_zero)
@@ -694,6 +721,10 @@ class LSQUnit
      * completed younger load and requests precise TSO recovery.
      */
     void checkSnoop(PacketPtr pkt);
+    /** Preserve TSO load-order hazards when L1 replacement ends coherence
+     * monitoring for a speculative load's cache line.
+     */
+    void checkL1Eviction(PacketPtr pkt);
     /** Mark loads that saw external snoops for re-execution after a barrier.
      */
     unsigned markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
@@ -867,7 +898,7 @@ class LSQUnit
     void recvRetry();
 
     /** Forces merge buffer drain for entries older than version. */
-    void forceMBDrain(uint64_t version);
+    void forceMBDrain(uint64_t version, InstSeqNum seq_num);
 
     /** Handles merge buffer drain completion. */
     void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
@@ -963,9 +994,14 @@ class LSQUnit
     {
         MergeBuffer::MergeBufferEntry *entry;
         LSQUnit *lsqUnit;
+        uint64_t publicationId;
         MergeBufferDrainSenderState(MergeBuffer::MergeBufferEntry *e,
                                     LSQUnit *unit)
-            : entry(e), lsqUnit(unit)
+            : entry(e), lsqUnit(unit), publicationId(0)
+        {}
+        MergeBufferDrainSenderState(MergeBuffer::MergeBufferEntry *e,
+                                    LSQUnit *unit, uint64_t publication_id)
+            : entry(e), lsqUnit(unit), publicationId(publication_id)
         {}
     };
 
@@ -977,11 +1013,16 @@ class LSQUnit
         Addr expectedBlockAddr;
         Cycles expectedAllocCycle;
         bool conflictRecovery;
+        bool publicationPrefetch;
+        bool earlyReadinessPrefetch;
         MergeBufferPrefetchSenderState(
             LSQUnit *unit, MergeBuffer::MergeBufferEntry *e,
-            Addr block_addr, Cycles alloc_cycle, bool recovery)
+            Addr block_addr, Cycles alloc_cycle, bool recovery,
+            bool publication_prefetch, bool early_readiness_prefetch)
             : lsqUnit(unit), entry(e), expectedBlockAddr(block_addr),
-              expectedAllocCycle(alloc_cycle), conflictRecovery(recovery)
+              expectedAllocCycle(alloc_cycle), conflictRecovery(recovery),
+              publicationPrefetch(publication_prefetch),
+              earlyReadinessPrefetch(early_readiness_prefetch)
         {}
     };
 
@@ -1120,6 +1161,12 @@ class LSQUnit
     DynInstPtr memOrderViolator;
     /** Track the oldest load that must be squashed/replayed due to re-exec. */
     void setMemOrderViolatorIfOlder(const DynInstPtr &inst);
+    /**
+     * A completed load resolves its position relative to every younger load.
+     * Recover the oldest younger load that executed early and subsequently
+     * observed an invalidation snoop.
+     */
+    void checkCompletedLoadSnoopHazards(const DynInstPtr &completed_load);
 
     /** Enable optimized store-release handling. */
     bool optimizeStoreRelease = false;
@@ -1142,8 +1189,15 @@ class LSQUnit
     bool tsoTagCompleteStoreMerging = false;
     /** Allow frozen tag-complete groups to drain out of tag order. */
     bool tsoTagCompleteOutOfOrderDrain = false;
+    /** Warm writable residency without acquiring a line lock. */
+    bool tsoTagCompleteEarlyReadinessPrefetch = true;
+    /** Acquire a revocable lock without holding baseline retirement. */
+    bool tsoTagCompleteEarlyMbPrelock = false;
     unsigned tsoTagCompleteWindow = 0;
     Cycles tsoTagCompleteRetryCycles = Cycles(0);
+    unsigned tsoTagCompleteSqPressureThreshold = 80;
+    unsigned mbSqPressureFreeEntryThreshold = 4;
+    unsigned mbMergingPressureThreshold = 75;
     Cycles tsoTagCompleteLockLease = Cycles(0);
 
   protected:
@@ -1166,6 +1220,11 @@ class LSQUnit
 
         /** Tota number of memory ordering violations. */
         statistics::Scalar memOrderViolation;
+        /** TSO replays detected when an older load completes after a snoop
+         * hit a younger, already-executed load. */
+        statistics::Scalar tsoLoadCompletionReschedules;
+        /** Executed TSO loads marked hazardous by an L1D replacement. */
+        statistics::Scalar tsoL1EvictionHazards;
         /** Possible consistency violations due to version hazard without addr
          * overlap. */
         statistics::Scalar possibleConsistencyViolation;
@@ -1183,6 +1242,8 @@ class LSQUnit
         /** Number of loads rescheduled due to partial merge-buffer forwarding.
          */
         statistics::Scalar mbPartialFwdRescheduledLoads;
+        /** MB entries force-retired after a partial MB forwarding match. */
+        statistics::Scalar mbPartialFwdForceRetires;
 
         /** Number of times the LSQ is blocked due to the cache. */
         statistics::Scalar blockedByCache;
@@ -1202,11 +1263,56 @@ class LSQUnit
         statistics::Scalar mbAllocations;
         /** Merge buffer merges into existing entries */
         statistics::Scalar mbMerges;
+        /** Same-tag store fragments merged into an existing entry. */
+        statistics::Scalar mbSameTagMerges;
+        /** Adjacent TSO store-tag merges into an existing entry. */
+        statistics::Scalar mbConsecutiveTagMerges;
         statistics::Scalar mbTagCompleteMerges;
+        /** Structurally complete non-consecutive merge candidates. */
+        statistics::Scalar mbTagCompleteCandidates;
         statistics::Scalar mbTagCompleteFallbacks;
+        /** Candidates that bypassed an incomplete lock wait under SQ pressure. */
+        statistics::Scalar mbTagCompleteSqPressureFallbacks;
+        /** Candidates rejected because their resident tag ranges have a gap. */
+        statistics::Scalar mbTagCompleteRangeGapFallbacks;
+        /** Candidates containing a cache-line-split store fragment. */
+        statistics::Scalar mbTagCompleteSplitRangeFallbacks;
+        /** Complete candidates exceeding the resident-entry group bound. */
+        statistics::Scalar mbTagCompleteWindowFallbacks;
+        /** Candidate attempts abandoned while waiting for line locks. */
+        statistics::Scalar mbTagCompleteLockTimeouts;
+        /** Missing member locks started after a real recurrence is found. */
+        statistics::Scalar mbTagCompleteOnDemandLocks;
+        /** One-shot allocation-time exclusive readiness prefetches issued. */
+        statistics::Scalar mbTagCompleteEarlyReadinessPrefetches;
+        /** Allocation-time readiness prefetches completed for a live entry. */
+        statistics::Scalar mbTagCompleteEarlyReadinessCompletions;
+        /** Early readiness proofs cleared by an L1 eviction. */
+        statistics::Scalar mbTagCompleteEarlyReadinessInvalidations;
+        /** Revocable MB prelocks issued before candidate discovery. */
+        statistics::Scalar mbTagCompleteEarlyMbPrelocks;
         statistics::Scalar mbTagCompleteWaitCycles;
+        /** Per-candidate wait for all tag-complete member locks. */
+        statistics::Distribution mbTagCompleteLockWaitLatency;
+        /** Maximum observed per-candidate member-lock wait. */
+        statistics::Scalar mbTagCompleteLockWaitMax;
         statistics::Scalar mbTagCompleteGroups;
+        statistics::Scalar mbTagCompleteGroupMembers;
         statistics::Scalar mbTagCompleteOutOfOrderDrains;
+        /** Consecutive stores absorbed by a still-unissued group member. */
+        statistics::Scalar mbTagCompleteLeaderMerges;
+        /** Leader merges after another member began group publication. */
+        statistics::Scalar mbTagCompleteActiveGroupMerges;
+        /** Younger ready entries appended before publication starts. */
+        statistics::Scalar mbTagCompleteGroupExtensions;
+        /** Frozen members whose MB slot was freed at cache acceptance. */
+        statistics::Scalar mbAtomicPublicationEarlyDeallocs;
+        /** Atomic publications completed by the cache. */
+        statistics::Scalar mbAtomicPublicationsCompleted;
+        /** Sum of end-to-end atomic publication latency in cycles. */
+        statistics::Scalar mbAtomicPublicationLatencyCycles;
+        /** Average end-to-end atomic publication latency in cycles. */
+        statistics::Formula mbAtomicPublicationAvgLatency;
         /** Merge buffer entries retired */
         statistics::Scalar mbRetired;
         /** Merge buffer drains issued */
@@ -1219,6 +1325,12 @@ class LSQUnit
         statistics::Scalar mbFullStoreDeallocStalls;
         /** Older-version MB entries force retired for same block address. */
         statistics::Scalar mbForceRetiresOlderVersion;
+        /** Unfrozen candidate entries canceled because the SQ is pressured. */
+        statistics::Scalar mbSqPressureCandidateEntriesCanceled;
+        /** MB entries force retired because the SQ crossed its threshold. */
+        statistics::Scalar mbSqPressureForceRetires;
+        /** MB entries force retired because merging occupancy was too high. */
+        statistics::Scalar mbMergingPressureForceRetires;
         /** Average merge buffer occupancy (valid entries / total). */
         statistics::Average mbAvgOccupancy;
         /** Total cycles entries reside in the merge buffer. */

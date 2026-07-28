@@ -434,6 +434,7 @@ CPU::heartbeat() const
         }
 
         if (head_inst) {
+            iew.dumpLSQInsts();
             const char *disasm = "unknown";
             std::string disasm_str;
             if ((*head_inst)->staticInst) {

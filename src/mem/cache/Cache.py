@@ -151,6 +151,10 @@ class BaseCache(ClockedObject):
     # In case of the downstream cache is mostly inclusive, this should be
     # set to False.
     writeback_clean = Param.Bool(False, "Writeback clean lines")
+    notify_cpu_on_eviction = Param.Bool(
+        False,
+        "Send metadata-only replacement notifications toward the CPU",
+    )
 
     # Control whether this cache should be mostly inclusive or mostly
     # exclusive with respect to upstream caches. The behaviour on a

@@ -108,6 +108,8 @@ class Cache : public BaseCache
      */
     void drainZFDeferredSnoops(Addr blk_addr, bool is_secure);
 
+    void notifyZFLineUnlocked(Addr blk_addr, bool is_secure) override;
+
     /** Schedule deferred snoop replay. */
     void scheduleZFDeferredReplay();
 

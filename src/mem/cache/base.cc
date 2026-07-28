@@ -144,6 +144,7 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
           [this]{ processDeferredZFLineLockReqs(); },
           name() + ".zf_deferred_acquire_req"),
       writebackClean(p.writeback_clean),
+      notifyCpuOnEviction(p.notify_cpu_on_eviction),
       tempBlockWriteback(nullptr),
       writebackTempBlockAtomicEvent([this]{ writebackTempBlockAtomic(); },
                                     name(), false,
@@ -344,6 +345,14 @@ BaseCache::isZFLineLocked(Addr block_addr, bool is_secure) const
 }
 
 bool
+BaseCache::isZFLinePrelocked(Addr block_addr, bool is_secure) const
+{
+    const uint64_t key = zfenceLockKey(block_addr, is_secure);
+    const auto it = zfLineAcquireOnlyMap.find(key);
+    return it != zfLineAcquireOnlyMap.end() && it->second != 0;
+}
+
+bool
 BaseCache::isZFLineReadBlocked(Addr block_addr, bool is_secure) const
 {
     const uint64_t key = zfenceLockKey(block_addr, is_secure);
@@ -358,10 +367,13 @@ BaseCache::isZFLineReadBlocked(Addr block_addr, bool is_secure) const
     const uint32_t installed = written_it == zfLineGroupWrittenMap.end() ?
         0 : written_it->second;
 
-    // A retained group line becomes readable only after every final write
-    // covered by its prelocks has installed.  Ordinary zFence locks have no
-    // such installed marker and therefore continue to block reads.
-    return prelocks == 0 || installed < prelocks;
+    // Before a retained group write installs, the cache still contains the
+    // old, globally visible value, so reads may observe it. Once any group
+    // write installs, keep the new value hidden until the explicit group
+    // unlock releases the retained prelock. An ordinary write consumes its
+    // prelock when accepted and is thereafter governed by normal coherence;
+    // its transient write-lifetime lock must not defer sibling-cache reads.
+    return prelocks != 0 && installed != 0;
 }
 
 bool
@@ -404,21 +416,62 @@ BaseCache::acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk)
     }
 
     if (acquire_only) {
-        ++zfLineLockMap[key];
-        ++zfLineAcquireOnlyMap[key];
+        const bool newly_owned = zfLineAcquireOnlyMap.count(key) == 0;
+        if (newly_owned) {
+            ++zfLineLockMap[key];
+            zfLineAcquireOnlyMap[key] = 1;
+        }
+        DPRINTF(Cache,
+                "%s: acquired zFence prelock block %#llx (%s) "
+                "new=%u total=%u\n",
+                __func__, blk_addr, is_secure ? "s" : "ns",
+                newly_owned, zfLineLockMap[key]);
     } else if (pkt->req->isZFenceRetainLine()) {
         // A tag-complete group write takes a transient write-lifetime lock
         // without consuming the acquire-only prelock.  The latter blocks
         // reads until this line's final write installs, and continues to
         // block invalidations until the whole group explicitly releases it.
         ++zfLineLockMap[key];
+        DPRINTF(Cache,
+                "%s: retained publication write block %#llx "
+                "publication=%llu members=%u total=%u prelock=%u\n",
+                __func__, blk_addr,
+                static_cast<unsigned long long>(
+                    pkt->req->zfPublicationId()),
+                pkt->req->zfPublicationMembers(),
+                zfLineLockMap[key],
+                zfLineAcquireOnlyMap.count(key) ?
+                    zfLineAcquireOnlyMap.at(key) : 0);
+        const uint64_t publication_id = pkt->req->zfPublicationId();
+        if (publication_id != 0 &&
+            pkt->req->claimZFPublicationTracking()) {
+            auto &publication =
+                zfPublications[rid][publication_id];
+            if (publication.expected == 0) {
+                publication.expected = pkt->req->zfPublicationMembers();
+            } else {
+                assert(publication.expected ==
+                       pkt->req->zfPublicationMembers());
+            }
+            // The Request carries a one-shot claim bit, so this executes
+            // exactly once for each accepted member despite timing retries.
+            // Do not additionally key on Request*, since gem5 may recycle a
+            // completed member's allocation before the next group member
+            // reaches the cache.
+            publication.prelockedLines.push_back(
+                {blk_addr, is_secure});
+        }
     } else {
         auto acq_it = zfLineAcquireOnlyMap.find(key);
         if (acq_it != zfLineAcquireOnlyMap.end() && acq_it->second > 0) {
-            --acq_it->second;
-            if (acq_it->second == 0) {
-                zfLineAcquireOnlyMap.erase(acq_it);
-            }
+            // The accepted write takes over the line's sole prelock. Keep
+            // the existing lock count as its transient write-lifetime lock;
+            // releaseZFLineLock() consumes it when the write installs.
+            zfLineAcquireOnlyMap.erase(acq_it);
+            DPRINTF(Cache,
+                    "%s: write took over sole prelock block %#llx "
+                    "total=%u\n",
+                    __func__, blk_addr, zfLineLockMap[key]);
         } else {
             ++zfLineLockMap[key];
         }
@@ -446,7 +499,7 @@ BaseCache::acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk)
 }
 
 void
-BaseCache::releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *blk)
+BaseCache::releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *)
 {
     if (!isReleaseOnlyZFLineLockReq(pkt)) {
         return;
@@ -454,17 +507,21 @@ BaseCache::releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *blk)
 
     const Addr blk_addr = pkt->getBlockAddr(blkSize);
     const bool is_secure = pkt->isSecure();
+    releaseZFLinePrelock(blk_addr, is_secure);
+}
+
+void
+BaseCache::releaseZFLinePrelock(Addr blk_addr, bool is_secure)
+{
     const uint64_t key = zfenceLockKey(blk_addr, is_secure);
 
     auto acq_it = zfLineAcquireOnlyMap.find(key);
-    if (acq_it != zfLineAcquireOnlyMap.end() && acq_it->second > 0) {
-        --acq_it->second;
-        if (acq_it->second == 0) {
-            zfLineAcquireOnlyMap.erase(acq_it);
-        }
-    }
+    const bool release = acq_it != zfLineAcquireOnlyMap.end() &&
+        acq_it->second > 0;
+    if (release)
+        zfLineAcquireOnlyMap.erase(acq_it);
     auto lock_it = zfLineLockMap.find(key);
-    if (lock_it != zfLineLockMap.end() && lock_it->second > 0) {
+    if (release && lock_it != zfLineLockMap.end() && lock_it->second > 0) {
         --lock_it->second;
         if (lock_it->second == 0) {
             zfLineLockMap.erase(lock_it);
@@ -473,16 +530,24 @@ BaseCache::releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *blk)
 
     const uint32_t total_locks = zfLineLockMap.count(key) ?
         zfLineLockMap.at(key) : 0;
+    const uint32_t prelocks = zfLineAcquireOnlyMap.count(key) ?
+        zfLineAcquireOnlyMap.at(key) : 0;
+    DPRINTF(Cache,
+            "%s: released zFence prelock block %#llx (%s) "
+            "matched=%u total=%u prelock=%u\n",
+            __func__, blk_addr, is_secure ? "s" : "ns",
+            release, total_locks, prelocks);
     const uint32_t target_locks = total_locks;
 
-    if (!blk) {
-        blk = tags->findBlock({pkt->getAddr(), is_secure});
-    }
+    CacheBlk *blk = tags->findBlock({blk_addr, is_secure});
     if (blk && blk->isValid() && regenerateBlkAddr(blk) == blk_addr &&
         blk->isSecure() == is_secure) {
         while (blk->zfLockCount() > target_locks) {
             blk->clearZFLineLocked();
         }
+    }
+    if (release) {
+        notifyZFLineUnlocked(blk_addr, is_secure);
     }
     if (total_locks == 0) {
         zfLineGroupWrittenMap.erase(key);
@@ -544,12 +609,39 @@ BaseCache::releaseZFLineLock(const PacketPtr pkt, CacheBlk *blk)
         if (zfDeferredAcquireReqs.find(key) != zfDeferredAcquireReqs.end()) {
             scheduleDeferredZFLineLockReqReplay();
         }
-    } else if (installed_group_write &&
-               zfDeferredAcquireReqs.find(key) !=
-                   zfDeferredAcquireReqs.end()) {
-        // Ordinary readers can be reconsidered as soon as this line has its
-        // final group value, even though exclusive requests remain blocked.
-        scheduleDeferredZFLineLockReqReplay();
+    }
+
+    const uint64_t publication_id = pkt->req->zfPublicationId();
+    if (installed_group_write && publication_id != 0) {
+        const RequestorID rid = pkt->req->requestorId();
+        auto rid_it = zfPublications.find(rid);
+        if (rid_it == zfPublications.end()) {
+            return;
+        }
+        auto publication_it = rid_it->second.find(publication_id);
+        if (publication_it == rid_it->second.end()) {
+            return;
+        }
+        auto &publication = publication_it->second;
+        ++publication.completed;
+        DPRINTF(Cache,
+                "%s: publication %llu completed member %u/%u "
+                "tracked_prelocks=%u\n",
+                __func__,
+                static_cast<unsigned long long>(publication_id),
+                publication.completed, publication.expected,
+                static_cast<unsigned>(publication.prelockedLines.size()));
+        assert(publication.completed <= publication.expected);
+        if (publication.completed == publication.expected) {
+            for (const auto &prelock : publication.prelockedLines) {
+                releaseZFLinePrelock(prelock.line, prelock.secure);
+            }
+            pkt->req->markZFPublicationComplete();
+            rid_it->second.erase(publication_it);
+            if (rid_it->second.empty()) {
+                zfPublications.erase(rid_it);
+            }
+        }
     }
 }
 
@@ -922,22 +1014,6 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     }
 
     if (!acquireZFLineLock(pkt)) {
-        return;
-    }
-
-    if (isAcquireOnlyZFLineLockReq(pkt) && forwardSnoops) {
-        Tick grant_time = clockEdge(forwardLatency) + pkt->headerDelay;
-        pkt->headerDelay = pkt->payloadDelay = 0;
-        if (pkt->needsResponse()) {
-            pkt->makeTimingResponse();
-            cpuSidePort.schedTimingResp(pkt, grant_time);
-        } else {
-            pendingDelete.reset(pkt);
-        }
-        DPRINTF(Cache,
-                "%s: early zBit grant for block %#llx (%s), reqRid=%u\n",
-                __func__, pkt->getBlockAddr(blkSize),
-                pkt->isSecure() ? "s" : "ns", pkt->requestorId());
         return;
     }
 

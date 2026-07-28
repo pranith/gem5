@@ -1249,13 +1249,17 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
         if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
             ++stats.barrierHeadNotExecuted;
-            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
+            iewStage->forceMBDrain(
+                tid, head_inst->getMemOrderVersion() + 1,
+                head_inst->seqNum);
         }
         if (relaxed_store_drain && !cpu->versioningEnabled()) {
             // zFence can let the head instruction retire before the merge
             // buffer fully drains, but the older MB entries still need to be
             // pushed out promptly to preserve forward progress.
-            iewStage->forceMBDrain(tid, head_inst->getMemOrderVersion() + 1);
+            iewStage->forceMBDrain(
+                tid, head_inst->getMemOrderVersion() + 1,
+                head_inst->seqNum);
         }
 
         if (!cpu->versioningEnabled() && (inst_num > 0 || need_store_drain)) {
@@ -1338,8 +1342,9 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         "ver:%llu until older release MB entries drain.\n",
                         tid, head_inst->seqNum,
                         head_inst->getMemOrderVersion());
-                iewStage->forceMBDrain(tid,
-                                       head_inst->getMemOrderVersion() + 1);
+                iewStage->forceMBDrain(
+                    tid, head_inst->getMemOrderVersion() + 1,
+                    head_inst->seqNum);
                 return false;
             } else if (bypass_release_wait && load_blocked) {
                 stats.acquirePcReleaseBypassCount++;
@@ -1380,8 +1385,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                         head_inst->getMemOrderVersion(),
                         youngest_mb_version ? *youngest_mb_version : 0);
 
-                    iewStage->forceMBDrain(tid,
-                                           head_inst->getMemOrderVersion());
                     return false;
                 }
             }
@@ -1474,7 +1477,8 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
             // ReExec processing waits for every store through the load's
             // version, including older stores that share the same tag.
             iewStage->forceMBDrain(
-                tid, head_inst->getMemOrderVersion() + 1);
+                tid, head_inst->getMemOrderVersion() + 1,
+                head_inst->seqNum);
             return false;
         }
 

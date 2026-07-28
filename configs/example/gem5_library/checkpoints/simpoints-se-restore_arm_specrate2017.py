@@ -98,13 +98,21 @@ requires(isa_required=ISA.ARM)
 
 import gem5.utils.multisim as multisim
 
-multisim.set_num_processes(15)
+multisim.set_num_processes(
+    int(os.environ.get("SPEC_MULTISIM_PROCESSES", "15"))
+)
 
 checkpoint_filter = {
     item.strip()
     for item in os.environ.get("SPEC_CHECKPOINT_FILTER", "").split(",")
     if item.strip()
 }
+simpoint_interval = int(
+    os.environ.get("SPEC_SIMPOINT_INTERVAL", "200000000")
+)
+warmup_interval = int(
+    os.environ.get("SPEC_WARMUP_INTERVAL", "50000000")
+)
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_gem5_20260710_hardlink/{x_workload}"
 
@@ -341,12 +349,10 @@ for workload in spec_rate_workloads:
             workload_resource,
             arguments=argv[1:],
             simpoint=SimpointResource(
-                simpoint_interval=200000000,
-                # simpoint_interval=20000000,
+                simpoint_interval=simpoint_interval,
                 simpoint_list=simpts_list,
                 weight_list=weights_list,
-                warmup_interval=50000000,
-                # warmup_interval=5000,
+                warmup_interval=warmup_interval,
             ),
             checkpoint=CheckpointResource(local_path=chkpt),
         )
@@ -360,6 +366,13 @@ for workload in spec_rate_workloads:
             checkpoint=chkpt,
             id=chkpt_id,
         )
+        # MultiSim intentionally rejects --debug-start/--debug-end. Allow a
+        # single filtered checkpoint to run directly for bounded debug traces.
+        if os.environ.get("SPEC_DIRECT_RUN", "").lower() in {
+            "1", "true", "yes", "on"
+        }:
+            simulator.run()
+            raise SystemExit(0)
         multisim.add_simulator(simulator)
         chkpt_idx = chkpt_idx + 1
 

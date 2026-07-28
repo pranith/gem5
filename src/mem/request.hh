@@ -208,6 +208,8 @@ class Request : public Extensible<Request>
 
         /** This request drains an entry revoked by a prelock conflict. */
         MB_REVOKED_DRAIN            = 0x0002000000000000,
+        /** An L1 data-cache replacement notification sent to the CPU. */
+        L1D_EVICTION_NOTIFY         = 0x0004000000000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -483,6 +485,16 @@ class Request : public Extensible<Request>
     /** A pointer to an atomic operation */
     AtomicOpFunctorPtr atomicOpFunctor = nullptr;
 
+    /**
+     * Cache-owned atomic-publication metadata. A nonzero ID identifies a
+     * retained-lock write group and the member count lets the accepting
+     * cache release all group prelocks when the final member installs.
+     */
+    uint64_t _zfPublicationId = 0;
+    uint32_t _zfPublicationMembers = 0;
+    bool _zfPublicationComplete = false;
+    bool _zfPublicationTrackingClaimed = false;
+
     LocalAccessor _localAccessor;
 
     /** The instruction count at the time this request is created */
@@ -538,6 +550,11 @@ class Request : public Extensible<Request>
           _taskId(other._taskId), _vaddr(other._vaddr),
           _extraData(other._extraData), _contextId(other._contextId),
           _pc(other._pc), _reqInstSeqNum(other._reqInstSeqNum),
+          _zfPublicationId(other._zfPublicationId),
+          _zfPublicationMembers(other._zfPublicationMembers),
+          _zfPublicationComplete(other._zfPublicationComplete),
+          _zfPublicationTrackingClaimed(
+              other._zfPublicationTrackingClaimed),
           _localAccessor(other._localAccessor),
           translateDelta(other.translateDelta),
           accessDelta(other.accessDelta), depth(other.depth)
@@ -1060,11 +1077,36 @@ class Request : public Extensible<Request>
     bool isRelease() const { return _flags.isSet(RELEASE); }
     bool isZFenceLockLine() const { return _flags.isSet(ZFENCE_LOCK_LINE); }
     bool isZFenceRetainLine() const { return _flags.isSet(ZFENCE_RETAIN_LINE); }
+    void
+    setZFPublication(uint64_t id, uint32_t members)
+    {
+        assert(id != 0 && members != 0);
+        _zfPublicationId = id;
+        _zfPublicationMembers = members;
+        _zfPublicationComplete = false;
+        _zfPublicationTrackingClaimed = false;
+    }
+    uint64_t zfPublicationId() const { return _zfPublicationId; }
+    uint32_t zfPublicationMembers() const { return _zfPublicationMembers; }
+    bool isZFPublicationComplete() const
+    { return _zfPublicationComplete; }
+    void markZFPublicationComplete() { _zfPublicationComplete = true; }
+    bool
+    claimZFPublicationTracking()
+    {
+        if (_zfPublicationTrackingClaimed) {
+            return false;
+        }
+        _zfPublicationTrackingClaimed = true;
+        return true;
+    }
     bool isZFencePrelockConflict() const
     { return _flags.isSet(ZFENCE_PRELOCK_CONFLICT); }
     bool isMBPrefetchCompletion() const
     { return _flags.isSet(MB_PREFETCH_COMPLETION); }
     bool isMBRevokedDrain() const { return _flags.isSet(MB_REVOKED_DRAIN); }
+    bool isL1DEvictionNotify() const
+    { return _flags.isSet(L1D_EVICTION_NOTIFY); }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }
     bool isAtomicNoReturn() const { return _flags.isSet(ATOMIC_NO_RETURN_OP); }

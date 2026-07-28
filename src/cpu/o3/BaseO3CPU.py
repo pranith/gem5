@@ -217,11 +217,36 @@ class BaseO3CPU(BaseCPU):
         False,
         "Allow frozen tag-complete groups to issue younger members first",
     )
+    tsoTagCompleteEarlyReadinessPrefetch = Param.Bool(
+        True,
+        "Issue a one-shot exclusive readiness prefetch when a tag-complete "
+        "MB entry is allocated without making retirement wait for a lock",
+    )
+    tsoTagCompleteEarlyMbPrelock = Param.Bool(
+        False,
+        "Acquire a revocable MB line prelock after early readiness without "
+        "changing ordinary entry retirement or drain eligibility",
+    )
     tsoTagCompleteWindow = Param.Unsigned(
         16, "Maximum number of ordering tags in a tag-complete merge group"
     )
     tsoTagCompleteRetryCycles = Param.Cycles(
         4, "Cycles to wait for an incomplete tag interval before allocating normally"
+    )
+    tsoTagCompleteSqPressureThreshold = Param.Unsigned(
+        80,
+        "SQ occupancy percentage above which an incomplete tag-complete "
+        "candidate allocates normally instead of waiting for locks",
+    )
+    mbSqPressureFreeEntryThreshold = Param.Unsigned(
+        4,
+        "SQ pressure may force MB retirement only when the number of free "
+        "MB entries is strictly below this threshold",
+    )
+    mbMergingPressureThreshold = Param.Unsigned(
+        75,
+        "Force-retire up to four oldest MB entries when the percentage of "
+        "valid entries in MERGING state exceeds this threshold",
     )
     tsoTagCompleteLockLease = Param.Cycles(
         128, "Maximum time an unfrozen merge-buffer prelock may be retained"

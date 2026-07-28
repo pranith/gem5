@@ -562,7 +562,13 @@ LSQ::recvTimingSnoopReq(PacketPtr pkt)
     DPRINTF(LSQ, "received pkt for addr:%#x %s\n", pkt->getAddr(),
             pkt->cmdString());
 
-    if (pkt->req && pkt->req->isZFencePrelockConflict()) {
+    if (pkt->req && pkt->req->isL1DEvictionNotify()) {
+        DPRINTF(LSQ, "received L1D eviction notification for addr:%#x\n",
+                pkt->getAddr());
+        for (ThreadID tid = 0; tid < numThreads; tid++) {
+            thread[tid]->checkL1Eviction(pkt);
+        }
+    } else if (pkt->req && pkt->req->isZFencePrelockConflict()) {
         for (ThreadID tid = 0; tid < numThreads; tid++) {
             thread[tid]->checkSnoop(pkt);
         }
@@ -800,9 +806,9 @@ LSQ::hasStoreToLine(Addr line_addr)
 }
 
 void
-LSQ::forceMBDrain(ThreadID tid, uint64_t version)
+LSQ::forceMBDrain(ThreadID tid, uint64_t version, InstSeqNum seq_num)
 {
-    thread.at(tid)->forceMBDrain(version);
+    thread.at(tid)->forceMBDrain(version, seq_num);
 }
 
 bool

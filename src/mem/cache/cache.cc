@@ -161,6 +161,12 @@ Cache::drainZFDeferredSnoops(Addr blk_addr, bool is_secure)
 }
 
 void
+Cache::notifyZFLineUnlocked(Addr blk_addr, bool is_secure)
+{
+    drainZFDeferredSnoops(blk_addr, is_secure);
+}
+
+void
 Cache::scheduleZFDeferredReplay()
 {
     if (!zfDeferredReplayEvent.scheduled()) {
@@ -187,10 +193,16 @@ Cache::processZFDeferredSnoops()
             queue.pop_front();
             PacketPtr deferred_pkt = deferred_entry.first;
             const bool locked = isZFLineLocked(blk_addr, is_secure);
-            const bool still_blocked = deferred_pkt && locked &&
+            const bool lock_blocks_snoop = deferred_pkt && locked &&
                 (deferred_pkt->isInvalidate() ||
                  (deferred_pkt->isRead() &&
                   isZFLineReadBlocked(blk_addr, is_secure)));
+            // Once protection releases, feed the snoop back through gem5's
+            // ordinary snoop path even if a same-line MSHR is still active.
+            // recvTimingSnoopReq() will attach/order it on that MSHR. Keeping
+            // it in this private queue until the MSHR disappears can deadlock:
+            // the MSHR may itself be waiting for this snoop's response.
+            const bool still_blocked = deferred_pkt && lock_blocks_snoop;
             (still_blocked ? retained : ready).push_back(deferred_entry);
         }
 
@@ -1173,6 +1185,10 @@ Cache::evictBlock(CacheBlk *blk)
     PacketPtr pkt = (blk->isSet(CacheBlk::DirtyBit) || writebackClean) ?
         writebackBlk(blk) : cleanEvictBlk(blk);
 
+    if (pkt && notifyCpuOnEviction) {
+        pkt->req->setFlags(Request::L1D_EVICTION_NOTIFY);
+    }
+
     invalidateBlock(blk);
 
     return pkt;
@@ -1511,7 +1527,12 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
     Addr blk_addr = pkt->getBlockAddr(blkSize);
     MSHR *mshr = mshrQueue.findMatch(blk_addr, is_secure);
 
-    const bool zf_snoop_blocked = isZFLineLocked(blk_addr, is_secure) &&
+    // Only a retained prelock protects speculative/frozen state. An
+    // ordinary zFence-tagged write consumes that prelock when accepted; its
+    // remaining transient lock tracks completion but must use normal gem5
+    // snoop handling, otherwise a sibling-cache read can be deferred past
+    // this write and deadlock with the next TSO write.
+    const bool zf_snoop_blocked = isZFLinePrelocked(blk_addr, is_secure) &&
         (pkt->isInvalidate() ||
          (pkt->isRead() && isZFLineReadBlocked(blk_addr, is_secure)));
     if (zf_snoop_blocked) {

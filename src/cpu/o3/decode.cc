@@ -117,6 +117,7 @@ Decode::Decode(CPU *_cpu, const BaseO3CPUParams &params)
         squashInst[tid] = nullptr;
         squashAfterDelaySlot[tid] = 0;
         memOrderVersion[tid] = 0;
+        loadMemOrderVersion[tid] = 0;
         memOrderHistory[tid].clear();
     }
 }
@@ -141,6 +142,7 @@ Decode::clearStates(ThreadID tid)
     }
 
     memOrderVersion[tid] = 0;
+    loadMemOrderVersion[tid] = 0;
     memOrderHistory[tid].clear();
 
     // Clear out any of this thread's instructions being sent to fetch.
@@ -749,21 +751,53 @@ Decode::decodeInsts(ThreadID tid)
                    (inst->staticInst->isRelease() && optimizeStoreRelease)));
             const bool tso_store_bump =
                 needsTSO && inst->isStore() && !inst->isDataPrefetch();
-            const bool bump_version = barrier_bump || tso_store_bump;
+            if (needsTSO) {
+                if (tso_store_bump) {
+                    // The first store after a fence shares the load epoch.
+                    // Later stores consume consecutive ordering tags.
+                    inst->setMemOrderVersion(memOrderVersion[tid]);
+                    ++memOrderVersion[tid];
+                } else if (barrier_bump) {
+                    // Reserve a tag at every real fence.  The resulting gap
+                    // prevents consecutive-tag and tag-complete merging from
+                    // combining stores across the fence.  Loads retain this
+                    // new fence epoch until the next fence.
+                    ++memOrderVersion[tid];
+                    loadMemOrderVersion[tid] = memOrderVersion[tid];
+                    inst->setMemOrderVersion(loadMemOrderVersion[tid]);
+                } else if (inst->isLoad()) {
+                    inst->setMemOrderVersion(loadMemOrderVersion[tid]);
+                } else {
+                    inst->setMemOrderVersion(memOrderVersion[tid]);
+                }
 
-            if (bump_version) {
-                ++memOrderVersion[tid];
+                if (barrier_bump || tso_store_bump) {
+                    DPRINTF(
+                        Decode,
+                        "[tid:%i] Decoded memory-order boundary instruction "
+                        "%i with PC:%s %s. Mem Order version is %i, "
+                        "load version is %i\n",
+                        tid, inst->seqNum, inst->pcState(),
+                        inst->staticInst->disassemble(
+                            inst->pcState().instAddr()),
+                        memOrderVersion[tid], loadMemOrderVersion[tid]);
+                }
+            } else {
+                if (barrier_bump) {
+                    ++memOrderVersion[tid];
 
-                DPRINTF(
-                    Decode,
-                    "[tid:%i] Decoded memory-order boundary instruction "
-                    "%i with PC:%s %s. Mem Order version is %i\n",
-                    tid, inst->seqNum, inst->pcState(),
-                    inst->staticInst->disassemble(inst->pcState().instAddr()),
-                    memOrderVersion[tid]);
+                    DPRINTF(
+                        Decode,
+                        "[tid:%i] Decoded memory-order boundary instruction "
+                        "%i with PC:%s %s. Mem Order version is %i\n",
+                        tid, inst->seqNum, inst->pcState(),
+                        inst->staticInst->disassemble(
+                            inst->pcState().instAddr()),
+                        memOrderVersion[tid]);
+                }
+
+                inst->setMemOrderVersion(memOrderVersion[tid]);
             }
-
-            inst->setMemOrderVersion(memOrderVersion[tid]);
         }
 
         // This current instruction is valid, so add it into the decode

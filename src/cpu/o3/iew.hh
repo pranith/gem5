@@ -224,6 +224,7 @@ class IEW
 
     /** Returns if the LSQ has any stores to writeback. */
     bool hasStoresToWB() { return ldstQueue.hasStoresToWB(); }
+    void dumpLSQInsts() const { ldstQueue.dumpInsts(); }
     bool hasStoreToLine(Addr line_addr) { return ldstQueue.hasStoreToLine(line_addr); }
 
     /** Returns if the LSQ has any stores to writeback. */
@@ -277,9 +278,9 @@ class IEW
 
     /** Mark the merge buffer entries for drain */
     void
-    forceMBDrain(ThreadID tid, uint64_t version)
+    forceMBDrain(ThreadID tid, uint64_t version, InstSeqNum seq_num)
     {
-        return ldstQueue.forceMBDrain(tid, version);
+        return ldstQueue.forceMBDrain(tid, version, seq_num);
     }
 
     /** Mark loads that saw external snoops for re-execution. */

@@ -51,6 +51,8 @@
 #include <deque>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "base/addr_range.hh"
 #include "base/compiler.hh"
@@ -416,9 +418,9 @@ class BaseCache : public ClockedObject
     /** zFence lock counts by block address (+secure bit in key LSB). */
     std::unordered_map<uint64_t, uint32_t> zfLineLockMap;
     /**
-     * Count of acquire-only zFence lock probes by block. These are lock
-     * requests with all-byte-masked writes and are released by later draining
-     * write responses on the same block.
+     * Presence of the single revocable prelock for a block. The core admits
+     * at most one logical prelock per line, and same-owner timing retries are
+     * idempotent.
      */
     std::unordered_map<uint64_t, uint32_t> zfLineAcquireOnlyMap;
     /** Number of retained group writes installed on each protected line. */
@@ -427,16 +429,40 @@ class BaseCache : public ClockedObject
     std::unordered_map<uint64_t, RequestorID> zfLineOwnerMap;
     /** Deferred acquire-only zBit requests waiting for current owner release. */
     std::unordered_map<uint64_t, std::deque<PacketPtr>> zfDeferredAcquireReqs;
+    struct ZFPublicationState
+    {
+        struct Prelock
+        {
+            Addr line;
+            bool secure;
+        };
+        uint32_t expected = 0;
+        uint32_t completed = 0;
+        std::vector<Prelock> prelockedLines;
+    };
+    /**
+     * Cache-resident completion state for accepted atomic publications.
+     * Payload data remains in the normal packet/MSHR path.
+     */
+    std::unordered_map<RequestorID,
+        std::unordered_map<uint64_t, ZFPublicationState>> zfPublications;
     /** Replay event for deferred acquire-only zBit requests. */
     EventFunctionWrapper zfDeferredAcquireReqEvent;
 
 
     uint64_t zfenceLockKey(Addr block_addr, bool is_secure) const;
     bool isZFLineLocked(Addr block_addr, bool is_secure) const;
+    bool isZFLinePrelocked(Addr block_addr, bool is_secure) const;
     bool isZFLineReadBlocked(Addr block_addr, bool is_secure) const;
     bool acquireZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
     void releaseZFLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
     void releaseZFLinePrelock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseZFLinePrelock(Addr block_addr, bool is_secure);
+    /**
+     * Notify a concrete cache that protection no longer blocks coherence
+     * observation on this line. BaseCache itself has no snoop replay queue.
+     */
+    virtual void notifyZFLineUnlocked(Addr block_addr, bool is_secure) {}
     void clearZFLineLock(Addr block_addr, bool is_secure,
                          CacheBlk *blk = nullptr);
     void scheduleDeferredZFLineLockReqReplay();
@@ -710,6 +736,12 @@ class BaseCache : public ClockedObject
      * clean evict), but rather need to send the actual data.
      */
     const bool writebackClean;
+
+    /**
+     * Mark locally generated eviction probes so an attached CPU can retain
+     * speculative-load ordering information after this cache drops a line.
+     */
+    const bool notifyCpuOnEviction;
 
     /**
      * Writebacks from the tempBlock, resulting on the response path
