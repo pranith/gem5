@@ -72,9 +72,16 @@ class BasePO3CPU(BaseCPU):
     activity = Param.Unsigned(0, "Initial count")
 
     cacheStorePorts = Param.Unsigned(
-        200, "Cache Ports. Constrains stores only."
+        200, "Number of D-cache write ports available per cycle"
     )
-    cacheLoadPorts = Param.Unsigned(200, "Cache Ports. Constrains loads only.")
+    cacheLoadPorts = Param.Unsigned(
+        200, "Number of D-cache read ports available per cycle"
+    )
+    cacheBanks = Param.Unsigned(
+        1,
+        "Number of cache-line-interleaved D-cache banks used to model "
+        "read/write bank conflicts",
+    )
 
     po3MemPipeline = Param.Bool(
         True, "Enable PO3 cycle-by-cycle load/store execute sub-pipeline"

@@ -709,6 +709,9 @@ class LSQ
 
             /* Number of retry responses sent */
             statistics::Scalar numSendRetryResp;
+
+            /* Number of read/write bank conflicts */
+            statistics::Scalar loadStoreBankConflicts;
         } dcachePortStats;
 
       protected:
@@ -969,10 +972,18 @@ class LSQ
     bool cacheBlocked() const;
     /** Set D-cache blocked status */
     void cacheBlocked(bool v);
-    /** Is any store port available to use? */
+    /** Is a cache port of the requested type available? */
     bool cachePortAvailable(bool is_load) const;
-    /** Another store port is in use */
-    void cachePortBusy(bool is_load);
+    /**
+     * Is a cache port and the address's bank available?
+     * Read/read and write/write accesses do not conflict at the bank level;
+     * their throughput is constrained by the corresponding port count.
+     */
+    bool cacheBankAvailable(bool is_load, Addr addr) const;
+    /** Record use of a cache port and the address's bank. */
+    void cachePortBusy(bool is_load, Addr addr);
+    /** Record a rejected access caused by a read/write bank conflict. */
+    void cacheBankConflict();
 
     RequestPort &
     getDataPort()
@@ -993,6 +1004,15 @@ class LSQ
     int cacheLoadPorts;
     /** The number of used cache ports in this cycle by loads. */
     int usedLoadPorts;
+    /** Number of cache-line-interleaved D-cache banks. */
+    const unsigned cacheBanks;
+    /** Banks read in the current cycle. */
+    std::vector<bool> loadBanksUsed;
+    /** Banks written in the current cycle. */
+    std::vector<bool> storeBanksUsed;
+
+    /** Return the D-cache bank containing an address. */
+    unsigned cacheBank(Addr addr) const;
 
     /** If the LSQ is currently waiting for stale translations */
     bool waitingForStaleTranslation;
