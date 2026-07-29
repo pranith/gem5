@@ -186,6 +186,7 @@ class DynInst : public ExecContext, public RefCounted
         TranslationStarted,
         TranslationCompleted,
         PossibleLoadViolation,
+        MemDepPredHit,
         HitExternalSnoop,
         EffAddrValid,
         RecordResult,
@@ -196,6 +197,7 @@ class DynInst : public ExecContext, public RefCounted
         ReqMade,
         MemOpDone,
         HtmFromTransaction,
+        StlfForwarded,
         NoCapableFU, /// Processor does not have capability to
                      /// execute the instruction
         MaxFlags
@@ -487,6 +489,18 @@ class DynInst : public ExecContext, public RefCounted
         instFlags[PossibleLoadViolation] = f;
     }
 
+    /** True if the memory dependence predictor reported a producer hit. */
+    bool
+    memDepPredHit() const
+    {
+        return instFlags[MemDepPredHit];
+    }
+    void
+    memDepPredHit(bool f)
+    {
+        instFlags[MemDepPredHit] = f;
+    }
+
     /** True if the address hit a external snoop while sitting in the LSQ.
      * If this is true and a older instruction sees it, this instruction must
      * reexecute
@@ -651,6 +665,25 @@ class DynInst : public ExecContext, public RefCounted
     isStoreConditional() const
     {
         return staticInst->isStoreConditional();
+    }
+
+    /** Memory ordering version (stub; always returns 0). */
+    uint64_t
+    getMemOrderVersion() const
+    {
+        return 0;
+    }
+    /** Whether this load was forwarded via STLF (stub). */
+    bool
+    stlfForwarded() const
+    {
+        return false;
+    }
+    /** Version of the store that forwarded this load via STLF (stub). */
+    uint64_t
+    stlfVersion() const
+    {
+        return 0;
     }
     bool
     isInstPrefetch() const

@@ -188,8 +188,10 @@ MemDepUnit::insertBarrierSN(const DynInstPtr &barr_inst)
         }
 
         if (barrier_type) {
-            DPRINTF(MemDepUnit, "Inserted a %s barrier %s SN:%lli\n",
-                    barrier_type, barr_inst->pcState(), barr_sn);
+            DPRINTF(MemDepUnit, "Inserted a %s barrier %s [sn:%lli] %s\n",
+                    barrier_type, barr_inst->pcState(), barr_sn,
+                    barr_inst->staticInst->disassemble(
+                        barr_inst->pcState().instAddr()));
         }
 
         if (loadBarrierSNs.size() || storeBarrierSNs.size()) {

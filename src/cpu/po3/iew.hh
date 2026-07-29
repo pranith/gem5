@@ -42,6 +42,7 @@
 #define __CPU_O3_IEW_HH__
 
 #include <deque>
+#include <optional>
 #include <queue>
 #include <set>
 
@@ -234,6 +235,44 @@ class IEW
     hasStoresToWB(ThreadID tid)
     {
         return ldstQueue.hasStoresToWB(tid);
+    }
+
+    /** Youngest/lowest merge buffer version for a thread, if any. */
+    std::optional<uint64_t>
+    youngestMBVersion(ThreadID tid) const
+    {
+        return ldstQueue.youngestMBVersion(tid);
+    }
+
+    /** Whether a load must wait for older merge buffer versions to drain. */
+    bool
+    loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+    {
+        return ldstQueue.loadBlockedByMBVersion(tid, load_version);
+    }
+
+    /** Mark the merge buffer entries for drain */
+    void
+    forceMBDrain(ThreadID tid)
+    {
+        return ldstQueue.forceMBDrain(tid);
+    }
+
+    /** Marks loads younger than barrier_sn that hit external snoops. */
+    unsigned
+    markLoadsHitExternalSnoopAfter(ThreadID tid, const InstSeqNum &barrier_sn)
+    {
+        return ldstQueue.markLoadsHitExternalSnoopAfter(tid, barrier_sn);
+    }
+
+    /** Marks acquire loads younger than barrier_sn that hit external
+     * snoops. */
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                          const InstSeqNum &barrier_sn)
+    {
+        return ldstQueue.markAcquireLoadsHitExternalSnoopAfter(tid,
+                                                               barrier_sn);
     }
 
     /** Check misprediction  */

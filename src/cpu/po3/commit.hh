@@ -344,6 +344,9 @@ class Commit
     /** IEW instruction queue interface. */
     TimeBuffer<IEWStruct> *iewQueue;
 
+    /** Allow STLF loads to bypass MB drain stalls at commit. */
+    bool stlfLoadsBypassMBDrain;
+
     /** Wire to read information from IEW queue. */
     TimeBuffer<IEWStruct>::wire fromIEW;
 
@@ -528,6 +531,13 @@ class Commit
 
         /** Number of cycles where the commit bandwidth limit is reached. */
         statistics::Scalar commitEligibleSamples;
+        /** Loads stalled due to MB version when also STLF-forwarded with same
+         * version. */
+        statistics::Scalar mbVersionLoadStallSameStlfVersion;
+        /** Barriers at ROB head that are not yet executed. */
+        statistics::Scalar barrierHeadNotExecuted;
+        /** Cycles stalled draining stores at barrier commit. */
+        statistics::Scalar commitBarrierDrainStallCycles;
     } stats;
 };
 

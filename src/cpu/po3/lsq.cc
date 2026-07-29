@@ -114,7 +114,7 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU *_cpu)
       ADD_STAT(numSendRetryResp, statistics::units::Count::get(),
                "Number of retry responses sent"),
       ADD_STAT(loadStoreBankConflicts, statistics::units::Count::get(),
-               "Number of D-cache accesses rejected due to a read/write "
+               "Number of D-cache accesses rejected due to a load/store "
                "bank conflict")
 {
     recvRespAvgBW.precision(2);
@@ -268,6 +268,12 @@ LSQ::tick()
     usedStorePorts = 0;
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
+
+    // Ensure merge buffer retirement progresses even when no stores are
+    // actively being written back (e.g., during serialize stalls).
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
+        thread[tid]->updateMergeBufferRetire();
+    }
 
     // Reserve the write phase of ready partial-write RMWs before any thread
     // issues demand accesses. This makes the bank observably write-busy in
@@ -559,6 +565,15 @@ LSQ::recvTimingResp(PacketPtr pkt)
                 pkt->getAddr());
     }
 
+    if (auto *mb_state = dynamic_cast<LSQUnit::MergeBufferDrainSenderState *>(
+            pkt->senderState)) {
+        return mb_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_pf_state =
+                   dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
+                       pkt->senderState)) {
+        return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    }
+
     LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
     panic_if(!request, "Got packet back with unknown sender state\n");
 
@@ -829,10 +844,41 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    thread.at(tid)->forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
 {
     return thread.at(tid)->hasStoresToWB();
+}
+
+std::optional<uint64_t>
+LSQ::youngestMBVersion(ThreadID tid) const
+{
+    return thread.at(tid)->youngestMBVersion();
+}
+
+bool
+LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+{
+    return thread.at(tid)->loadBlockedByMBVersion(load_version);
+}
+
+unsigned
+LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markLoadsHitExternalSnoopAfter(barrier_sn);
+}
+
+unsigned
+LSQ::markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                           const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
 }
 
 int
@@ -888,6 +934,11 @@ LSQ::pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
     auto cacheLineSize = cpu->cacheLineSize();
     bool needs_burst = transferNeedsBurst(addr, size, cacheLineSize);
     LSQRequest *request = nullptr;
+
+    DPRINTF(LSQ,
+            "Creating a request for %s inst [sn:%lli] to addr: %#x "
+            "and size: %u\n",
+            (isLoad ? "load" : "store"), inst->seqNum, addr, size);
 
     // Atomic requests that access data across cache line boundary are
     // currently not allowed since the cache does not guarantee corresponding

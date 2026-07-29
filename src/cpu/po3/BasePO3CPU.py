@@ -263,6 +263,46 @@ class BasePO3CPU(BaseCPU):
     LSQDepCheckShift = Param.Unsigned(
         4, "Number of places to shift addr before check"
     )
+    useMergeBuffer = Param.Bool(False, "Use merge buffer")
+    mergeBufferEntries = Param.Unsigned(
+        32, "Number of entries in " "the merge buffer"
+    )
+    mergeBufferPrefetch = Param.Bool(
+        True,
+        "Prefetch cache line on merge buffer allocation to speed up drains",
+    )
+    storeDeallocateWidth = Param.Unsigned(
+        2, "Number of stores that can retire from the store queue per cycle"
+    )
+    mergeBufferRetireCycles = Param.Cycles(
+        16,
+        "Cycles a merge buffer entry remains in MERGING state before "
+        "retiring and draining",
+    )
+    mbRetireWhenFullValid = Param.Bool(
+        False,
+        "Retire merge buffer entries immediately when all bytes are valid",
+    )
+    mergeBufferMaxUnretire = Param.Unsigned(
+        2,
+        "Max times a merge buffer entry can unretire from RETIRED to MERGING",
+    )
+    mergeBufferResetRetireOnMerge = Param.Bool(
+        False,
+        "If true, reset the retire timer when a new store merges "
+        "into an existing merge buffer entry",
+    )
+    mergeBufferRetireResetCycles = Param.Cycles(
+        64, "Retire window used when resetting an entry on merge"
+    )
+    optimizeStoreRelease = Param.Bool(
+        False,
+        "Enable optimized store-release handling with release buffer tracking",
+    )
+    stlfLoadsBypassMBDrain = Param.Bool(
+        True,
+        "Allow STLF loads at ROB head to bypass MB version stall",
+    )
     LSQCheckLoads = Param.Bool(
         True,
         "Should dependency violations be checked for "

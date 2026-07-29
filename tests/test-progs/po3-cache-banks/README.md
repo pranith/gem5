@@ -20,4 +20,13 @@ build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
     bank_conflict 4
 ```
 
+Enable the PO3 merge buffer and select its capacity and retirement delay:
+
+```sh
+build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
+    bank_conflict 4 --merge-buffer --merge-buffer-entries 32 \
+    --merge-buffer-retire-cycles 64
+```
+
 The relevant statistic is `system.cpu.loadStoreBankConflicts`.
+Merge-buffer statistics are under `system.cpu.lsq0.mb*`.
