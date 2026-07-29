@@ -631,6 +631,20 @@ class CPU : public BaseCPU
     // hardware transactional memory
     void htmSendAbortSignal(ThreadID tid, uint64_t htm_uid,
                             HtmFailureFaultCause cause) override;
+
+    /** Returns whether memory ordering versioning is enabled (stub). */
+    bool
+    versioningEnabled() const
+    {
+        return false;
+    }
+
+    /** Returns whether speculative barrier issue is enabled (stub). */
+    bool
+    speculativeBarrierIssueEnabled() const
+    {
+        return false;
+    }
 };
 
 } // namespace po3

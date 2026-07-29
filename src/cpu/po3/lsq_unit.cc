@@ -75,6 +75,56 @@ namespace gem5
 namespace po3
 {
 
+namespace
+{
+
+uint64_t
+extractValue(const uint8_t *data, size_t size)
+{
+    uint64_t value = 0;
+    const size_t limit = size < sizeof(value) ? size : sizeof(value);
+
+    for (size_t i = 0; i < limit; ++i) {
+        value |= static_cast<uint64_t>(data[i]) << (i * 8);
+    }
+
+    return value;
+}
+
+CachePort
+readPortFor(MemPipe pipe)
+{
+    switch (pipe) {
+      case MemPipe::Load:
+        return CachePort::LoadPipeRead;
+      case MemPipe::LoadStore0:
+        return CachePort::LoadStorePipe0Read;
+      case MemPipe::LoadStore1:
+        return CachePort::LoadStorePipe1Read;
+      case MemPipe::Unassigned:
+        panic("Memory request reached the cache without a memory pipe");
+    }
+    panic("Unknown PO3 memory pipe");
+}
+
+unsigned
+storePipeIndex(MemPipe pipe)
+{
+    switch (pipe) {
+      case MemPipe::LoadStore0:
+        return 0;
+      case MemPipe::LoadStore1:
+        return 1;
+      case MemPipe::Load:
+        panic("Load-only pipe cannot issue a store");
+      case MemPipe::Unassigned:
+        panic("Store reached the merge buffer without a memory pipe");
+    }
+    panic("Unknown PO3 memory pipe");
+}
+
+} // namespace
+
 LSQUnit::WritebackEvent::WritebackEvent(const DynInstPtr &_inst,
                                         PacketPtr _pkt, LSQUnit *lsq_ptr,
                                         bool delete_pkt)
@@ -111,14 +161,70 @@ LSQUnit::WritebackEvent::description() const
 bool
 LSQUnit::recvTimingResp(PacketPtr pkt)
 {
-    LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
-    assert(request != nullptr);
-    bool ret = true;
-    /* Check that the request is still alive before any further action. */
-    if (!request->isReleased()) {
-        ret = request->recvTimingResp(pkt);
+    if (auto *pf_state =
+            dynamic_cast<MergeBufferPrefetchSenderState *>(pkt->senderState)) {
+        assert(mergeBufferPfInFlight > 0);
+        --mergeBufferPfInFlight;
+        delete pf_state;
+        delete pkt;
+        return true;
+    } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
+                   pkt->senderState)) {
+        if (mb_state->entry && mb_state->entry->isAtomic) {
+            LSQRequest *req = mb_state->entry->atomicReq;
+            if (req && !req->isReleased()) {
+                DynInstPtr inst = req->instruction();
+                if (pkt && pkt->getSize() > 0) {
+                    const uint64_t val = extractValue(
+                        pkt->getConstPtr<uint8_t>(), pkt->getSize());
+                    DPRINTF(LSQUnit,
+                            "Atomic drain resp writeback [sn:%llu] PC %s "
+                            "val:%#x size:%u addr:%#x\n",
+                            inst->seqNum, inst->pcState(), val, pkt->getSize(),
+                            pkt->getAddr());
+                }
+                writeback(inst, pkt);
+                req->writebackDone();
+                completeStore(inst->sqIt);
+                if (storeQueue.empty()) {
+                    storeWBIt = storeQueue.end();
+                } else {
+                    storeWBIt = storeQueue.begin();
+                }
+            }
+        }
+        mergeBuffer.handleDrainResp(mb_state->entry, this);
+        delete mb_state;
+        delete pkt;
+        return true;
+    } else {
+        LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
+        assert(request != nullptr);
+        bool ret = true;
+        /* Check that the request is still alive before any further action. */
+        if (!request->isReleased()) {
+            ret = request->recvTimingResp(pkt);
+        }
+        return ret;
     }
-    return ret;
+}
+
+void
+LSQUnit::handleMBDrain(MergeBuffer::MergeBufferEntry *entry)
+{
+    if (!entry) {
+        return;
+    }
+
+    if (isStalled() && entry->blockAddr == stallingMBAddr) {
+        DPRINTF(LSQUnit,
+                "Unstalling, stalling load [sn:%lli] "
+                "load idx:%li MB addr:%#x\n",
+                loadQueue[stallingLoadIdx].instruction()->seqNum,
+                stallingLoadIdx, stallingMBAddr);
+        stalled = false;
+        iewStage->replayMemInst(loadQueue[stallingLoadIdx].instruction());
+    }
 }
 
 void
@@ -251,6 +357,26 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
     po3MemTLBLookupWidth = params.po3MemTLBLookupWidth;
     po3MemCacheAccessWidth = params.po3MemCacheAccessWidth;
 
+    mergeBufferEnabled = params.useMergeBuffer;
+    mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
+    mergeBufferPfInFlight = 0;
+    mbRetireWhenFullValid = params.mbRetireWhenFullValid;
+    optimizeStoreRelease = params.optimizeStoreRelease;
+
+    storeDeallocateWidth = params.storeDeallocateWidth;
+    storeDeallocsThisCycle = 0;
+    lastStoreDeallocCycle = cpu->curCycle();
+    mbStorePipe0Used = false;
+    mbStorePipe1Used = false;
+
+    if (mergeBufferEnabled) {
+        mergeBuffer.init(this, params.mergeBufferEntries, cacheLineSize(),
+                         params.mergeBufferRetireCycles,
+                         params.mergeBufferResetRetireOnMerge,
+                         params.mergeBufferRetireResetCycles,
+                         params.mergeBufferMaxUnretire);
+    }
+
     resetState();
 }
 
@@ -258,6 +384,10 @@ void
 LSQUnit::resetState()
 {
     storesToWB = 0;
+
+    if (mergeBufferEnabled) {
+        mergeBuffer.reset();
+    }
 
     // hardware transactional memory
     // nesting depth
@@ -300,10 +430,18 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "squashed"),
       ADD_STAT(memOrderViolation, statistics::units::Count::get(),
                "Number of memory ordering violations"),
+      ADD_STAT(possibleConsistencyViolation, statistics::units::Count::get(),
+               "Number of possible consistency violations detected"),
       ADD_STAT(squashedStores, statistics::units::Count::get(),
                "Number of stores squashed"),
       ADD_STAT(rescheduledLoads, statistics::units::Count::get(),
                "Number of loads that were rescheduled"),
+      ADD_STAT(sqPartialFwdRescheduledLoads, statistics::units::Count::get(),
+               "Number of loads rescheduled due to partial store queue "
+               "forwarding"),
+      ADD_STAT(mbPartialFwdRescheduledLoads, statistics::units::Count::get(),
+               "Number of loads rescheduled due to partial merge buffer "
+               "forwarding"),
       ADD_STAT(blockedByCache, statistics::units::Count::get(),
                "Number of times an access to memory failed due to the cache "
                "being blocked"),
@@ -315,13 +453,54 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(lqAvgOccupancy, statistics::units::Ratio::get(),
                "Average LQ Occupancy (UsedSlots/TotalSlots)"),
       ADD_STAT(sqAvgOccupancy, statistics::units::Ratio::get(),
-               "Average SQ Occupancy (UsedSlots/TotalSlots)")
+               "Average SQ Occupancy (UsedSlots/TotalSlots)"),
+      ADD_STAT(mbAllocations, statistics::units::Count::get(),
+               "Number of merge buffer entries allocated"),
+      ADD_STAT(mbMerges, statistics::units::Count::get(),
+               "Number of stores merged into existing merge buffer entries"),
+      ADD_STAT(mbRetired, statistics::units::Count::get(),
+               "Number of merge buffer entries retired"),
+      ADD_STAT(mbDrains, statistics::units::Count::get(),
+               "Number of merge buffer entries drained to cache"),
+      ADD_STAT(mbCacheWritePortUses, statistics::units::Count::get(),
+               "Merge buffer drains issued through its cache write port"),
+      ADD_STAT(mbLoadStorePipe0Writes, statistics::units::Count::get(),
+               "Stores written into the merge buffer by load/store pipe 0"),
+      ADD_STAT(mbLoadStorePipe1Writes, statistics::units::Count::get(),
+               "Stores written into the merge buffer by load/store pipe 1"),
+      ADD_STAT(mbDualPipeWriteCycles, statistics::units::Count::get(),
+               "Cycles in which both load/store pipes wrote into the merge "
+               "buffer"),
+      ADD_STAT(mbUnretire, statistics::units::Count::get(),
+               "Number of merge buffer entries unretired from RETIRED state"),
+      ADD_STAT(mbForwards, statistics::units::Count::get(),
+               "Number of loads forwarded from merge buffer"),
+      ADD_STAT(mbFullStoreDeallocStalls, statistics::units::Count::get(),
+               "Stores blocked from dealloc because merge buffer is full"),
+      ADD_STAT(mbForceRetiresOlderVersion, statistics::units::Count::get(),
+               "MB entries force retired due to lower version on same block"),
+      ADD_STAT(mbAvgOccupancy, statistics::units::Ratio::get(),
+               "Average merge buffer occupancy (UsedEntries/TotalEntries)"),
+      ADD_STAT(mbResidencyCycles, statistics::units::Count::get(),
+               "Total cycles entries reside in the merge buffer"),
+      ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
+               "Cycles store WB/dealloc stalled by a barrier at the head"),
+      ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
+               "Sum of SQ occupancy during barrier stall cycles"),
+      ADD_STAT(mbReleaseWaitCycles, statistics::units::Count::get(),
+               "Cycles release MB entries waited for outstanding bytes"),
+      ADD_STAT(mbVersionLoadStallCycles, statistics::units::Count::get(),
+               "Cycles loads waited on older merge buffer versions"),
+      ADD_STAT(barrierReschedulesLSQ, statistics::units::Count::get(),
+               "Instructions rescheduled/replayed due to barrier in LSQ")
 {
     loadToUse.init(0, 299, 10).flags(statistics::nozero);
 
     lqAvgOccupancy.precision(2);
 
     sqAvgOccupancy.precision(2);
+
+    mbAvgOccupancy.precision(2);
 }
 
 void
@@ -345,6 +524,7 @@ LSQUnit::drainSanityCheck() const
     assert(po3TLBLookupStage.empty());
     assert(po3CacheAccessStage.empty());
     assert(partialWriteRMWs.empty());
+    assert(!mergeBufferEnabled || mergeBuffer.isEmpty());
 }
 
 void
@@ -483,14 +663,15 @@ LSQUnit::reserveRMWWriteBank()
             continue;
         }
 
-        const bool port_available = lsq->cachePortAvailable(false);
+        const CachePort port = state.writePort;
+        const bool port_available = lsq->cachePortAvailable(port);
         const bool bank_available =
-            port_available && lsq->cacheBankAvailable(false, pkt->getAddr());
+            port_available && lsq->cacheBankAvailable(port, pkt->getAddr());
         if (bank_available) {
-            lsq->cachePortBusy(false, pkt->getAddr());
+            lsq->cachePortBusy(port, pkt->getAddr());
             state.writeReserved = true;
             DPRINTF(LSQUnit,
-                    "Reserved partial-write RMW bank write at addr %#x\n",
+                    "Reserved merge-buffer-port RMW write at addr %#x\n",
                     pkt->getAddr());
         } else if (port_available) {
             lsq->cacheBankConflict();
@@ -813,7 +994,8 @@ LSQUnit::checkSnoop(PacketPtr pkt)
                 // need to be squashed to prevent possible load reordering.
                 force_squash = true;
             }
-            if (ld_inst->possibleLoadViolation() || force_squash) {
+            if (false) {
+                // if (ld_inst->possibleLoadViolation() || force_squash) {
                 DPRINTF(LSQUnit, "Conflicting load at addr %#x [sn:%lli]\n",
                         pkt->getAddr(), ld_inst->seqNum);
 
@@ -842,6 +1024,112 @@ LSQUnit::checkSnoop(PacketPtr pkt)
     return;
 }
 
+unsigned
+LSQUnit::markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
+{
+    if (loadQueue.empty()) {
+        return 0;
+    }
+
+    unsigned marked = 0;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->seqNum <= barrier_sn || ld_inst->isSquashed()) {
+            continue;
+        }
+
+        // Unlike in checkViolations, we can use isExecuted() here because
+        // the store actually completed updating the cache by this time.
+        if (!ld_inst->isExecuted()) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            continue;
+        }
+
+        if (ld_inst->fault == NoFault) {
+            DPRINTF(LSQUnit,
+                    "Marking load for re-exec due to external snoop "
+                    "[sn:%lli] barrier [sn:%lli]\n",
+                    ld_inst->seqNum, barrier_sn);
+            ld_inst->fault = std::make_shared<ReExec>();
+            if (entry.hasRequest()) {
+                entry.request()->setStateToFault();
+            }
+            ++stats.barrierReschedulesLSQ;
+            ++marked;
+        }
+    }
+
+    return marked;
+}
+
+unsigned
+LSQUnit::markLoadsHitExternalSnoop(uint64_t version)
+{
+    if (loadQueue.empty()) {
+        return 0;
+    }
+
+    unsigned marked = 0;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+
+        if (ld_inst->isSquashed()) {
+            continue;
+        }
+
+        if (ld_inst->getMemOrderVersion() <= version) {
+            continue;
+        }
+
+        // Unlike in checkViolations, we can use isExecuted() here because
+        // the store actually completed updating the cache by this time.
+        if (!ld_inst->isExecuted()) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            continue;
+        }
+
+        if (ld_inst->fault == NoFault) {
+            DPRINTF(LSQUnit,
+                    "Marking load for re-exec due to external snoop "
+                    "[sn:%lli] ver:%llu > %llu\n",
+                    ld_inst->seqNum, ld_inst->getMemOrderVersion(), version);
+            ld_inst->fault = std::make_shared<ReExec>();
+            if (entry.hasRequest()) {
+                entry.request()->setStateToFault();
+            }
+            ++stats.barrierReschedulesLSQ;
+            ++marked;
+        }
+    }
+
+    return marked;
+}
+
+unsigned
+LSQUnit::markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn)
+{
+    // Stub: speculativeBarrierIssueEnabled() is always false, so this is
+    // never called.
+    return 0;
+}
+
 Fault
 LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                          const DynInstPtr &inst)
@@ -861,11 +1149,21 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
             continue;
         }
 
+        auto inst_mem_version = inst->getMemOrderVersion();
+        auto ld_mem_version = ld_inst->getMemOrderVersion();
+        // if a younger load bypassed an older store with older version,
+        // mark this load as a potential violation on snoop
+        bool possible_ordering_hazard =
+            (inst_mem_version < ld_mem_version) && !ld_inst->stlfForwarded();
+
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
             (ld_inst->effAddr + ld_inst->effSize - 1) >> depCheckShift;
 
-        if (inst_eff_addr2 >= ld_eff_addr1 && inst_eff_addr1 <= ld_eff_addr2) {
+        bool addr_overlap = (inst_eff_addr2 >= ld_eff_addr1) &&
+                            (inst_eff_addr1 <= ld_eff_addr2);
+
+        if (addr_overlap) {
             if (inst->isLoad()) {
                 // If this load is to the same block as an external snoop
                 // invalidate that we've observed then the load needs to be
@@ -880,6 +1178,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                         memDepViolator = ld_inst;
 
                         ++stats.memOrderViolation;
+                        if (possible_ordering_hazard && !addr_overlap) {
+                            ++stats.possibleConsistencyViolation;
+                        }
 
                         return std::make_shared<GenericISA::M5PanicFault>(
                             "Detected fault with inst [sn:%lli] and "
@@ -888,13 +1189,21 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                     }
                 }
 
+                // If this load and a younger load have the same version and
+                // the younger load did not see an invalidation snoop yet, we
+                // don't need to mark the younger load as a possible violation
+                // in a weak memory model
+                // if (!needsTSO && cpu->versioningEnabled() &&
+                //    inst_mem_version >= ld_mem_version) {
+                //    ++loadIt;
+                //    continue;
+                //}
                 // Otherwise, mark the load has a possible load violation and
                 // if we see a snoop before it's commited, we need to squash
-                ld_inst->possibleLoadViolation(true);
-                DPRINTF(LSQUnit,
-                        "Found possible load violation at addr: %#x"
-                        " between instructions [sn:%lli] and [sn:%lli]\n",
-                        inst_eff_addr1, inst->seqNum, ld_inst->seqNum);
+                // Do not mark a possible load violation here. A load which
+                // has not actually overlapped this store must not trigger a
+                // later read-after-read squash merely because it observed a
+                // snoop.
             } else {
                 // A load/store incorrectly passed this store.
                 // Check if we already have a violator, or if it's newer
@@ -918,9 +1227,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                     inst->seqNum, ld_inst->seqNum, ld_eff_addr1);
             }
         }
-
         ++loadIt;
     }
+
     return NoFault;
 }
 
@@ -1006,6 +1315,8 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
             auto it = inst->lqIt;
             ++it;
 
+            // Check if any younger loads to the same address executed
+            // before this load
             if (checkLoads) {
                 return checkViolations(it, inst);
             }
@@ -1155,29 +1466,54 @@ LSQUnit::writebackBlockedStore()
 void
 LSQUnit::writebackStores()
 {
+    Cycles now = cpu->curCycle();
+
     if (isStoreBlocked) {
-        DPRINTF(LSQUnit, "Writing back  blocked store\n");
+        DPRINTF(LSQUnit, "Writing back blocked store\n");
         writebackBlockedStore();
     }
 
-    while (storesToWB > 0 && storeWBIt.dereferenceable() &&
-           storeWBIt->valid() && storeWBIt->canWB() &&
-           ((!needsTSO) || (!storeInFlight)) &&
-           lsq->cachePortAvailable(false)) {
+    if (mergeBufferEnabled) {
+        // Keep issuing independent drains while progress is possible. A
+        // partial drain may only start its RMW read here; drainOne() skips
+        // that entry until its X+2 write has the merge buffer's cache port,
+        // allowing another entry to enter the RMW pipeline.
+        while ((!needsTSO || !storeInFlight) && !lsq->cacheBlocked() &&
+               mergeBuffer.drainOne(this)) {
+            if (needsTSO) {
+                break;
+            }
+        }
+    }
 
-        if (isStoreBlocked) {
-            DPRINTF(LSQUnit, "Unable to write back any more stores, cache"
-                             " is blocked!\n");
+    // Track store queue deallocations per cycle for head removals.
+    if (lastStoreDeallocCycle != cpu->curCycle()) {
+        storeDeallocsThisCycle = 0;
+        mbStorePipe0Used = false;
+        mbStorePipe1Used = false;
+        lastStoreDeallocCycle = cpu->curCycle();
+    }
+
+    bool forcedMBRetire = false;
+
+    while (storesToWB > 0 && storeWBIt.dereferenceable() &&
+           storeWBIt->valid() && storeWBIt->canWB()) {
+
+        DPRINTF(LSQUnit, "Trying to drain store at idx:%i PC:%s [sn:%lu]\n",
+                storeWBIt.idx(), storeWBIt->instruction()->pcState(),
+                storeWBIt->instruction()->seqNum);
+
+        if (storeDeallocsThisCycle >= storeDeallocateWidth) {
+            DPRINTF(LSQUnit, "Unable to write back any more stores, store "
+                             " dealloc bandwidth reached!\n");
             break;
         }
 
         // Store didn't write any data so no need to write it back to
         // memory.
         if (storeWBIt->size() == 0) {
-            /* It is important that the preincrement happens at (or before)
-             * the call, as the the code of completeStore checks
-             * storeWBIt. */
             completeStore(storeWBIt++);
+            ++storeDeallocsThisCycle;
             continue;
         }
 
@@ -1187,10 +1523,22 @@ LSQUnit::writebackStores()
         }
 
         assert(storeWBIt->hasRequest());
-        assert(!storeWBIt->committed());
 
         DynInstPtr inst = storeWBIt->instruction();
         LSQRequest *request = storeWBIt->request();
+        bool is_atomic_req = request->mainReq()->isAtomic();
+        const unsigned store_pipe = storePipeIndex(inst->memPipe());
+        constexpr CachePort store_port = CachePort::MergeBufferWrite;
+
+        bool can_use_mb = mergeBufferEnabled &&
+                          !request->mainReq()->isLocalAccess() &&
+                          !request->mainReq()->isLLSC() && !is_atomic_req;
+
+        if (!can_use_mb && isStoreBlocked) {
+            DPRINTF(LSQUnit, "Unable to write back any more stores, cache"
+                             " is blocked!\n");
+            break;
+        }
 
         // Process store conditionals or store release after all previous
         // stores are completed
@@ -1207,84 +1555,258 @@ LSQUnit::writebackStores()
             break;
         }
 
-        storeWBIt->committed() = true;
+        assert(!storeWBIt->committed());
 
-        assert(!inst->memData);
-        inst->memData = new uint8_t[request->_size];
-
-        if (storeWBIt->isAllZeros()) {
-            memset(inst->memData, 0, request->_size);
-        } else {
-            memcpy(inst->memData, storeWBIt->data(), request->_size);
-        }
-
-        request->buildPackets();
-
-        DPRINTF(LSQUnit,
-                "D-Cache: Writing back store idx:%i PC:%s "
-                "to Addr:%#x, data:%#x [sn:%lli]\n",
-                storeWBIt.idx(), inst->pcState(),
-                request->mainReq()->getPaddr(), (int)*(inst->memData),
-                inst->seqNum);
-
-        // @todo: Remove this SC hack once the memory system handles it.
-        if (inst->isStoreConditional()) {
-            // Disable recording the result temporarily.  Writing to
-            // misc regs normally updates the result, but this is not
-            // the desired behavior when handling store conditionals.
-            inst->recordResult(false);
-            bool success = inst->tcBase()->getIsaPtr()->handleLockedWrite(
-                inst.get(), request->mainReq(), cacheBlockMask);
-            inst->recordResult(true);
-            request->packetSent();
-
-            if (!success) {
-                request->complete();
-                // Instantly complete this store.
+        if (can_use_mb) {
+            const bool pipe_used =
+                store_pipe == 0 ? mbStorePipe0Used : mbStorePipe1Used;
+            if (pipe_used) {
                 DPRINTF(LSQUnit,
-                        "Store conditional [sn:%lli] failed.  "
-                        "Instantly completing it.\n",
-                        inst->seqNum);
-                PacketPtr new_pkt = new Packet(*request->packet());
-                WritebackEvent *wb = new WritebackEvent(inst, new_pkt, this);
-                cpu->schedule(wb, curTick() + 1);
+                        "Unable to write store [sn:%lli] into merge buffer: "
+                        "load/store pipe %u input is busy\n",
+                        inst->seqNum, store_pipe);
+                break;
+            }
+
+            bool merged_ok = true;
+            MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
+            MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
+            uint64_t store_version = inst->getMemOrderVersion();
+
+            bool is_release_req = request->mainReq()->isRelease();
+            bool is_release_store =
+                optimizeStoreRelease && can_use_mb && is_release_req;
+
+            std::vector<bool> release_wait_bits;
+            if (is_release_store) {
+                release_wait_bits = mergeBuffer.validVector();
+            }
+            auto clear_self_wait_bit =
+                [this](MergeBuffer::MergeBufferEntry *entry) {
+                    if (!entry || entry->waitBits.empty()) {
+                        return;
+                    }
+                    const size_t idx = mergeBuffer.indexOf(entry);
+                    if (idx != std::numeric_limits<size_t>::max() &&
+                        idx < entry->waitBits.size()) {
+                        entry->waitBits[idx] = false;
+                    }
+                };
+
+            if (request->isSplit()) {
+                // For split stores, make sure both fragments can be merged
+                // before releasing the SQ entry.
+                auto req0 = request->req(0);
+                auto req1 = request->req(1);
+                const size_t size0 = req0->getSize();
+                const size_t size1 = req1->getSize();
+
+                uint64_t store_version = inst->getMemOrderVersion();
+                bool mb_full = false;
+                bool can_merge_both = mergeBuffer.canAcceptSplitStore(
+                    request, store_version, mb_full);
+
+                if (can_merge_both) {
+                    mb_entry = mergeBuffer.addStore(
+                        now, req0->getPaddr(),
+                        reinterpret_cast<uint8_t *>(storeWBIt->data()), size0,
+                        storeWBIt, storeWBIt->isAllZeros());
+
+                    mb_entry2 = mergeBuffer.addStore(
+                        now, req1->getPaddr(),
+                        reinterpret_cast<uint8_t *>(storeWBIt->data()) + size0,
+                        size1, storeWBIt, storeWBIt->isAllZeros());
+
+                    if (!mb_entry || !mb_entry2) {
+                        panic("Only one part of a split store merged!");
+                        merged_ok = false;
+                    }
+                } else {
+                    if (mb_full) {
+                        stats.mbFullStoreDeallocStalls++;
+                    }
+                    merged_ok = false;
+                }
+            } else {
+                mb_entry = mergeBuffer.addStore(
+                    now, request->mainReq()->getPaddr(),
+                    (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
+                    storeWBIt->isAllZeros());
+            }
+
+            DPRINTF(LSQUnit,
+                    "Merge for store idx:%i PC:%s "
+                    "to Addr:%#x, data:%#x [sn:%lli] %s\n",
+                    storeWBIt.idx(), inst->pcState(),
+                    request->mainReq()->getPaddr(), (int)*(storeWBIt->data()),
+                    inst->seqNum,
+                    (mb_entry && merged_ok) ? "accepted" : "blocked");
+
+            if (mb_entry && merged_ok) {
+                if (store_pipe == 0) {
+                    mbStorePipe0Used = true;
+                    ++stats.mbLoadStorePipe0Writes;
+                } else {
+                    mbStorePipe1Used = true;
+                    ++stats.mbLoadStorePipe1Writes;
+                }
+                if (mbStorePipe0Used && mbStorePipe1Used) {
+                    ++stats.mbDualPipeWriteCycles;
+                }
+                if (is_release_req) {
+                    mb_entry->isRelease = true;
+                    if (is_release_store) {
+                        mb_entry->waitBits = release_wait_bits;
+                        clear_self_wait_bit(mb_entry);
+                    }
+                    if (mb_entry2) {
+                        mb_entry2->isRelease = true;
+                        if (is_release_store) {
+                            mb_entry2->waitBits = release_wait_bits;
+                            clear_self_wait_bit(mb_entry2);
+                        }
+                    }
+                    DPRINTF(
+                        LSQUnit,
+                        "Store-release idx:%i tracked via MB entry ver:%llu\n",
+                        storeWBIt.idx(), store_version);
+                }
+                // Should never merge the same store twice.
+                assert(!storeWBIt->completed());
+                // Complete and remove this store from the SQ;
+                // merge buffer owns the data from here on.
                 completeStore(storeWBIt);
+                ++storeDeallocsThisCycle;
                 if (!storeQueue.empty()) {
                     storeWBIt++;
                 } else {
                     storeWBIt = storeQueue.end();
                 }
+            } else {
+                // If a barrier/release store is stalled, force retire MB
+                // entries once to unblock serialization.
+                if (mergeBuffer.isFull()) {
+                    stats.mbFullStoreDeallocStalls++;
+                }
+                if (!forcedMBRetire &&
+                    (inst->isWriteBarrier() || inst->isSerializeBefore() ||
+                     inst->isSerializeAfter() ||
+                     request->mainReq()->isRelease())) {
+                    mergeBuffer.forceRetireAll();
+                    forcedMBRetire = true;
+                }
+                // Unable to merge, stop trying
+                break;
+            }
+        } else if (((!needsTSO) || (!storeInFlight)) &&
+                   lsq->cachePortAvailable(store_port)) {
+
+            storeWBIt->committed() = true;
+
+            assert(!inst->memData);
+            inst->memData = new uint8_t[request->_size];
+
+            if (storeWBIt->isAllZeros()) {
+                memset(inst->memData, 0, request->_size);
+            } else {
+                memcpy(inst->memData, storeWBIt->data(), request->_size);
+            }
+
+            request->buildPackets();
+
+            DPRINTF(LSQUnit,
+                    "D-Cache: Writing back store idx:%i PC:%s "
+                    "to Addr:%#x, data:%#x [sn:%lli]\n",
+                    storeWBIt.idx(), inst->pcState(),
+                    request->mainReq()->getPaddr(), (int)*(inst->memData),
+                    inst->seqNum);
+
+            // @todo: Remove this SC hack once the memory system handles it.
+            if (inst->isStoreConditional()) {
+                // Disable recording the result temporarily.  Writing to
+                // misc regs normally updates the result, but this is not
+                // the desired behavior when handling store conditionals.
+                inst->recordResult(false);
+                bool success = inst->tcBase()->getIsaPtr()->handleLockedWrite(
+                    inst.get(), request->mainReq(), cacheBlockMask);
+                inst->recordResult(true);
+                request->packetSent();
+
+                if (!success) {
+                    request->complete();
+                    // Instantly complete this store.
+                    DPRINTF(LSQUnit,
+                            "Store conditional [sn:%lli] failed.  "
+                            "Instantly completing it.\n",
+                            inst->seqNum);
+
+                    PacketPtr new_pkt = new Packet(*request->packet());
+                    WritebackEvent *wb =
+                        new WritebackEvent(inst, new_pkt, this);
+                    cpu->schedule(wb, curTick() + 1);
+                    completeStore(storeWBIt);
+                    ++storeDeallocsThisCycle;
+                    if (!storeQueue.empty()) {
+                        storeWBIt++;
+                    } else {
+                        storeWBIt = storeQueue.end();
+                    }
+                    continue;
+                }
+            }
+
+            if (request->mainReq()->isLocalAccess()) {
+                assert(!inst->isStoreConditional());
+                assert(!inst->inHtmTransactionalState());
+                gem5::ThreadContext *thread = cpu->tcBase(lsqID);
+                PacketPtr main_pkt =
+                    new Packet(request->mainReq(), MemCmd::WriteReq);
+                main_pkt->dataStatic(inst->memData);
+                request->mainReq()->localAccessor(thread, main_pkt);
+                delete main_pkt;
+                completeStore(storeWBIt);
+                storeWBIt++;
+                ++storeDeallocsThisCycle;
                 continue;
             }
-        }
+            /* Send to cache */
+            request->sendPacketToCache();
 
-        if (request->mainReq()->isLocalAccess()) {
-            assert(!inst->isStoreConditional());
-            assert(!inst->inHtmTransactionalState());
-            gem5::ThreadContext *thread = cpu->tcBase(lsqID);
-            PacketPtr main_pkt =
-                new Packet(request->mainReq(), MemCmd::WriteReq);
-            main_pkt->dataStatic(inst->memData);
-            request->mainReq()->localAccessor(thread, main_pkt);
-            delete main_pkt;
-            completeStore(storeWBIt);
-            storeWBIt++;
-            continue;
-        }
-        /* Send to cache */
-        request->sendPacketToCache();
-
-        /* If successful, do the post send */
-        if (request->isSent()) {
-            storePostSend();
+            /* If successful, do the post send */
+            if (request->isSent()) {
+                storePostSend();
+                ++storeDeallocsThisCycle;
+            } else {
+                DPRINTF(LSQUnit,
+                        "D-Cache became blocked when writing [sn:%lli], "
+                        "will retry later\n",
+                        inst->seqNum);
+            }
         } else {
+            // This store must use the write port associated with the
+            // load/store pipe on which it issued.
             DPRINTF(LSQUnit,
-                    "D-Cache became blocked when writing [sn:%lli], "
-                    "will retry later\n",
+                    "Unable to write back store [sn:%lli]: its load/store "
+                    "pipe write port is busy\n",
                     inst->seqNum);
+            break;
         }
+        assert(storesToWB >= 0);
     }
-    assert(storesToWB >= 0);
+}
+
+void
+LSQUnit::updateMergeBufferRetire()
+{
+    if (!mergeBufferEnabled) {
+        return;
+    }
+    if (mergeBuffer.isEmpty()) {
+        return;
+    }
+
+    mergeBuffer.updateRetiredEntries(cpu->curCycle());
+    cpu->activityThisCycle();
 }
 
 void
@@ -1513,6 +2035,8 @@ void
 LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
 {
     assert(store_idx->valid());
+    assert(!store_idx->completed());
+
     store_idx->completed() = true;
     --storesToWB;
     // A bit conservative because a store completion may not free up entries,
@@ -1576,6 +2100,18 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
     bool cache_got_blocked = false;
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(data_pkt->senderState);
+    const bool isMergeBufferPkt = request == nullptr;
+    CachePort data_port = CachePort::MergeBufferWrite;
+    if (isLoad) {
+        if (isMergeBufferPkt) {
+            data_port =
+                lsq->cachePortAvailable(CachePort::LoadStorePipe0Read)
+                    ? CachePort::LoadStorePipe0Read
+                    : CachePort::LoadStorePipe1Read;
+        } else {
+            data_port = readPortFor(request->instruction()->memPipe());
+        }
+    }
 
     const bool partial_write =
         !isLoad && data_pkt->isWrite() &&
@@ -1586,14 +2122,18 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         // Cycle X: read the bank. The packet remains local while the old and
         // new bytes merge in X+1, then it is sent during the reserved write
         // phase in X+2.
-        const bool port_available = lsq->cachePortAvailable(true);
+        constexpr CachePort rmw_read_port = CachePort::MergeBufferRead;
+        constexpr CachePort rmw_write_port = CachePort::MergeBufferWrite;
+        const bool port_available =
+            lsq->cachePortAvailable(rmw_read_port);
         const bool bank_available =
             port_available &&
-            lsq->cacheBankAvailable(true, data_pkt->getAddr());
+            lsq->cacheBankAvailable(rmw_read_port, data_pkt->getAddr());
         if (!lsq->cacheBlocked() && bank_available) {
-            lsq->cachePortBusy(true, data_pkt->getAddr());
-            partialWriteRMWs.emplace(data_pkt,
-                                     PartialWriteRMWState{Cycles(2), false});
+            lsq->cachePortBusy(rmw_read_port, data_pkt->getAddr());
+            partialWriteRMWs.emplace(
+                data_pkt,
+                PartialWriteRMWState{Cycles(2), false, rmw_write_port});
             DPRINTF(LSQUnit,
                     "Started partial-write RMW bank read at addr %#x\n",
                     data_pkt->getAddr());
@@ -1606,18 +2146,22 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         }
         ret = false;
     } else if (partial_write && !rmw_it->second.writeReserved) {
+        data_port = rmw_it->second.writePort;
         // X+1 is the merge-only cycle. A write phase which could not reserve
         // its bank at X+2 also waits here for the next reservation cycle.
         ret = false;
     } else {
         const bool bank_reserved =
             partial_write && rmw_it->second.writeReserved;
+        if (bank_reserved) {
+            data_port = rmw_it->second.writePort;
+        }
         const bool port_available =
-            bank_reserved || lsq->cachePortAvailable(isLoad);
+            bank_reserved || lsq->cachePortAvailable(data_port);
         const bool bank_available =
             bank_reserved ||
             (port_available &&
-             lsq->cacheBankAvailable(isLoad, data_pkt->getAddr()));
+             lsq->cacheBankAvailable(data_port, data_pkt->getAddr()));
 
         if (!lsq->cacheBlocked() && bank_available) {
             if (!dcachePort->sendTimingReq(data_pkt)) {
@@ -1637,7 +2181,15 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
             if (bank_reserved) {
                 partialWriteRMWs.erase(rmw_it);
             } else {
-                lsq->cachePortBusy(isLoad, data_pkt->getAddr());
+                lsq->cachePortBusy(data_port, data_pkt->getAddr());
+            }
+            if (isMergeBufferPkt && !isLoad) {
+                assert(data_port == CachePort::MergeBufferWrite);
+                ++stats.mbCacheWritePortUses;
+                DPRINTF(LSQUnit,
+                        "Merge-buffer drain used its cache write port "
+                        "at addr %#x\n",
+                        data_pkt->getAddr());
             }
         } else if (bank_reserved) {
             rmw_it->second.writeReserved = false;
@@ -1645,26 +2197,42 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
     }
 
     if (ret) {
-        if (!isLoad) {
+        // isStoreBlocked belongs exclusively to the direct SQ request at
+        // storeWBIt. A successful merge-buffer drain must not clear a
+        // bank-conflicted SQ store's retry state, or that store remains
+        // committed without an outstanding packet or a future retry.
+        if (!isLoad && !isMergeBufferPkt) {
             isStoreBlocked = false;
         }
-        request->packetSent();
+        if (!isMergeBufferPkt) {
+            request->packetSent();
+        }
     } else {
         if (cache_got_blocked) {
             lsq->cacheBlocked(true);
             ++stats.blockedByCache;
         }
-        if (!isLoad) {
+        if (!isLoad && !isMergeBufferPkt) {
             assert(request == storeWBIt->request());
             isStoreBlocked = true;
         }
-        request->packetNotSent();
+        if (!isMergeBufferPkt) {
+            request->packetNotSent();
+        }
     }
-    DPRINTF(LSQUnit,
-            "Memory request (pkt: %s) from inst [sn:%llu] was"
-            " %ssent (cache is blocked: %d, cache_got_blocked: %d)\n",
-            data_pkt->print(), request->instruction()->seqNum,
-            ret ? "" : "not ", lsq->cacheBlocked(), cache_got_blocked);
+    if (!isMergeBufferPkt) {
+        DPRINTF(LSQUnit,
+                "Memory request (pkt: %s) from inst [sn:%llu] was"
+                " %ssent (cache is blocked: %d, cache_got_blocked: %d)\n",
+                data_pkt->print(), request->instruction()->seqNum,
+                ret ? "" : "not ", lsq->cacheBlocked(), cache_got_blocked);
+    } else {
+        DPRINTF(LSQUnit,
+                "Merge buffer request (pkt: %s) was %ssent "
+                "(cache blocked: %d, cache_got_blocked: %d)\n",
+                data_pkt->print(), ret ? "" : "not ", lsq->cacheBlocked(),
+                cache_got_blocked);
+    }
     return ret;
 }
 
@@ -1794,10 +2362,10 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
     }
 
     DPRINTF(LSQUnit,
-            "Read called, load idx: %i, store idx: %i, "
+            "[sn:%lli] Read called, load idx: %i, store idx: %i, "
             "storeHead: %i addr: %#x%s\n",
-            load_idx - 1, load_inst->sqIt._idx, storeQueue.head() - 1,
-            request->mainReq()->getPaddr(),
+            load_inst->seqNum, load_idx - 1, load_inst->sqIt._idx,
+            storeQueue.head() - 1, request->mainReq()->getPaddr(),
             request->isSplit() ? " split" : "");
 
     if (request->mainReq()->isLLSC()) {
@@ -1999,6 +2567,7 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 load_inst->clearIssued();
                 load_inst->effAddrValid(false);
                 ++stats.rescheduledLoads;
+                ++stats.sqPartialFwdRescheduledLoads;
 
                 // Do not generate a writeback event as this instruction is not
                 // complete.
@@ -2012,6 +2581,118 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 load_entry.setRequest(nullptr);
                 return NoFault;
             }
+        }
+    }
+
+    Addr stallBlockAddr = 0;
+    // Check merge buffer entries for forwarding.
+    if (mergeBufferEnabled) {
+        AddrRangeCoverage coverage;
+        if (request->isSplit()) {
+            Addr first_part_addr = request->req(0)->getPaddr();
+            size_t first_access_size = request->req(0)->getSize();
+            Addr second_part_addr = request->req(1)->getPaddr();
+            size_t second_access_size = request->req(1)->getSize();
+
+            coverage = mergeBuffer.forwardCoverage(first_part_addr,
+                                                   first_access_size);
+
+            // TODO: forward from both MB entries if possible
+            if (coverage == AddrRangeCoverage::NoAddrRangeCoverage) {
+                coverage = mergeBuffer.forwardCoverage(second_part_addr,
+                                                       second_access_size);
+                stallBlockAddr = second_part_addr & cacheBlockMask;
+            } else {
+                stallBlockAddr = first_part_addr & cacheBlockMask;
+            }
+
+            // For split requests, even if we can fully forward the data from
+            // the MB, we replay the load only after the MB is drained
+            if (coverage != AddrRangeCoverage::NoAddrRangeCoverage) {
+                coverage = AddrRangeCoverage::PartialAddrRangeCoverage;
+            }
+
+        } else {
+            coverage = mergeBuffer.forwardCoverage(
+                request->mainReq()->getPaddr(), request->mainReq()->getSize());
+        }
+
+        if (coverage == AddrRangeCoverage::FullAddrRangeCoverage) {
+            if (!load_inst->memData) {
+                load_inst->memData =
+                    new uint8_t[request->mainReq()->getSize()];
+            }
+            if (mergeBuffer.forwardData(request->mainReq()->getPaddr(),
+                                        load_inst->memData,
+                                        request->mainReq()->getSize())) {
+
+                DPRINTF(LSQUnit,
+                        "Forwarding from merge buffer to load to "
+                        "addr %#x\n",
+                        request->mainReq()->getVaddr());
+
+                PacketPtr data_pkt =
+                    new Packet(request->mainReq(), MemCmd::ReadReq);
+                data_pkt->dataStatic(load_inst->memData);
+
+                if (request->isAnyOutstandingRequest()) {
+                    assert(request->_numOutstandingPackets > 0);
+                    // There are memory requests packets in flight already.
+                    // This may happen if the store was not complete the
+                    // first time this load got executed. Signal the senderSate
+                    // that response packets should be discarded.
+                    request->discard();
+                    // Avoid checking snoops on this discarded request.
+                    load_entry.setRequest(nullptr);
+                }
+
+                ++stats.mbForwards;
+
+                // load_inst->setExecuted();
+                // load_inst->completeAcc(nullptr);
+                // request->packetSent();
+                // request->complete();
+                WritebackEvent *wb =
+                    new WritebackEvent(load_inst, data_pkt, this);
+                cpu->schedule(wb, cpu->clockEdge(Cycles(1)));
+                return NoFault;
+            }
+        } else if (coverage == AddrRangeCoverage::PartialAddrRangeCoverage) {
+            if (!stalled ||
+                (stalled &&
+                 load_inst->seqNum <
+                     loadQueue[stallingLoadIdx].instruction()->seqNum)) {
+                stalled = true;
+                if (!request->isSplit()) {
+                    stallingMBAddr =
+                        request->mainReq()->getPaddr() & cacheBlockMask;
+                } else {
+                    stallingMBAddr = stallBlockAddr;
+                }
+                stallingStoreIsn = 0;
+                stallingLoadIdx = load_idx;
+            }
+
+            // Tell IQ/mem dep unit that this instruction will need to be
+            // rescheduled eventually
+            iewStage->rescheduleMemInst(load_inst);
+            load_inst->clearIssued();
+            load_inst->effAddrValid(false);
+            ++stats.rescheduledLoads;
+            ++stats.mbPartialFwdRescheduledLoads;
+
+            // Do not generate a writeback event as this instruction is not
+            // complete.
+            DPRINTF(LSQUnit,
+                    "Load-store forwarding mis-match. "
+                    "Merge buffer to load addr %#x\n",
+                    request->mainReq()->getVaddr());
+
+            // Must discard the request.
+            request->discard();
+            load_entry.setRequest(nullptr);
+
+            return NoFault;
         }
     }
 
@@ -2113,6 +2794,405 @@ LSQEntry::~LSQEntry()
     }
 }
 
+LSQUnit::MergeBuffer::MergeBufferEntry *
+LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
+                               size_t size,
+                               typename StoreQueue::iterator store_it,
+                               bool is_all_zero)
+{
+    Addr currAddr = addr;
+    size_t remaining = size;
+    MergeBufferEntry *last_entry = nullptr;
+
+    while (remaining > 0) {
+        Addr lineAddr = currAddr & ~(lineSize - 1);
+        uint32_t offset = currAddr & (lineSize - 1);
+        size_t chunk = std::min(lineSize - offset, remaining);
+
+        auto it = std::find_if(entries.begin(), entries.end(),
+                               [lineAddr](const MergeBufferEntry &e) {
+                                   return e.valid && e.blockAddr == lineAddr;
+                               });
+
+        if (it != entries.end()) {
+
+            if (it->isAtomic) {
+                DPRINTF(LSQUnit,
+                        "Blocking merge into atomic MB entry Addr:%#x\n",
+                        lineAddr);
+                return nullptr;
+            }
+
+            if (lsqPtr && lsqPtr->needsTSO && &(*it) != &entries.back()) {
+                DPRINTF(LSQUnit,
+                        "Blocking merge for Addr:%#x; matching MB "
+                        "entry is not the most recent allocation\n",
+                        lineAddr);
+                return nullptr;
+            }
+
+            DPRINTF(LSQUnit,
+                    "Found an existing MB entry for Addr:%#x retiring in %lu, "
+                    "now:%lu\n",
+                    lineAddr, it->retireCycle, now);
+            if (it->state == EntryState::RETIRED &&
+                it->unretireCount < maxUnretire) {
+                // Allow unretire if new data arrives later.
+                it->state = EntryState::MERGING;
+                it->retireCycle = now + retireWindow;
+                it->unretireCount++;
+                if (lsqPtr) {
+                    lsqPtr->stats.mbUnretire++;
+                }
+            } else if (it->state != EntryState::MERGING) {
+                DPRINTF(LSQUnit, "MB entry for Addr:%#x marked %s\n", lineAddr,
+                        (it->state == EntryState::RETIRED) ? "RETIRED"
+                        : (it->state == EntryState::DRAINING)
+                            ? "DRAINING"
+                            : "FORCE_RETIRED");
+                return nullptr;
+            }
+
+            updateEntry(*it, data + (currAddr - addr), offset, chunk,
+                        is_all_zero);
+
+            if (!it->baseReq) {
+                it->baseReq = std::make_shared<Request>(
+                    *(store_it->request()->mainReq()));
+            }
+            if (resetRetireOnMerge) {
+                it->retireCycle = now + resetRetireWindow;
+            }
+            if (lsqPtr) {
+                lsqPtr->stats.mbMerges++;
+            }
+            last_entry = &(*it);
+        } else {
+            if (entries.size() >= numEntries) {
+                return nullptr;
+            }
+            MergeBufferEntry newEntry(lineSize);
+            newEntry.blockAddr = lineAddr;
+            newEntry.valid = true;
+            newEntry.allocCycle = now;
+            newEntry.retireCycle = now + retireWindow;
+            newEntry.baseReq =
+                std::make_shared<Request>(*(store_it->request()->mainReq()));
+            updateEntry(newEntry, data + (currAddr - addr), offset, chunk,
+                        is_all_zero);
+
+            entries.push_back(std::move(newEntry));
+            last_entry = &entries.back();
+
+            if (lsqPtr && lsqPtr->mergeBufferPrefetchEnabled &&
+                lsqPtr->mergeBufferPfInFlight == 0) {
+                // Prefetch the cache line to speed up later drains.
+                RequestPtr base = store_it->request()->mainReq();
+                Request::Flags flags = base->getFlags() | Request::PREFETCH;
+                RequestorID rid = base->requestorId();
+                RequestPtr pf_req =
+                    std::make_shared<Request>(lineAddr, lineSize, flags, rid);
+                if (base->hasContextId()) {
+                    pf_req->setContext(base->contextId());
+                }
+                if (base->hasPC()) {
+                    pf_req->setPC(base->getPC());
+                }
+                pf_req->taskId(base->taskId());
+
+                PacketPtr pf_pkt = Packet::createRead(pf_req);
+                // Use a soft prefetch so it can go through cache/MSHR
+                // normally.
+                pf_pkt->cmd = MemCmd::SoftPFReq;
+                // Give the packet a data buffer to satisfy downstream asserts.
+                pf_pkt->allocate();
+                pf_pkt->senderState =
+                    new MergeBufferPrefetchSenderState(lsqPtr);
+
+                // Merge-buffer prefetches are opportunistic. Respect both
+                // the read-port and bank constraints, but drop a rejected
+                // prefetch instead of marking the LSQ cache-blocked and
+                // stalling demand traffic behind it.
+                const CachePort port =
+                    lsqPtr->lsq->cachePortAvailable(
+                        CachePort::LoadStorePipe0Read)
+                        ? CachePort::LoadStorePipe0Read
+                        : CachePort::LoadStorePipe1Read;
+                const bool port_available =
+                    lsqPtr->lsq->cachePortAvailable(port);
+                const bool bank_available =
+                    port_available &&
+                    lsqPtr->lsq->cacheBankAvailable(port, lineAddr);
+                if (!lsqPtr->lsq->cacheBlocked() && bank_available &&
+                    lsqPtr->dcachePort->sendTimingReq(pf_pkt)) {
+                    lsqPtr->lsq->cachePortBusy(port, lineAddr);
+                    ++lsqPtr->mergeBufferPfInFlight;
+                } else {
+                    delete static_cast<MergeBufferPrefetchSenderState *>(
+                        pf_pkt->senderState);
+                    delete pf_pkt;
+                }
+            }
+
+            if (lsqPtr) {
+                lsqPtr->stats.mbAllocations++;
+                lsqPtr->stats.mbAvgOccupancy =
+                    (double)entries.size() / (double)numEntries;
+            }
+            // Reset unretire count on new allocations
+            last_entry->unretireCount = 0;
+            DPRINTF(LSQUnit,
+                    "Allocating a new MB entry for Addr:%#x retiring in %lu, "
+                    "now: %lu\n",
+                    lineAddr, now + retireWindow, now);
+        }
+
+        currAddr += chunk;
+        remaining -= chunk;
+    }
+
+    return last_entry;
+}
+
+LSQUnit::MergeBuffer::MergeBufferEntry *
+LSQUnit::MergeBuffer::addAtomic(Cycles now, LSQRequest *request,
+                                typename StoreQueue::iterator store_it,
+                                uint64_t version)
+{
+    if (request->isSplit()) {
+        return nullptr;
+    }
+
+    if (entries.size() >= numEntries) {
+        return nullptr;
+    }
+
+    const Addr paddr = request->mainReq()->getPaddr();
+    const Addr lineAddr = paddr & ~(lineSize - 1);
+
+    MergeBufferEntry newEntry(lineSize);
+    newEntry.blockAddr = lineAddr;
+    newEntry.baseReq =
+        std::make_shared<Request>(*(store_it->request()->mainReq()));
+    newEntry.state = EntryState::RETIRED;
+    newEntry.retireCycle = now;
+    newEntry.allocCycle = now;
+    newEntry.unretireCount = 0;
+    newEntry.valid = true;
+    newEntry.isAtomic = true;
+    newEntry.atomicReq = store_it->request();
+    newEntry.version = version;
+
+    entries.push_back(std::move(newEntry));
+
+    if (lsqPtr) {
+        lsqPtr->stats.mbAllocations++;
+        lsqPtr->stats.mbAvgOccupancy =
+            (double)entries.size() / (double)numEntries;
+    }
+
+    DPRINTF(LSQUnit,
+            "Allocating a new atomic MB entry for Addr:%#x "
+            "now:%lu\n",
+            lineAddr, now);
+
+    return &entries.back();
+}
+
+bool
+LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
+                                          uint64_t version,
+                                          bool &mb_full) const
+{
+    mb_full = false;
+    auto req0 = request->req(0);
+    auto req1 = request->req(1);
+
+    auto addr0 = req0->getPaddr() & ~(lineSize - 1);
+    auto addr1 = req1->getPaddr() & ~(lineSize - 1);
+
+    bool addr0_exists = false;
+    bool addr1_exists = false;
+
+    bool merge_req0 = false;
+    bool merge_req1 = false;
+
+    auto checkAddrMerge = [this](const Addr addr, bool &addr_exists,
+                                 bool &can_merge) {
+        return
+            [this, addr, &addr_exists, &can_merge](const MergeBufferEntry &e) {
+                if (e.blockAddr == addr) {
+                    addr_exists = true;
+
+                    if (e.isAtomic) {
+                        can_merge = false;
+                        return false;
+                    }
+
+                    if (e.state == EntryState::MERGING ||
+                        (e.state == EntryState::RETIRED &&
+                         e.unretireCount < maxUnretire)) {
+                        can_merge = true;
+                    }
+                }
+
+                return false;
+            };
+    };
+
+    std::for_each(entries.begin(), entries.end(),
+                  checkAddrMerge(addr0, addr0_exists, merge_req0));
+    std::for_each(entries.begin(), entries.end(),
+                  checkAddrMerge(addr1, addr1_exists, merge_req1));
+
+    int num_allocs = !addr0_exists + !addr1_exists;
+
+    if (addr0_exists && !merge_req0) {
+        return false;
+    }
+
+    if (addr1_exists && !merge_req1) {
+        return false;
+    }
+
+    size_t valid_entries = entries.size();
+
+    if (valid_entries + num_allocs > numEntries) {
+        mb_full = true;
+        return false;
+    }
+
+    return true;
+}
+
+bool
+LSQUnit::MergeBuffer::canForward(Addr paddr, size_t size) const
+{
+    Addr end = paddr + size;
+    for (const auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        if (entry.isAtomic) {
+            continue;
+        }
+        Addr blk_start = entry.blockAddr;
+        Addr blk_end = entry.blockAddr + lineSize;
+        if (end <= blk_start || paddr >= blk_end) {
+            continue;
+        }
+        size_t offset = paddr - blk_start;
+        size_t to_check = std::min<size_t>(size, lineSize - offset);
+        bool all_present = true;
+        for (size_t i = 0; i < to_check; ++i) {
+            if (!entry.byteValids[offset + i]) {
+                all_present = false;
+                break;
+            }
+        }
+        if (all_present) {
+            return true;
+        }
+    }
+    return false;
+}
+
+LSQUnit::AddrRangeCoverage
+LSQUnit::MergeBuffer::forwardCoverage(Addr paddr, size_t size) const
+{
+    Addr end = paddr + size;
+    for (const auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        if (entry.isAtomic) {
+            continue;
+        }
+        Addr blk_start = entry.blockAddr;
+        Addr blk_end = entry.blockAddr + lineSize;
+        if (end <= blk_start || paddr >= blk_end) {
+            continue;
+        }
+        size_t offset = paddr - blk_start;
+        bool fits = (offset + size) <= lineSize;
+        size_t to_check = std::min<size_t>(size, lineSize - offset);
+        bool all_present = true;
+        bool any_present = false;
+        for (size_t i = 0; i < to_check; ++i) {
+            if (entry.byteValids[offset + i]) {
+                any_present = true;
+            } else {
+                all_present = false;
+            }
+        }
+        if (!any_present) {
+            continue;
+        }
+        if (fits && all_present) {
+            return AddrRangeCoverage::FullAddrRangeCoverage;
+        }
+
+        return AddrRangeCoverage::PartialAddrRangeCoverage;
+    }
+    return AddrRangeCoverage::NoAddrRangeCoverage;
+}
+
+bool
+LSQUnit::MergeBuffer::forwardData(Addr paddr, uint8_t *dst, size_t size) const
+{
+    Addr end = paddr + size;
+    for (const auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        if (entry.isAtomic) {
+            continue;
+        }
+        Addr blk_start = entry.blockAddr;
+        Addr blk_end = entry.blockAddr + lineSize;
+        if (end <= blk_start || paddr >= blk_end) {
+            continue;
+        }
+        size_t offset = paddr - blk_start;
+        bool fits = (offset + size) <= lineSize;
+        size_t to_copy = std::min<size_t>(size, lineSize - offset);
+        bool all_present = true;
+        for (size_t i = 0; i < to_copy; ++i) {
+            if (!entry.byteValids[offset + i]) {
+                all_present = false;
+                break;
+            }
+        }
+        if (!all_present || !fits) {
+            continue;
+        }
+        std::memcpy(dst, &entry.blockData[offset], to_copy);
+        return true;
+    }
+    return false;
+}
+
+void
+LSQUnit::MergeBuffer::updateRetiredEntries(Cycles now)
+{
+    for (auto &entry : entries) {
+        if (entry.valid && entry.state == EntryState::MERGING) {
+
+            bool all_valid =
+                std::all_of(entry.byteValids.begin(), entry.byteValids.end(),
+                            [](bool v) { return v; });
+
+            if (now >= entry.retireCycle ||
+                (lsqPtr && lsqPtr->mbRetireWhenFullValid && all_valid)) {
+                entry.state = EntryState::RETIRED;
+                if (lsqPtr) {
+                    lsqPtr->stats.mbRetired++;
+                }
+            }
+        }
+    }
+}
+
 void
 LSQEntry::clear()
 {
@@ -2155,6 +3235,312 @@ SQEntry::clear()
 LSQUnit::LSQUnit(const LSQUnit &l) : stats(nullptr)
 {
     panic("LSQUnit is not copy-able");
+}
+
+void
+LSQUnit::MergeBuffer::reset()
+{
+    for (auto &entry : entries) {
+        if (!entry.drainPkt) {
+            continue;
+        }
+        if (lsqPtr) {
+            lsqPtr->partialWriteRMWs.erase(entry.drainPkt);
+        }
+        delete static_cast<MergeBufferDrainSenderState *>(
+            entry.drainPkt->senderState);
+        delete entry.drainPkt;
+    }
+    entries.clear();
+}
+
+void
+LSQUnit::MergeBuffer::forceRetireAll()
+{
+    for (auto &entry : entries) {
+        if (!entry.valid) {
+            continue;
+        }
+        if (entry.state == EntryState::MERGING ||
+            entry.state == EntryState::RETIRED) {
+            entry.state = EntryState::FORCE_RETIRED;
+            entry.retireCycle = Cycles(0);
+        }
+    }
+}
+
+void
+LSQUnit::MergeBuffer::forceRetireVersionsBefore(uint64_t version)
+{
+    // Stub: no versioning support, so nothing to do.
+    (void)version;
+}
+
+std::optional<uint64_t>
+LSQUnit::MergeBuffer::oldestVersion() const
+{
+    // Stub: versioning not enabled, return nullopt.
+    return std::nullopt;
+}
+
+size_t
+LSQUnit::MergeBuffer::indexOf(const MergeBufferEntry *entry) const
+{
+    size_t idx = 0;
+    for (const auto &e : entries) {
+        if (&e == entry) {
+            return idx;
+        }
+        ++idx;
+    }
+    return std::numeric_limits<size_t>::max();
+}
+
+std::optional<uint64_t>
+LSQUnit::MergeBuffer::youngestVersion() const
+{
+    if (versionCounts.empty()) {
+        return std::nullopt;
+    }
+    return versionCounts.front().first;
+}
+
+std::optional<uint64_t>
+LSQUnit::youngestMBVersion() const
+{
+    if (!mergeBufferEnabled) {
+        return std::nullopt;
+    }
+    return mergeBuffer.youngestVersion();
+}
+
+bool
+LSQUnit::loadBlockedByMBVersion(uint64_t version) const
+{
+    if (!mergeBufferEnabled || !cpu->versioningEnabled()) {
+        return false;
+    }
+
+    auto youngest = mergeBuffer.youngestVersion();
+    if (!youngest) {
+        return false;
+    }
+
+    return version > *youngest;
+}
+
+bool
+LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
+{
+    auto is_drainable = [](const MergeBufferEntry &entry) {
+        return entry.valid &&
+               (entry.state == EntryState::RETIRED ||
+                entry.state == EntryState::FORCE_RETIRED);
+    };
+
+    // Oldest entry is at the front of the list; enforce FIFO draining in TSO.
+    auto it = entries.begin();
+    while (it != entries.end() && !it->valid) {
+        it = entries.erase(it);
+    }
+
+    if (lsq_ptr->needsTSO) {
+        if (it == entries.end() || !is_drainable(*it)) {
+            return false;
+        }
+    } else {
+        auto can_send_now = [&](MergeBufferEntry &entry) {
+            if (!is_drainable(entry) || !entry.drainPkt) {
+                return false;
+            }
+            auto rmw = lsq_ptr->partialWriteRMWs.find(entry.drainPkt);
+            return rmw == lsq_ptr->partialWriteRMWs.end() ||
+                   rmw->second.writeReserved;
+        };
+        auto can_start = [&](MergeBufferEntry &entry) {
+            if (!is_drainable(entry) || entry.drainPkt) {
+                return false;
+            }
+            // For release entries, check that all wait bits are cleared
+            if (entry.isRelease) {
+                bool deps_clear =
+                    std::none_of(entry.waitBits.begin(), entry.waitBits.end(),
+                                 [](bool v) { return v; });
+                if (!deps_clear) {
+                    if (lsq_ptr) {
+                        lsq_ptr->stats.mbReleaseWaitCycles++;
+                    }
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        // Consume already-reserved RMW writes before starting more reads.
+        it = std::find_if(it, entries.end(), can_send_now);
+        if (it == entries.end()) {
+            it = std::find_if(entries.begin(), entries.end(), can_start);
+        }
+        if (it == entries.end()) {
+            dumpWaitBits();
+            return false;
+        }
+    }
+
+    MergeBufferEntry &entry = *it;
+
+    assert(entry.baseReq);
+    RequestPtr base = entry.baseReq;
+
+    if (entry.isAtomic) {
+        PacketPtr pkt = entry.drainPkt;
+        if (!pkt) {
+            RequestPtr atomic_req = std::make_shared<Request>(*base);
+            pkt = Packet::createWrite(atomic_req);
+            if (atomic_req->getSize() > 0) {
+                uint8_t *buf = new uint8_t[atomic_req->getSize()];
+                std::memset(buf, 0, atomic_req->getSize());
+                pkt->dataDynamic(buf);
+            }
+            pkt->senderState =
+                new MergeBufferDrainSenderState(&entry, lsq_ptr);
+            entry.drainPkt = pkt;
+        }
+
+        const bool rmw_pending =
+            lsq_ptr->partialWriteRMWs.contains(pkt);
+        if (!lsq_ptr->trySendPacket(false, pkt)) {
+            return !rmw_pending &&
+                   lsq_ptr->partialWriteRMWs.contains(pkt);
+        }
+        entry.drainPkt = nullptr;
+
+        DPRINTF(LSQUnit,
+                "Sending an atomic MB drain request for addr %#x "
+                "version ver:%llu now:%lli\n",
+                base->getPaddr(), entry.version, lsqPtr->cpu->curCycle());
+
+        if (lsqPtr) {
+            lsqPtr->stats.mbDrains++;
+        }
+
+        if (lsq_ptr->needsTSO) {
+            lsq_ptr->storeInFlight = true;
+        }
+
+        entry.state = EntryState::DRAINING;
+        return true;
+    }
+
+    PacketPtr pkt = entry.drainPkt;
+    if (!pkt) {
+        Request::Flags flags = base->getFlags();
+        RequestorID rid = base->requestorId();
+        RequestPtr merged_req =
+            std::make_shared<Request>(entry.blockAddr, lineSize, flags, rid);
+
+        std::vector<bool> byte_enable = entry.byteValids;
+        bool full_line = std::find(byte_enable.begin(), byte_enable.end(),
+                                   false) == byte_enable.end();
+
+        if (base->hasContextId()) {
+            merged_req->setContext(base->contextId());
+        }
+        if (base->hasPC()) {
+            merged_req->setPC(base->getPC());
+        }
+        merged_req->taskId(base->taskId());
+        merged_req->setByteEnable(byte_enable);
+
+        pkt = full_line ? new Packet(merged_req, MemCmd::WriteLineReq)
+                        : Packet::createWrite(merged_req);
+        uint8_t *buf = new uint8_t[lineSize];
+        std::memcpy(buf, entry.blockData.data(), lineSize);
+        pkt->dataDynamic(buf);
+        pkt->senderState = new MergeBufferDrainSenderState(&entry, lsq_ptr);
+        entry.drainPkt = pkt;
+    }
+
+    const bool rmw_pending = lsq_ptr->partialWriteRMWs.contains(pkt);
+    if (!lsq_ptr->trySendPacket(false, pkt)) {
+        return !rmw_pending && lsq_ptr->partialWriteRMWs.contains(pkt);
+    }
+    entry.drainPkt = nullptr;
+
+    if (lsqPtr) {
+        lsqPtr->stats.mbDrains++;
+    }
+
+    if (lsq_ptr->needsTSO) {
+        lsq_ptr->storeInFlight = true;
+    }
+
+    entry.state = EntryState::DRAINING;
+    return true;
+}
+
+void
+LSQUnit::MergeBuffer::dumpWaitBits() const
+{
+    auto stateStr = [](EntryState state) -> const char * {
+        switch (state) {
+            case EntryState::MERGING:
+                return "MERGING";
+            case EntryState::RETIRED:
+                return "RETIRED";
+            case EntryState::DRAINING:
+                return "DRAINING";
+            case EntryState::FORCE_RETIRED:
+                return "FORCE_RETIRED";
+        }
+        return "UNKNOWN";
+    };
+
+    size_t idx = 0;
+    for (const auto &e : entries) {
+        if (!e.valid) {
+            ++idx;
+            continue;
+        }
+        std::string bits;
+        bits.reserve(e.waitBits.size());
+        for (bool b : e.waitBits) {
+            bits.push_back(b ? '1' : '0');
+        }
+        DPRINTF(LSQUnit,
+                "MB[%llu] ver:%llu state:%s release:%d waitBits:%s "
+                "alloc:%llu retire:%llu\n",
+                (unsigned long long)idx, (unsigned long long)e.version,
+                stateStr(e.state), e.isRelease,
+                bits.empty() ? "-" : bits.c_str(),
+                (unsigned long long)e.allocCycle,
+                (unsigned long long)e.retireCycle);
+        ++idx;
+    }
+}
+
+void
+LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
+                                      LSQUnit *lsq_ptr)
+{
+    assert(entry);
+    if (!entry) {
+        return;
+    }
+
+    DPRINTF(LSQUnit,
+            "Drain response for merge buffer entry with "
+            "block addr:%#x cycle:%lu\n",
+            entry->blockAddr, lsq_ptr->cpu->curCycle());
+
+    lsq_ptr->stats.mbResidencyCycles +=
+        lsq_ptr->cpu->curCycle() - entry->allocCycle;
+    lsq_ptr->handleMBDrain(entry);
+
+    entries.remove_if(
+        [entry](const MergeBufferEntry &e) { return &e == entry; });
+    lsq_ptr->stats.mbAvgOccupancy =
+        static_cast<double>(entries.size()) / numEntries;
 }
 
 } // namespace po3

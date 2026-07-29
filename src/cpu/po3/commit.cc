@@ -42,6 +42,7 @@
 #include "cpu/po3/commit.hh"
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -103,6 +104,7 @@ Commit::processTrapEvent(ThreadID tid)
 
 Commit::Commit(CPU *_cpu, const BasePO3CPUParams &params)
     : commitPolicy(params.smtCommitPolicy),
+      stlfLoadsBypassMBDrain(params.stlfLoadsBypassMBDrain),
       cpu(_cpu),
       iewToCommitDelay(params.iewToCommitDelay),
       commitToIEWDelay(params.commitToIEWDelay),
@@ -194,7 +196,15 @@ Commit::CommitStats::CommitStats(CPU *cpu, Commit *commit)
       ADD_STAT(committedInstType, statistics::units::Count::get(),
                "Class of committed instruction"),
       ADD_STAT(commitEligibleSamples, statistics::units::Cycle::get(),
-               "number cycles where commit BW limit reached")
+               "number cycles where commit BW limit reached"),
+      ADD_STAT(
+          mbVersionLoadStallSameStlfVersion, statistics::units::Count::get(),
+          "Loads stalled by MB version that were also STLF-forwarded with "
+          "same version"),
+      ADD_STAT(barrierHeadNotExecuted, statistics::units::Count::get(),
+               "Barriers at ROB head not yet executed"),
+      ADD_STAT(commitBarrierDrainStallCycles, statistics::units::Count::get(),
+               "Cycles stalled draining stores at barrier commit")
 {
     using namespace statistics;
 
@@ -922,7 +932,8 @@ Commit::commit()
         // @todo: Make this handle multi-cycle communication between
         // commit and IEW.
         if (checkEmptyROB[tid] && rob->isEmpty(tid) &&
-            !iewStage->hasStoresToWB(tid) && !committedStores[tid]) {
+            (cpu->versioningEnabled() || !iewStage->hasStoresToWB(tid)) &&
+            !committedStores[tid]) {
             checkEmptyROB[tid] = false;
             toIEW->commitInfo[tid].usedROB = true;
             toIEW->commitInfo[tid].emptyROB = true;
@@ -1182,11 +1193,30 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
-            DPRINTF(Commit,
-                    "[tid:%i] [sn:%llu] "
-                    "Waiting for all stores to writeback.\n",
-                    tid, head_inst->seqNum);
+        bool need_store_drain = iewStage->hasStoresToWB(tid);
+
+        // AcquirePC can bypass store drain. Acquire RC needs to wait for
+        // possible store release in the MB to drain.
+        const bool bypass_mb_drain = head_inst->staticInst->isAcquirePC();
+
+        if (bypass_mb_drain) {
+            need_store_drain = false;
+        }
+
+        if (head_inst->isReadBarrier() || head_inst->isWriteBarrier()) {
+            ++stats.barrierHeadNotExecuted;
+            iewStage->forceMBDrain(tid);
+        }
+
+        if (inst_num > 0 || need_store_drain) {
+            // Drain the merge buffer to reduce stall.
+            if (need_store_drain) {
+                ++stats.commitBarrierDrainStallCycles;
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] "
+                        "Waiting for all stores to writeback.\n",
+                        tid, head_inst->seqNum);
+            }
             return false;
         }
 
@@ -1229,6 +1259,61 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         }
         // If this point is reached and the fault inherits from the HTM fault,
         // then there is no need to raise a new fault
+    }
+
+    if (cpu->versioningEnabled()) {
+        // The load at the head of the ROB needs to wait for older stores to
+        // drain if its version is greater than the lowest MB version
+        if (head_inst->isLoad() && inst_fault == NoFault &&
+            iewStage->loadBlockedByMBVersion(
+                tid, head_inst->getMemOrderVersion())) {
+            if (head_inst->stlfForwarded() &&
+                head_inst->stlfVersion() == head_inst->getMemOrderVersion()) {
+                stats.mbVersionLoadStallSameStlfVersion++;
+            }
+            if (!head_inst->stlfForwarded() || !stlfLoadsBypassMBDrain) {
+                auto youngest_mb_version = iewStage->youngestMBVersion(tid);
+                DPRINTF(Commit,
+                        "Stalling commit of load [tid:%i] [sn:%llu] ver:%llu "
+                        "until "
+                        "merge buffer versions <= ver:%llu drain.\n",
+                        tid, head_inst->seqNum,
+                        head_inst->getMemOrderVersion(),
+                        youngest_mb_version ? *youngest_mb_version : 0);
+                iewStage->forceMBDrain(tid);
+                return false;
+            }
+        }
+    }
+
+    if (cpu->speculativeBarrierIssueEnabled() && inst_fault == NoFault &&
+        head_inst->isReadBarrier()) {
+
+        if (!head_inst->staticInst->isRelease()) {
+            // A read barrier that is not release will squash and re-execute
+            // younger loads that saw a snoop.
+            const unsigned marked = iewStage->markLoadsHitExternalSnoopAfter(
+                tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u load(s) for re-exec "
+                        "due to external snoops at barrier commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
+        } else {
+            // A RCsc release barrier will check only snooped acquire loads to
+            // squash
+            const unsigned marked =
+                iewStage->markAcquireLoadsHitExternalSnoopAfter(
+                    tid, head_inst->seqNum);
+            if (marked) {
+                DPRINTF(Commit,
+                        "[tid:%i] [sn:%llu] Marked %u acquire load(s) for "
+                        "re-exec due to external snoops at release barrier "
+                        "commit\n",
+                        tid, head_inst->seqNum, marked);
+            }
+        }
     }
 
     // Stores mark themselves as completed.
@@ -1303,8 +1388,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
 
     updateComInstStats(head_inst);
 
-    DPRINTF(Commit, "[tid:%i] [sn:%llu] Committing instruction with PC %s\n",
-            tid, head_inst->seqNum, head_inst->pcState());
+    DPRINTF(
+        Commit, "[tid:%i] [sn:%llu] Committing instruction with PC:%s %s\n",
+        tid, head_inst->seqNum, head_inst->pcState(),
+        head_inst->staticInst->disassemble(head_inst->pcState().instAddr()));
 
     if (head_inst->isReturn()) {
         DPRINTF(Commit,
@@ -1342,7 +1429,6 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
         committedStores[tid] = true;
     }
 
-    // Return true to indicate that we have committed an instruction.
     return true;
 }
 
