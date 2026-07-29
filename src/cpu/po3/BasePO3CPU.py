@@ -72,10 +72,10 @@ class BasePO3CPU(BaseCPU):
     activity = Param.Unsigned(0, "Initial count")
 
     cacheStorePorts = Param.Unsigned(
-        200, "Number of D-cache write ports available per cycle"
+        1, "Merge-buffer D-cache write ports available per cycle"
     )
     cacheLoadPorts = Param.Unsigned(
-        200, "Number of D-cache read ports available per cycle"
+        3, "One D-cache read port mapped to each memory pipe"
     )
     cacheBanks = Param.Unsigned(
         1,
@@ -184,7 +184,7 @@ class BasePO3CPU(BaseCPU):
         True, "Enable PO3 explicit commit/retire stage"
     )
     po3CommitLatency = Param.Cycles(1, "PO3 commit/retire stage latency")
-    po3CommitStageWidth = Param.Unsigned(1, "PO3 commit/retire stage width")
+    po3CommitStageWidth = Param.Unsigned(2, "PO3 commit/retire stage width")
     po3RedirectPipeline = Param.Bool(
         True, "Enable PO3 explicit branch redirect/recovery stage"
     )
@@ -262,6 +262,46 @@ class BasePO3CPU(BaseCPU):
     SQEntries = Param.Unsigned(32, "Number of store queue entries")
     LSQDepCheckShift = Param.Unsigned(
         4, "Number of places to shift addr before check"
+    )
+    useMergeBuffer = Param.Bool(False, "Use merge buffer")
+    mergeBufferEntries = Param.Unsigned(
+        32, "Number of entries in " "the merge buffer"
+    )
+    mergeBufferPrefetch = Param.Bool(
+        True,
+        "Prefetch cache line on merge buffer allocation to speed up drains",
+    )
+    storeDeallocateWidth = Param.Unsigned(
+        2, "Number of stores that can retire from the store queue per cycle"
+    )
+    mergeBufferRetireCycles = Param.Cycles(
+        16,
+        "Cycles a merge buffer entry remains in MERGING state before "
+        "retiring and draining",
+    )
+    mbRetireWhenFullValid = Param.Bool(
+        False,
+        "Retire merge buffer entries immediately when all bytes are valid",
+    )
+    mergeBufferMaxUnretire = Param.Unsigned(
+        2,
+        "Max times a merge buffer entry can unretire from RETIRED to MERGING",
+    )
+    mergeBufferResetRetireOnMerge = Param.Bool(
+        False,
+        "If true, reset the retire timer when a new store merges "
+        "into an existing merge buffer entry",
+    )
+    mergeBufferRetireResetCycles = Param.Cycles(
+        64, "Retire window used when resetting an entry on merge"
+    )
+    optimizeStoreRelease = Param.Bool(
+        False,
+        "Enable optimized store-release handling with release buffer tracking",
+    )
+    stlfLoadsBypassMBDrain = Param.Bool(
+        True,
+        "Allow STLF loads at ROB head to bypass MB version stall",
     )
     LSQCheckLoads = Param.Bool(
         True,

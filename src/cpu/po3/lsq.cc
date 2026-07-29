@@ -114,8 +114,22 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU *_cpu)
       ADD_STAT(numSendRetryResp, statistics::units::Count::get(),
                "Number of retry responses sent"),
       ADD_STAT(loadStoreBankConflicts, statistics::units::Count::get(),
-               "Number of D-cache accesses rejected due to a read/write "
-               "bank conflict")
+               "Number of D-cache accesses rejected due to a load/store "
+               "bank conflict"),
+      ADD_STAT(loadPipeReadPortUses, statistics::units::Count::get(),
+               "Uses of the load-only pipe's D-cache read port"),
+      ADD_STAT(loadStorePipe0ReadPortUses, statistics::units::Count::get(),
+               "Uses of load/store pipe 0's D-cache read port"),
+      ADD_STAT(loadStorePipe1ReadPortUses, statistics::units::Count::get(),
+               "Uses of load/store pipe 1's D-cache read port"),
+      ADD_STAT(mergeBufferReadPortUses, statistics::units::Count::get(),
+               "RMW read phases using the merge-buffer cache port"),
+      ADD_STAT(mergeBufferWritePortUses, statistics::units::Count::get(),
+               "Writes using the merge-buffer cache port"),
+      ADD_STAT(writePortUseCycles0, statistics::units::Count::get(),
+               "Cycles in which the merge-buffer cache write port is idle"),
+      ADD_STAT(writePortUseCycles1, statistics::units::Count::get(),
+               "Cycles in which the merge-buffer cache write port is used")
 {
     recvRespAvgBW.precision(2);
     recvRespAvgBW = numRecvRespBytes / _cpu->baseStats.numCycles;
@@ -138,6 +152,10 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
       usedStorePorts(0),
       cacheLoadPorts(params.cacheLoadPorts),
       usedLoadPorts(0),
+      loadPipeReadPortUsed(false),
+      loadStorePipe0ReadPortUsed(false),
+      loadStorePipe1ReadPortUsed(false),
+      mergeBufferCachePortUsed(false),
       cacheBanks(params.cacheBanks),
       loadBanksUsed(cacheBanks, false),
       storeBanksUsed(cacheBanks, false),
@@ -163,6 +181,9 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
 {
     assert(numThreads > 0 && numThreads <= MaxThreads);
     fatal_if(cacheBanks == 0, "The PO3 D-cache must have at least one bank");
+    fatal_if(cacheLoadPorts != 3 || cacheStorePorts != 1,
+             "PO3 requires three pipe-mapped D-cache read ports and one "
+             "merge-buffer D-cache write port");
 
     //**********************************************
     //************ Handle SMT Parameters ***********
@@ -247,6 +268,10 @@ LSQ::takeOverFrom()
 {
     usedLoadPorts = 0;
     usedStorePorts = 0;
+    loadPipeReadPortUsed = false;
+    loadStorePipe0ReadPortUsed = false;
+    loadStorePipe1ReadPortUsed = false;
+    mergeBufferCachePortUsed = false;
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
     _cacheBlocked = false;
@@ -260,14 +285,37 @@ void
 LSQ::tick()
 {
     // Re-issue loads which exhausted the previous cycle's load ports.
-    if (usedLoadPorts == cacheLoadPorts && !_cacheBlocked) {
+    if (loadPipeReadPortUsed && loadStorePipe0ReadPortUsed &&
+        loadStorePipe1ReadPortUsed && !_cacheBlocked) {
         iewStage->cacheUnblocked();
+    }
+
+    switch (usedStorePorts) {
+      case 0:
+        ++dcachePort.dcachePortStats.writePortUseCycles0;
+        break;
+      case 1:
+        ++dcachePort.dcachePortStats.writePortUseCycles1;
+        break;
+      default:
+        panic("PO3 used %u D-cache write ports in one cycle",
+              usedStorePorts);
     }
 
     usedLoadPorts = 0;
     usedStorePorts = 0;
+    loadPipeReadPortUsed = false;
+    loadStorePipe0ReadPortUsed = false;
+    loadStorePipe1ReadPortUsed = false;
+    mergeBufferCachePortUsed = false;
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
+
+    // Ensure merge buffer retirement progresses even when no stores are
+    // actively being written back (e.g., during serialize stalls).
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
+        thread[tid]->updateMergeBufferRetire();
+    }
 
     // Reserve the write phase of ready partial-write RMWs before any thread
     // issues demand accesses. This makes the bank observably write-busy in
@@ -294,15 +342,20 @@ LSQ::cacheBlocked(bool v)
 }
 
 bool
-LSQ::cachePortAvailable(bool is_load) const
+LSQ::cachePortAvailable(CachePort port) const
 {
-    bool ret;
-    if (is_load) {
-        ret = usedLoadPorts < cacheLoadPorts;
-    } else {
-        ret = usedStorePorts < cacheStorePorts;
+    switch (port) {
+      case CachePort::LoadPipeRead:
+        return cacheLoadPorts >= 1 && !loadPipeReadPortUsed;
+      case CachePort::LoadStorePipe0Read:
+        return cacheLoadPorts >= 2 && !loadStorePipe0ReadPortUsed;
+      case CachePort::LoadStorePipe1Read:
+        return cacheLoadPorts >= 3 && !loadStorePipe1ReadPortUsed;
+      case CachePort::MergeBufferRead:
+      case CachePort::MergeBufferWrite:
+        return cacheStorePorts >= 1 && !mergeBufferCachePortUsed;
     }
-    return ret;
+    panic("Unknown PO3 cache port");
 }
 
 unsigned
@@ -312,20 +365,22 @@ LSQ::cacheBank(Addr addr) const
 }
 
 bool
-LSQ::cacheBankAvailable(bool is_load, Addr addr) const
+LSQ::cacheBankAvailable(CachePort port, Addr addr) const
 {
-    if (!cachePortAvailable(is_load)) {
+    if (!cachePortAvailable(port)) {
         return false;
     }
 
+    const bool is_load = port != CachePort::MergeBufferWrite;
     const unsigned bank = cacheBank(addr);
     return is_load ? !storeBanksUsed[bank] : !loadBanksUsed[bank];
 }
 
 void
-LSQ::cachePortBusy(bool is_load, Addr addr)
+LSQ::cachePortBusy(CachePort port, Addr addr)
 {
-    assert(cacheBankAvailable(is_load, addr));
+    assert(cacheBankAvailable(port, addr));
+    const bool is_load = port != CachePort::MergeBufferWrite;
     const unsigned bank = cacheBank(addr);
     if (is_load) {
         usedLoadPorts++;
@@ -333,6 +388,29 @@ LSQ::cachePortBusy(bool is_load, Addr addr)
     } else {
         usedStorePorts++;
         storeBanksUsed[bank] = true;
+    }
+
+    switch (port) {
+      case CachePort::LoadPipeRead:
+        loadPipeReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadPipeReadPortUses;
+        break;
+      case CachePort::LoadStorePipe0Read:
+        loadStorePipe0ReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadStorePipe0ReadPortUses;
+        break;
+      case CachePort::LoadStorePipe1Read:
+        loadStorePipe1ReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadStorePipe1ReadPortUses;
+        break;
+      case CachePort::MergeBufferRead:
+        mergeBufferCachePortUsed = true;
+        ++dcachePort.dcachePortStats.mergeBufferReadPortUses;
+        break;
+      case CachePort::MergeBufferWrite:
+        mergeBufferCachePortUsed = true;
+        ++dcachePort.dcachePortStats.mergeBufferWritePortUses;
+        break;
     }
 }
 
@@ -557,6 +635,15 @@ LSQ::recvTimingResp(PacketPtr pkt)
     if (pkt->isError()) {
         DPRINTF(LSQ, "Got error packet back for address: %#X\n",
                 pkt->getAddr());
+    }
+
+    if (auto *mb_state = dynamic_cast<LSQUnit::MergeBufferDrainSenderState *>(
+            pkt->senderState)) {
+        return mb_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *mb_pf_state =
+                   dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
+                       pkt->senderState)) {
+        return mb_pf_state->lsqUnit->recvTimingResp(pkt);
     }
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
@@ -829,10 +916,41 @@ LSQ::hasStoresToWB()
     return false;
 }
 
+void
+LSQ::forceMBDrain(ThreadID tid)
+{
+    thread.at(tid)->forceMBDrain();
+}
+
 bool
 LSQ::hasStoresToWB(ThreadID tid)
 {
     return thread.at(tid)->hasStoresToWB();
+}
+
+std::optional<uint64_t>
+LSQ::youngestMBVersion(ThreadID tid) const
+{
+    return thread.at(tid)->youngestMBVersion();
+}
+
+bool
+LSQ::loadBlockedByMBVersion(ThreadID tid, uint64_t load_version) const
+{
+    return thread.at(tid)->loadBlockedByMBVersion(load_version);
+}
+
+unsigned
+LSQ::markLoadsHitExternalSnoopAfter(ThreadID tid, const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markLoadsHitExternalSnoopAfter(barrier_sn);
+}
+
+unsigned
+LSQ::markAcquireLoadsHitExternalSnoopAfter(ThreadID tid,
+                                           const InstSeqNum &barrier_sn)
+{
+    return thread.at(tid)->markAcquireLoadsHitExternalSnoopAfter(barrier_sn);
 }
 
 int
@@ -888,6 +1006,11 @@ LSQ::pushRequest(const DynInstPtr &inst, bool isLoad, uint8_t *data,
     auto cacheLineSize = cpu->cacheLineSize();
     bool needs_burst = transferNeedsBurst(addr, size, cacheLineSize);
     LSQRequest *request = nullptr;
+
+    DPRINTF(LSQ,
+            "Creating a request for %s inst [sn:%lli] to addr: %#x "
+            "and size: %u\n",
+            (isLoad ? "load" : "store"), inst->seqNum, addr, size);
 
     // Atomic requests that access data across cache line boundary are
     // currently not allowed since the cache does not guarantee corresponding
