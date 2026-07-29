@@ -272,6 +272,7 @@ LSQUnit::resetState()
     po3TLBLookupStage.clear();
     po3CacheAccessStage.clear();
     po3MemPipelineInsts.clear();
+    partialWriteRMWs.clear();
 
     stalled = false;
 
@@ -343,6 +344,7 @@ LSQUnit::drainSanityCheck() const
     assert(po3AddrGenStage.empty());
     assert(po3TLBLookupStage.empty());
     assert(po3CacheAccessStage.empty());
+    assert(partialWriteRMWs.empty());
 }
 
 void
@@ -461,6 +463,41 @@ LSQUnit::tick()
         advancePO3MemPipeline();
         if (!po3MemPipelineInsts.empty()) {
             cpu->activityThisCycle();
+        }
+    }
+}
+
+void
+LSQUnit::reserveRMWWriteBank()
+{
+    if (!partialWriteRMWs.empty()) {
+        cpu->activityThisCycle();
+    }
+
+    for (auto &[pkt, state] : partialWriteRMWs) {
+        state.writeReserved = false;
+        if (state.cyclesUntilWrite > Cycles(0)) {
+            --state.cyclesUntilWrite;
+        }
+        if (state.cyclesUntilWrite > Cycles(0) || lsq->cacheBlocked()) {
+            continue;
+        }
+
+        const bool port_available = lsq->cachePortAvailable(false);
+        const bool bank_available =
+            port_available && lsq->cacheBankAvailable(false, pkt->getAddr());
+        if (bank_available) {
+            lsq->cachePortBusy(false, pkt->getAddr());
+            state.writeReserved = true;
+            DPRINTF(LSQUnit,
+                    "Reserved partial-write RMW bank write at addr %#x\n",
+                    pkt->getAddr());
+        } else if (port_available) {
+            lsq->cacheBankConflict();
+            DPRINTF(LSQUnit,
+                    "D-cache bank conflict for partial-write RMW write "
+                    "at addr %#x\n",
+                    pkt->getAddr());
         }
     }
 }
@@ -1540,20 +1577,77 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(data_pkt->senderState);
 
-    if (!lsq->cacheBlocked() && lsq->cachePortAvailable(isLoad)) {
-        if (!dcachePort->sendTimingReq(data_pkt)) {
-            ret = false;
-            cache_got_blocked = true;
+    const bool partial_write =
+        !isLoad && data_pkt->isWrite() &&
+        !data_pkt->isWholeLineWrite(cpu->cacheLineSize());
+
+    auto rmw_it = partialWriteRMWs.find(data_pkt);
+    if (partial_write && rmw_it == partialWriteRMWs.end()) {
+        // Cycle X: read the bank. The packet remains local while the old and
+        // new bytes merge in X+1, then it is sent during the reserved write
+        // phase in X+2.
+        const bool port_available = lsq->cachePortAvailable(true);
+        const bool bank_available =
+            port_available &&
+            lsq->cacheBankAvailable(true, data_pkt->getAddr());
+        if (!lsq->cacheBlocked() && bank_available) {
+            lsq->cachePortBusy(true, data_pkt->getAddr());
+            partialWriteRMWs.emplace(data_pkt,
+                                     PartialWriteRMWState{Cycles(2), false});
+            DPRINTF(LSQUnit,
+                    "Started partial-write RMW bank read at addr %#x\n",
+                    data_pkt->getAddr());
+        } else if (!lsq->cacheBlocked() && port_available) {
+            lsq->cacheBankConflict();
+            DPRINTF(LSQUnit,
+                    "D-cache bank conflict for partial-write RMW read "
+                    "at addr %#x\n",
+                    data_pkt->getAddr());
         }
-    } else {
         ret = false;
+    } else if (partial_write && !rmw_it->second.writeReserved) {
+        // X+1 is the merge-only cycle. A write phase which could not reserve
+        // its bank at X+2 also waits here for the next reservation cycle.
+        ret = false;
+    } else {
+        const bool bank_reserved =
+            partial_write && rmw_it->second.writeReserved;
+        const bool port_available =
+            bank_reserved || lsq->cachePortAvailable(isLoad);
+        const bool bank_available =
+            bank_reserved ||
+            (port_available &&
+             lsq->cacheBankAvailable(isLoad, data_pkt->getAddr()));
+
+        if (!lsq->cacheBlocked() && bank_available) {
+            if (!dcachePort->sendTimingReq(data_pkt)) {
+                ret = false;
+                cache_got_blocked = true;
+            }
+        } else {
+            ret = false;
+            if (!lsq->cacheBlocked() && port_available && !bank_available) {
+                lsq->cacheBankConflict();
+                DPRINTF(LSQUnit, "D-cache bank conflict for %s at addr %#x\n",
+                        isLoad ? "load" : "store", data_pkt->getAddr());
+            }
+        }
+
+        if (ret) {
+            if (bank_reserved) {
+                partialWriteRMWs.erase(rmw_it);
+            } else {
+                lsq->cachePortBusy(isLoad, data_pkt->getAddr());
+            }
+        } else if (bank_reserved) {
+            rmw_it->second.writeReserved = false;
+        }
     }
 
     if (ret) {
         if (!isLoad) {
             isStoreBlocked = false;
         }
-        lsq->cachePortBusy(isLoad);
         request->packetSent();
     } else {
         if (cache_got_blocked) {
