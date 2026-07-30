@@ -274,8 +274,11 @@ class LSQUnit
             RequestPtr baseReq;
             Cycles retireCycle;
             Cycles allocCycle;
+            Cycles drainIssueCycle;
+            Cycles prefetchIssueCycle;
             unsigned unretireCount;
             bool valid;
+            bool prefetchIssued = false;
             bool isAtomic = false;
             LSQRequest *atomicReq = nullptr;
             bool isRelease = false;
@@ -289,6 +292,8 @@ class LSQUnit
                   state(EntryState::MERGING),
                   retireCycle(0),
                   allocCycle(0),
+                  drainIssueCycle(0),
+                  prefetchIssueCycle(0),
                   unretireCount(0),
                   valid(false)
             {}
@@ -336,6 +341,7 @@ class LSQUnit
                                     uint64_t version);
         void updateRetiredEntries(Cycles now);
         bool drainOne(LSQUnit *lsq_ptr);
+        bool hasDrainableEntry() const;
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
         void forceRetireAll();
         void forceRetireVersionsBefore(uint64_t version);
@@ -835,6 +841,10 @@ class LSQUnit
 
     /** Use a merge buffer that stores move to from the SQ */
     bool mergeBufferEnabled;
+    /** SQ occupancy percentage used for blocked-merge pressure stats. */
+    unsigned mergeBufferSqPressureThreshold;
+    /** Free-entry threshold used for blocked-merge pressure stats. */
+    unsigned mergeBufferFreeEntryPressureThreshold;
     /** Prefetch on merge buffer allocation to accelerate draining. */
     bool mergeBufferPrefetchEnabled;
     /** Limit outstanding merge buffer prefetches. */
@@ -915,6 +925,9 @@ class LSQUnit
 
     /** Flag for memory model. */
     bool needsTSO;
+
+    /** Record a merge-buffer rejection of the current SQ head store. */
+    void recordMBStoreBlock(bool mb_full);
 
     /** Whether to use explicit PO3 load/store execute sub-stages. */
     bool po3MemPipeline;
@@ -1001,10 +1014,24 @@ class LSQUnit
         statistics::Scalar mbAllocations;
         /** Merge buffer merges into existing entries */
         statistics::Scalar mbMerges;
+        /** TSO merge opportunities blocked without version reasoning. */
+        statistics::Scalar mbTsoBlockedMergeOpportunities;
+        /** TSO merges blocked by the newest-allocation constraint. */
+        statistics::Scalar mbTsoMergeBlockedByAllocationOrder;
+        /** Blocked TSO merges observed while SQ occupancy was high. */
+        statistics::Scalar mbTsoBlockedMergesUnderSqPressure;
+        /** Blocked TSO merges observed while MB free space was low. */
+        statistics::Scalar mbTsoBlockedMergesUnderMbPressure;
         /** Merge buffer entries retired */
         statistics::Scalar mbRetired;
         /** Merge buffer drains issued */
         statistics::Scalar mbDrains;
+        /** Cycles from merge-buffer drain issue to its response. */
+        statistics::Distribution mbDrainLatency;
+        /** Merge-buffer drain responses classified as L1D hits or misses. */
+        statistics::Vector mbDrainHitMiss;
+        /** Cycles a ready TSO drain waited for the prior store response. */
+        statistics::Scalar mbTsoStoreInFlightDrainStallCycles;
         /** Merge buffer drains using its cache write port. */
         statistics::Scalar mbCacheWritePortUses;
         /** Stores written into the merge buffer by load/store pipe 0. */
@@ -1019,12 +1046,24 @@ class LSQUnit
         statistics::Scalar mbForwards;
         /** Stores blocked from dealloc because merge buffer is full. */
         statistics::Scalar mbFullStoreDeallocStalls;
+        /** Cycles the SQ head could not enter the merge buffer. */
+        statistics::Scalar mbSqHeadBlockedCycles;
+        /** MB-full rejection events at the SQ head. */
+        statistics::Scalar mbFullEvents;
+        /** MB-full events when fetch or rename was already stalled. */
+        statistics::Scalar mbFullFrontendStalledEvents;
+        /** Fraction of MB-full events overlapping a frontend stall. */
+        statistics::Formula mbFullFrontendStallFraction;
         /** Older-version MB entries force retired for same block address. */
         statistics::Scalar mbForceRetiresOlderVersion;
+        /** Entries force-retired when the active version advanced. */
+        statistics::Scalar mbVersionAdvanceForceRetires;
         /** Average merge buffer occupancy (valid entries / total). */
         statistics::Average mbAvgOccupancy;
         /** Total cycles entries reside in the merge buffer. */
         statistics::Scalar mbResidencyCycles;
+        /** Cycles from a successful MB prefetch issue to drain issue. */
+        statistics::Distribution mbPrefetchToDrainLeadTime;
         /** Number of cycles store WB/dealloc stalled by a barrier at the head.
          */
         statistics::Scalar barrierSqStallCycles;

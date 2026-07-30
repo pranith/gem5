@@ -196,6 +196,8 @@ class Request : public Extensible<Request>
         CLEAN                       = 0x0000000200000000,
         /** An L1 data-cache replacement notification sent to the CPU. */
         L1D_EVICTION_NOTIFY         = 0x0004000000000000,
+        /** The request was satisfied by the CPU-facing L1 data cache. */
+        L1D_CACHE_HIT               = 0x0008000000000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -1050,6 +1052,11 @@ class Request : public Extensible<Request>
     isL1DEvictionNotify() const
     {
         return _flags.isSet(L1D_EVICTION_NOTIFY);
+    }
+    bool
+    isL1DCacheHit() const
+    {
+        return _flags.isSet(L1D_CACHE_HIT);
     }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }

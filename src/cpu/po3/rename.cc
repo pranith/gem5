@@ -107,6 +107,7 @@ Rename::Rename(CPU *_cpu, const BasePO3CPUParams &params)
     }
     for (uint32_t tid = 0; tid < MaxThreads; tid++) {
         renameStatus[tid] = Idle;
+        sqFullStall[tid] = false;
         renameMap[tid] = nullptr;
         instsInProgress[tid] = 0;
         loadsInProgress[tid] = 0;
@@ -142,6 +143,8 @@ Rename::RenameStats::RenameStats(statistics::Group *parent)
                "Number of times rename has blocked due to LQ full"),
       ADD_STAT(SQFullEvents, statistics::units::Count::get(),
                "Number of times rename has blocked due to SQ full"),
+      ADD_STAT(SQFullCycles, statistics::units::Cycle::get(),
+               "Cycles rename is blocked specifically by SQ full"),
       ADD_STAT(fullRegistersEvents, statistics::units::Count::get(),
                "Number of times there has been no free registers"),
       ADD_STAT(renamedOperands, statistics::units::Count::get(),
@@ -189,6 +192,7 @@ Rename::RenameStats::RenameStats(statistics::Group *parent)
     IQFullEvents.prereq(IQFullEvents);
     LQFullEvents.prereq(LQFullEvents);
     SQFullEvents.prereq(SQFullEvents);
+    SQFullCycles.prereq(SQFullCycles);
     fullRegistersEvents.prereq(fullRegistersEvents);
 
     renamedOperands.prereq(renamedOperands);
@@ -260,6 +264,7 @@ void
 Rename::clearStates(ThreadID tid)
 {
     renameStatus[tid] = Idle;
+    sqFullStall[tid] = false;
 
     freeEntries[tid].iqEntries = iew_ptr->instQueue.numFreeEntries(tid);
     freeEntries[tid].lqEntries = iew_ptr->ldstQueue.numFreeLoadEntries(tid);
@@ -305,6 +310,7 @@ Rename::resetStage()
     // Grab the number of free entries directly from the stages.
     for (ThreadID tid = 0; tid < numThreads; tid++) {
         renameStatus[tid] = Idle;
+        sqFullStall[tid] = false;
 
         freeEntries[tid].iqEntries = iew_ptr->instQueue.numFreeEntries(tid);
         freeEntries[tid].lqEntries =
@@ -434,6 +440,7 @@ Rename::squash(const InstSeqNum &squash_seq_num, ThreadID tid)
 
     // Set the status to Squashing.
     renameStatus[tid] = Squashing;
+    sqFullStall[tid] = false;
 
     // Squash any instructions from decode.
     for (int i = 0; i < fromDecode->size; i++) {
@@ -477,6 +484,12 @@ Rename::tick()
         status_change = checkSignalsAndUpdate(tid) || status_change;
 
         rename(status_change, tid);
+
+        if (sqFullStall[tid] && calcFreeSQEntries(tid) <= 0 &&
+            (renameStatus[tid] == Blocked ||
+             renameStatus[tid] == Unblocking)) {
+            ++stats.SQFullCycles;
+        }
     }
 
     updateStatus();
@@ -608,7 +621,7 @@ Rename::renameInsts(ThreadID tid)
 
         block(tid);
 
-        incrFullStat(source);
+        incrFullStat(source, tid);
 
         return;
     } else if (min_free_entries < insts_available) {
@@ -623,7 +636,7 @@ Rename::renameInsts(ThreadID tid)
 
         blockThisCycle = true;
 
-        incrFullStat(source);
+        incrFullStat(source, tid);
     }
 
     InstQueue &insts_to_rename =
@@ -673,7 +686,7 @@ Rename::renameInsts(ThreadID tid)
                 DPRINTF(Rename, "[tid:%i] Cannot rename due to no free LQ\n",
                         tid);
                 source = LQ;
-                incrFullStat(source);
+                incrFullStat(source, tid);
                 break;
             }
         }
@@ -683,7 +696,7 @@ Rename::renameInsts(ThreadID tid)
                 DPRINTF(Rename, "[tid:%i] Cannot rename due to no free SQ\n",
                         tid);
                 source = SQ;
-                incrFullStat(source);
+                incrFullStat(source, tid);
                 break;
             }
         }
@@ -1094,6 +1107,7 @@ Rename::unblock(ThreadID tid)
         wroteToTimeBuffer = true;
 
         renameStatus[tid] = Running;
+        sqFullStall[tid] = false;
         return true;
     }
 
@@ -1651,8 +1665,10 @@ Rename::serializeAfter(InstQueue &inst_list, ThreadID tid)
 }
 
 void
-Rename::incrFullStat(const FullSource &source)
+Rename::incrFullStat(const FullSource &source, ThreadID tid)
 {
+    sqFullStall[tid] = source == SQ;
+
     switch (source) {
         case ROB:
             ++stats.ROBFullEvents;

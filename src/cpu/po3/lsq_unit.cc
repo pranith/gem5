@@ -193,6 +193,7 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
                 }
             }
         }
+        ++stats.mbDrainHitMiss[pkt->req->isL1DCacheHit() ? 0 : 1];
         mergeBuffer.handleDrainResp(mb_state->entry, this);
         delete mb_state;
         delete pkt;
@@ -358,6 +359,11 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
     po3MemCacheAccessWidth = params.po3MemCacheAccessWidth;
 
     mergeBufferEnabled = params.useMergeBuffer;
+    mergeBufferSqPressureThreshold = params.mergeBufferSqPressureThreshold;
+    fatal_if(mergeBufferSqPressureThreshold > 100,
+             "mergeBufferSqPressureThreshold must be in [0, 100]");
+    mergeBufferFreeEntryPressureThreshold =
+        params.mergeBufferFreeEntryPressureThreshold;
     mergeBufferPrefetchEnabled = params.mergeBufferPrefetch;
     mergeBufferPfInFlight = 0;
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
@@ -464,10 +470,29 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of merge buffer entries allocated"),
       ADD_STAT(mbMerges, statistics::units::Count::get(),
                "Number of stores merged into existing merge buffer entries"),
+      ADD_STAT(mbTsoBlockedMergeOpportunities, statistics::units::Count::get(),
+               "TSO merge opportunities blocked without version reasoning"),
+      ADD_STAT(mbTsoMergeBlockedByAllocationOrder,
+               statistics::units::Count::get(),
+               "TSO merges blocked by the newest-allocation constraint"),
+      ADD_STAT(mbTsoBlockedMergesUnderSqPressure,
+               statistics::units::Count::get(),
+               "Blocked TSO merges while SQ occupancy met its threshold"),
+      ADD_STAT(mbTsoBlockedMergesUnderMbPressure,
+               statistics::units::Count::get(),
+               "Blocked TSO merges while MB free entries were below their "
+               "threshold"),
       ADD_STAT(mbRetired, statistics::units::Count::get(),
                "Number of merge buffer entries retired"),
       ADD_STAT(mbDrains, statistics::units::Count::get(),
                "Number of merge buffer entries drained to cache"),
+      ADD_STAT(mbDrainLatency, statistics::units::Cycle::get(),
+               "Cycles from merge-buffer drain issue to response"),
+      ADD_STAT(mbDrainHitMiss, statistics::units::Count::get(),
+               "Merge-buffer drain L1D hit/miss distribution"),
+      ADD_STAT(mbTsoStoreInFlightDrainStallCycles,
+               statistics::units::Cycle::get(),
+               "Cycles a ready TSO drain waited for storeInFlight"),
       ADD_STAT(mbCacheWritePortUses, statistics::units::Count::get(),
                "Merge buffer drains issued through its cache write port"),
       ADD_STAT(mbLoadStorePipe0Writes, statistics::units::Count::get(),
@@ -483,12 +508,24 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of loads forwarded from merge buffer"),
       ADD_STAT(mbFullStoreDeallocStalls, statistics::units::Count::get(),
                "Stores blocked from dealloc because merge buffer is full"),
+      ADD_STAT(mbSqHeadBlockedCycles, statistics::units::Cycle::get(),
+               "Cycles the SQ head could not enter the merge buffer"),
+      ADD_STAT(mbFullEvents, statistics::units::Count::get(),
+               "MB-full rejection events at the SQ head"),
+      ADD_STAT(mbFullFrontendStalledEvents, statistics::units::Count::get(),
+               "MB-full events when fetch or rename was already stalled"),
+      ADD_STAT(mbFullFrontendStallFraction, statistics::units::Ratio::get(),
+               "Fraction of MB-full events overlapping a frontend stall"),
       ADD_STAT(mbForceRetiresOlderVersion, statistics::units::Count::get(),
                "MB entries force retired due to lower version on same block"),
+      ADD_STAT(mbVersionAdvanceForceRetires, statistics::units::Count::get(),
+               "MB entries force retired by version advancement"),
       ADD_STAT(mbAvgOccupancy, statistics::units::Ratio::get(),
                "Average merge buffer occupancy (UsedEntries/TotalEntries)"),
       ADD_STAT(mbResidencyCycles, statistics::units::Count::get(),
                "Total cycles entries reside in the merge buffer"),
+      ADD_STAT(mbPrefetchToDrainLeadTime, statistics::units::Cycle::get(),
+               "Cycles from successful MB prefetch issue to drain issue"),
       ADD_STAT(barrierSqStallCycles, statistics::units::Count::get(),
                "Cycles store WB/dealloc stalled by a barrier at the head"),
       ADD_STAT(barrierSqStallOccupancy, statistics::units::Count::get(),
@@ -501,6 +538,14 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Instructions rescheduled/replayed due to barrier in LSQ")
 {
     loadToUse.init(0, 299, 10).flags(statistics::nozero);
+    mbDrainLatency.init(0, 299, 10).flags(statistics::nozero);
+    mbDrainHitMiss.init(2);
+    mbDrainHitMiss.subname(0, "hit");
+    mbDrainHitMiss.subname(1, "miss");
+    mbPrefetchToDrainLeadTime.init(0, 299, 10).flags(statistics::nozero);
+
+    mbFullFrontendStallFraction.precision(4);
+    mbFullFrontendStallFraction = mbFullFrontendStalledEvents / mbFullEvents;
 
     lqAvgOccupancy.precision(2);
 
@@ -1574,6 +1619,25 @@ LSQUnit::writebackBlockedStore()
 }
 
 void
+LSQUnit::recordMBStoreBlock(bool mb_full)
+{
+    if (storeQueue.empty() || !storeWBIt.dereferenceable() ||
+        storeWBIt.idx() != storeQueue.head()) {
+        return;
+    }
+
+    ++stats.mbSqHeadBlockedCycles;
+    if (!mb_full) {
+        return;
+    }
+
+    ++stats.mbFullEvents;
+    if (cpu->frontendStalled(lsqID)) {
+        ++stats.mbFullFrontendStalledEvents;
+    }
+}
+
+void
 LSQUnit::writebackStores()
 {
     Cycles now = cpu->curCycle();
@@ -1584,6 +1648,10 @@ LSQUnit::writebackStores()
     }
 
     if (mergeBufferEnabled) {
+        if (needsTSO && storeInFlight && mergeBuffer.hasDrainableEntry()) {
+            ++stats.mbTsoStoreInFlightDrainStallCycles;
+        }
+
         // Keep issuing independent drains while progress is possible. A
         // partial drain may only start its RMW read here; drainOne() skips
         // that entry until its X+2 write has the merge buffer's cache port,
@@ -1679,6 +1747,7 @@ LSQUnit::writebackStores()
             }
 
             bool merged_ok = true;
+            bool mb_full = false;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
             MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
             // Ordering tags are metadata only in PO3 for now. Keep the
@@ -1713,7 +1782,6 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
-                bool mb_full = false;
                 bool can_merge_both = mergeBuffer.canAcceptSplitStore(
                     request, store_version, mb_full);
 
@@ -1733,9 +1801,6 @@ LSQUnit::writebackStores()
                         merged_ok = false;
                     }
                 } else {
-                    if (mb_full) {
-                        stats.mbFullStoreDeallocStalls++;
-                    }
                     merged_ok = false;
                 }
             } else {
@@ -1743,6 +1808,7 @@ LSQUnit::writebackStores()
                     now, request->mainReq()->getPaddr(),
                     (uint8_t *)storeWBIt->data(), request->_size, storeWBIt,
                     storeWBIt->isAllZeros());
+                mb_full = !mb_entry && mergeBuffer.isFull();
             }
 
             DPRINTF(LSQUnit,
@@ -1794,10 +1860,12 @@ LSQUnit::writebackStores()
                     storeWBIt = storeQueue.end();
                 }
             } else {
+                recordMBStoreBlock(mb_full);
+
                 // If a barrier/release store is stalled, force retire MB
                 // entries once to unblock serialization.
-                if (mergeBuffer.isFull()) {
-                    stats.mbFullStoreDeallocStalls++;
+                if (mb_full) {
+                    ++stats.mbFullStoreDeallocStalls;
                 }
                 if (!forcedMBRetire &&
                     (inst->isWriteBarrier() || inst->isSerializeBefore() ||
@@ -2944,6 +3012,29 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             }
 
             if (lsqPtr && lsqPtr->needsTSO && &(*it) != &entries.back()) {
+                const bool mergeable_state =
+                    it->state == EntryState::MERGING ||
+                    (it->state == EntryState::RETIRED &&
+                     it->unretireCount < maxUnretire);
+                if (mergeable_state) {
+                    ++lsqPtr->stats.mbTsoBlockedMergeOpportunities;
+                    ++lsqPtr->stats.mbTsoMergeBlockedByAllocationOrder;
+
+                    const size_t sq_pressure_count =
+                        (lsqPtr->storeQueue.capacity() *
+                             lsqPtr->mergeBufferSqPressureThreshold +
+                         99) /
+                        100;
+                    if (lsqPtr->storeQueue.size() >= sq_pressure_count) {
+                        ++lsqPtr->stats.mbTsoBlockedMergesUnderSqPressure;
+                    }
+
+                    const size_t free_entries = numEntries - entries.size();
+                    if (free_entries <
+                        lsqPtr->mergeBufferFreeEntryPressureThreshold) {
+                        ++lsqPtr->stats.mbTsoBlockedMergesUnderMbPressure;
+                    }
+                }
                 DPRINTF(LSQUnit,
                         "Blocking merge for Addr:%#x; matching MB "
                         "entry is not the most recent allocation\n",
@@ -3047,6 +3138,8 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                     lsqPtr->dcachePort->sendTimingReq(pf_pkt)) {
                     lsqPtr->lsq->cachePortBusy(port, lineAddr);
                     ++lsqPtr->mergeBufferPfInFlight;
+                    last_entry->prefetchIssued = true;
+                    last_entry->prefetchIssueCycle = now;
                 } else {
                     delete static_cast<MergeBufferPrefetchSenderState *>(
                         pf_pkt->senderState);
@@ -3392,8 +3485,19 @@ LSQUnit::MergeBuffer::forceRetireAll()
 void
 LSQUnit::MergeBuffer::forceRetireVersionsBefore(uint64_t version)
 {
-    // Stub: no versioning support, so nothing to do.
-    (void)version;
+    for (auto &entry : entries) {
+        if (!entry.valid || entry.version >= version) {
+            continue;
+        }
+        if (entry.state == EntryState::MERGING ||
+            entry.state == EntryState::RETIRED) {
+            entry.state = EntryState::FORCE_RETIRED;
+            entry.retireCycle = Cycles(0);
+            if (lsqPtr) {
+                ++lsqPtr->stats.mbVersionAdvanceForceRetires;
+            }
+        }
+    }
 }
 
 std::optional<uint64_t>
@@ -3447,6 +3551,16 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version) const
     }
 
     return version > *youngest;
+}
+
+bool
+LSQUnit::MergeBuffer::hasDrainableEntry() const
+{
+    return std::any_of(
+        entries.begin(), entries.end(), [](const MergeBufferEntry &entry) {
+            return entry.valid && (entry.state == EntryState::RETIRED ||
+                                   entry.state == EntryState::FORCE_RETIRED);
+        });
 }
 
 bool
@@ -3544,6 +3658,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             lsqPtr->stats.mbDrains++;
         }
 
+        entry.drainIssueCycle = lsq_ptr->cpu->curCycle();
+        if (entry.prefetchIssued) {
+            lsq_ptr->stats.mbPrefetchToDrainLeadTime.sample(
+                entry.drainIssueCycle - entry.prefetchIssueCycle);
+        }
+
         if (lsq_ptr->needsTSO) {
             lsq_ptr->storeInFlight = true;
         }
@@ -3589,6 +3709,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 
     if (lsqPtr) {
         lsqPtr->stats.mbDrains++;
+    }
+
+    entry.drainIssueCycle = lsq_ptr->cpu->curCycle();
+    if (entry.prefetchIssued) {
+        lsq_ptr->stats.mbPrefetchToDrainLeadTime.sample(
+            entry.drainIssueCycle - entry.prefetchIssueCycle);
     }
 
     if (lsq_ptr->needsTSO) {
@@ -3655,6 +3781,8 @@ LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
 
     lsq_ptr->stats.mbResidencyCycles +=
         lsq_ptr->cpu->curCycle() - entry->allocCycle;
+    lsq_ptr->stats.mbDrainLatency.sample(lsq_ptr->cpu->curCycle() -
+                                         entry->drainIssueCycle);
     lsq_ptr->handleMBDrain(entry);
 
     entries.remove_if(

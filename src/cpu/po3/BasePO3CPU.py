@@ -267,6 +267,16 @@ class BasePO3CPU(BaseCPU):
     mergeBufferEntries = Param.Unsigned(
         32, "Number of entries in " "the merge buffer"
     )
+    mergeBufferSqPressureThreshold = Param.Unsigned(
+        80,
+        "SQ occupancy percentage used to classify blocked TSO merge "
+        "opportunities",
+    )
+    mergeBufferFreeEntryPressureThreshold = Param.Unsigned(
+        4,
+        "Blocked TSO merges occur under MB pressure when fewer than this "
+        "many entries are free",
+    )
     mergeBufferPrefetch = Param.Bool(
         True,
         "Prefetch cache line on merge buffer allocation to speed up drains",

@@ -132,6 +132,18 @@ class Rename
     /** Returns the name of rename. */
     std::string name() const;
 
+    /**
+     * Whether this thread is stalled in rename or draining its skid
+     * buffer.
+     */
+    bool
+    isStalled(ThreadID tid) const
+    {
+        const ThreadStatus status = renameStatus[tid];
+        return status == Blocked || status == Unblocking ||
+               status == SerializeStall;
+    }
+
     /** Registers probes. */
     void regProbePoints();
 
@@ -479,6 +491,9 @@ class Rename
     /** Whether or not rename needs to block this cycle. */
     bool blockThisCycle;
 
+    /** Whether each thread's current blocked episode began with SQ full. */
+    bool sqFullStall[MaxThreads];
+
     /** Whether or not rename needs to resume a serialize instruction
      * after squashing. */
     bool resumeSerialize;
@@ -508,7 +523,7 @@ class Rename
     /** Function used to increment the stat that corresponds to the source of
      * the stall.
      */
-    void incrFullStat(const FullSource &source);
+    void incrFullStat(const FullSource &source, ThreadID tid);
 
     struct RenameStats : public statistics::Group
     {
@@ -536,6 +551,8 @@ class Rename
         /** Stat for total number of times that the SQ starts a stall in
          *  rename. */
         statistics::Scalar SQFullEvents;
+        /** Cycles rename is blocked specifically because the SQ is full. */
+        statistics::Scalar SQFullCycles;
         /** Stat for total number of times that rename runs out of free
          *  registers to use to rename. */
         statistics::Scalar fullRegistersEvents;

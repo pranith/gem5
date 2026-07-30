@@ -224,6 +224,16 @@ class Fetch
     /** Returns the name of fetch. */
     std::string name() const;
 
+    /** Whether this thread is currently unable to make fetch progress. */
+    bool
+    isStalled(ThreadID tid) const
+    {
+        const ThreadStatus status = fetchStatus[tid];
+        return status == Blocked || status == ItlbWait ||
+               status == IcacheWaitResponse || status == IcacheWaitRetry ||
+               status == FtqWait || status == NoGoodAddr;
+    }
+
     /** Registers probes. */
     void regProbePoints();
 

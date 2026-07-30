@@ -497,6 +497,12 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     pkt->headerDelay = pkt->payloadDelay = 0;
 
     if (satisfied) {
+        // The CPU-facing L1D uses this response metadata to classify merge
+        // buffer drain hits without inferring them from response latency.
+        if (notifyCpuOnEviction) {
+            pkt->req->setFlags(Request::L1D_CACHE_HIT);
+        }
+
         // notify before anything else as later handleTimingReqHit might turn
         // the packet in a response
         ppHit->notify(CacheAccessProbeArg(pkt,accessor));

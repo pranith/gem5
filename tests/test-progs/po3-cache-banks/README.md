@@ -43,6 +43,11 @@ Merge-buffer statistics are under `system.cpu.lsq0.mb*`.
 `mbLoadStorePipe[01]Writes` counts stores entering the merge buffer from each
 load/store pipe, while `mbDualPipeWriteCycles` counts cycles in which both
 input ports were used.
+In TSO mode, `mbTsoBlockedMergeOpportunities` counts mergeable same-line
+entries rejected by the newest-allocation rule. The allocation-order counter
+classifies the cause, while the SQ- and MB-pressure counters are overlapping
+subsets controlled by `--mb-sq-pressure-percent` and
+`--mb-free-entry-pressure-threshold`.
 
 `l1_eviction_hazard` delays a program-order older load while younger loads
 overflow one L1D set. In TSO mode,

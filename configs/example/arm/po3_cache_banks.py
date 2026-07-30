@@ -36,6 +36,18 @@ parser.add_argument(
     help="Cycles before a merge-buffer entry becomes drainable",
 )
 parser.add_argument(
+    "--mb-sq-pressure-percent",
+    type=int,
+    default=80,
+    help="SQ occupancy percentage for blocked-merge pressure statistics",
+)
+parser.add_argument(
+    "--mb-free-entry-pressure-threshold",
+    type=int,
+    default=4,
+    help="Free MB entries below which blocked merges see MB pressure",
+)
+parser.add_argument(
     "--memory-model",
     choices=("rc", "tso"),
     default="rc",
@@ -64,6 +76,10 @@ system.cpu.needsTSO = args.memory_model == "tso"
 system.cpu.useMergeBuffer = args.merge_buffer
 system.cpu.mergeBufferEntries = args.merge_buffer_entries
 system.cpu.mergeBufferRetireCycles = args.merge_buffer_retire_cycles
+system.cpu.mergeBufferSqPressureThreshold = args.mb_sq_pressure_percent
+system.cpu.mergeBufferFreeEntryPressureThreshold = (
+    args.mb_free_entry_pressure_threshold
+)
 system.cpu.fetchWidth = 8
 system.cpu.decodeWidth = 8
 system.cpu.renameWidth = 8

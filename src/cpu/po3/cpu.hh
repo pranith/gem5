@@ -645,6 +645,13 @@ class CPU : public BaseCPU
     {
         return false;
     }
+
+    /** Whether fetch or rename is already stalled for this thread. */
+    bool
+    frontendStalled(ThreadID tid) const
+    {
+        return fetch.isStalled(tid) || rename.isStalled(tid);
+    }
 };
 
 } // namespace po3
