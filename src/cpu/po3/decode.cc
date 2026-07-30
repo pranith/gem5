@@ -103,6 +103,8 @@ Decode::Decode(CPU *_cpu, const BasePO3CPUParams &params)
       po3DecodePipeline(params.po3DecodePipeline),
       po3DecodeLatency(params.po3DecodeLatency),
       po3DecodeStageWidth(params.po3DecodeStageWidth),
+      optimizeStoreRelease(params.optimizeStoreRelease),
+      needsTSO(params.needsTSO),
       numThreads(params.numThreads),
       stats(_cpu)
 {
@@ -120,6 +122,8 @@ Decode::Decode(CPU *_cpu, const BasePO3CPUParams &params)
         bdelayDoneSeqNum[tid] = 0;
         squashInst[tid] = nullptr;
         squashAfterDelaySlot[tid] = 0;
+        memOrderVersion[tid] = 0;
+        loadMemOrderVersion[tid] = 0;
     }
 }
 
@@ -135,6 +139,8 @@ Decode::clearStates(ThreadID tid)
     decodeStatus[tid] = Idle;
     stalls[tid].rename = false;
     clearPO3DecodePipeline(tid);
+    memOrderVersion[tid] = 0;
+    loadMemOrderVersion[tid] = 0;
 
     // Clear out any of this thread's instructions being sent to rename.
     for (int i = -cpu->decodeQueue.getPast();
@@ -841,6 +847,47 @@ Decode::decodeInsts(ThreadID tid)
         // too much for function correctness.
         if (inst->numSrcRegs() == 0) {
             inst->setCanIssue();
+        }
+
+        // Ordering tags are decode metadata, independent of the versioning
+        // optimizations used by the O3 model. RC advances the epoch at real
+        // fences. TSO additionally gives ordinary stores consecutive tags.
+        const bool barrier_bump =
+            (inst->isWriteBarrier() || inst->isReadBarrier()) &&
+            (!(inst->staticInst->isAcquire() ||
+               (inst->staticInst->isRelease() && optimizeStoreRelease)));
+        const bool tso_store_bump =
+            needsTSO && inst->isStore() && !inst->isDataPrefetch();
+
+        if (needsTSO) {
+            if (tso_store_bump) {
+                inst->setMemOrderVersion(memOrderVersion[tid]);
+                ++memOrderVersion[tid];
+            } else if (barrier_bump) {
+                ++memOrderVersion[tid];
+                loadMemOrderVersion[tid] = memOrderVersion[tid];
+                inst->setMemOrderVersion(loadMemOrderVersion[tid]);
+            } else if (inst->isLoad()) {
+                inst->setMemOrderVersion(loadMemOrderVersion[tid]);
+            } else {
+                inst->setMemOrderVersion(memOrderVersion[tid]);
+            }
+        } else {
+            if (barrier_bump) {
+                ++memOrderVersion[tid];
+            }
+            inst->setMemOrderVersion(memOrderVersion[tid]);
+        }
+
+        if (barrier_bump || tso_store_bump) {
+            DPRINTF(Decode,
+                    "[tid:%i] Decoded memory-order boundary [sn:%llu] PC:%s "
+                    "%s. Assigned tag:%llu next store tag:%llu "
+                    "load tag:%llu mode:%s\n",
+                    tid, inst->seqNum, inst->pcState(),
+                    inst->staticInst->disassemble(inst->pcState().instAddr()),
+                    inst->getMemOrderVersion(), memOrderVersion[tid],
+                    loadMemOrderVersion[tid], needsTSO ? "TSO" : "RC");
         }
 
         // This current instruction is valid, so move it through the

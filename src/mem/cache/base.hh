@@ -677,6 +677,12 @@ class BaseCache : public ClockedObject
     const bool writebackClean;
 
     /**
+     * Send locally generated eviction notifications toward an attached CPU
+     * so it can preserve speculative-load ordering information.
+     */
+    const bool notifyCpuOnEviction;
+
+    /**
      * Writebacks from the tempBlock, resulting on the response path
      * in atomic mode, must happen after the call to recvAtomic has
      * finished (for the right ordering of the packets). We therefore

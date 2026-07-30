@@ -35,6 +35,12 @@ parser.add_argument(
     default=16,
     help="Cycles before a merge-buffer entry becomes drainable",
 )
+parser.add_argument(
+    "--memory-model",
+    choices=("rc", "tso"),
+    default="rc",
+    help="Select RC barrier-epoch tags or TSO per-store ordering tags",
+)
 parser.add_argument("--max-ticks", type=int, default=10_000_000_000)
 args = parser.parse_args()
 
@@ -54,6 +60,7 @@ system.cpu.po3MemAddrGenWidth = 3
 system.cpu.po3MemTLBLookupWidth = 3
 system.cpu.po3MemCacheAccessWidth = 3
 system.cpu.po3CommitStageWidth = 2
+system.cpu.needsTSO = args.memory_model == "tso"
 system.cpu.useMergeBuffer = args.merge_buffer
 system.cpu.mergeBufferEntries = args.merge_buffer_entries
 system.cpu.mergeBufferRetireCycles = args.merge_buffer_retire_cycles
@@ -65,9 +72,10 @@ system.cpu.issueWidth = 8
 system.cpu.wbWidth = 8
 system.cpu.commitWidth = 8
 
-system.cpu.addPrivateSplitL1Caches(
-    L1Cache(size="32KiB"), L1Cache(size="32KiB")
-)
+icache = L1Cache(size="32KiB")
+dcache = L1Cache(size="32KiB")
+dcache.notify_cpu_on_eviction = True
+system.cpu.addPrivateSplitL1Caches(icache, dcache)
 system.membus = SystemXBar()
 system.cpu.connectBus(system.membus)
 system.cpu.createInterruptController()

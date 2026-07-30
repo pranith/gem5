@@ -180,14 +180,19 @@ class StaticInst : public RefCounted, public StaticInstFlags
     bool isReadBarrier() const { return flags[IsReadBarrier]; }
     bool isWriteBarrier() const { return flags[IsWriteBarrier]; }
     bool
-    isAcquirePC() const
+    isAcquire() const
     {
-        return isReadBarrier() && !isWriteBarrier();
+        return flags[IsAcquire];
     }
     bool
     isRelease() const
     {
-        return isWriteBarrier();
+        return flags[IsRelease];
+    }
+    bool
+    isAcquirePC() const
+    {
+        return flags[IsAcquirePC];
     }
     bool isNonSpeculative() const { return flags[IsNonSpeculative]; }
     bool isQuiesce() const { return flags[IsQuiesce]; }

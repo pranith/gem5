@@ -1869,5 +1869,23 @@ IEW::checkMemOrderViolation(const DynInstPtr &inst)
     ++iewStats.memOrderViolationEvents;
 }
 
+bool
+IEW::memOrderViolation(ThreadID tid)
+{
+    return ldstQueue.memOrderViolation(tid);
+}
+
+DynInstPtr
+IEW::getMemOrderViolator(ThreadID tid)
+{
+    return ldstQueue.getMemOrderViolator(tid);
+}
+
+DynInstPtr
+IEW::peekMemOrderViolator(ThreadID tid)
+{
+    return ldstQueue.peekMemOrderViolator(tid);
+}
+
 } // namespace po3
 } // namespace gem5

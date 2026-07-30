@@ -11,6 +11,8 @@ Build:
 ```sh
 aarch64-linux-gnu-gcc -O2 -nostdlib -static -fno-stack-protector \
     -Wl,-e,_start -o bank_conflict bank_conflict.c
+aarch64-linux-gnu-gcc -nostdlib -static -Wl,-e,_start \
+    -o l1_eviction_hazard l1_eviction_hazard.S
 ```
 
 Run, selecting the number of modeled banks:
@@ -19,6 +21,10 @@ Run, selecting the number of modeled banks:
 build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
     bank_conflict 4
 ```
+
+Select decode-time RC or TSO ordering tags with `--memory-model rc` or
+`--memory-model tso`. RC advances the tag at fences; TSO assigns consecutive
+tags to ordinary stores and advances the load tag at fences.
 
 Enable the PO3 merge buffer and select its capacity and retirement delay:
 
@@ -37,3 +43,9 @@ Merge-buffer statistics are under `system.cpu.lsq0.mb*`.
 `mbLoadStorePipe[01]Writes` counts stores entering the merge buffer from each
 load/store pipe, while `mbDualPipeWriteCycles` counts cycles in which both
 input ports were used.
+
+`l1_eviction_hazard` delays a program-order older load while younger loads
+overflow one L1D set. In TSO mode,
+`system.cpu.lsq0.tsoL1EvictionHazards` and
+`system.cpu.lsq0.tsoLoadCompletionReschedules` should both be nonzero. In RC
+mode both remain zero.

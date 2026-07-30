@@ -397,6 +397,7 @@ LSQUnit::resetState()
 
     retryPkt = NULL;
     memDepViolator = NULL;
+    memOrderViolator = NULL;
     po3MemStageCycles.clear();
     po3AddrGenStage.clear();
     po3TLBLookupStage.clear();
@@ -430,6 +431,11 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "squashed"),
       ADD_STAT(memOrderViolation, statistics::units::Count::get(),
                "Number of memory ordering violations"),
+      ADD_STAT(tsoLoadCompletionReschedules, statistics::units::Count::get(),
+               "TSO loads replayed when an older load completed after an "
+               "L1 eviction or coherence hazard"),
+      ADD_STAT(tsoL1EvictionHazards, statistics::units::Count::get(),
+               "Executed TSO loads marked hazardous by an L1D replacement"),
       ADD_STAT(possibleConsistencyViolation, statistics::units::Count::get(),
                "Number of possible consistency violations detected"),
       ADD_STAT(squashedStores, statistics::units::Count::get(),
@@ -921,6 +927,73 @@ LSQUnit::getMemDepViolator()
     return temp;
 }
 
+void
+LSQUnit::setMemOrderViolatorIfOlder(const DynInstPtr &inst)
+{
+    if (!memOrderViolator || inst->seqNum < memOrderViolator->seqNum) {
+        memOrderViolator = inst;
+    }
+}
+
+void
+LSQUnit::checkCompletedLoadSnoopHazards(const DynInstPtr &completed_load)
+{
+    if (!needsTSO || loadQueue.empty() || !completed_load ||
+        completed_load->isSquashed()) {
+        return;
+    }
+
+    auto younger_it = completed_load->lqIt;
+    ++younger_it;
+
+    for (; younger_it != loadQueue.end(); ++younger_it) {
+        if (!younger_it->valid()) {
+            continue;
+        }
+
+        const DynInstPtr &younger = younger_it->instruction();
+        if (!younger || younger->isSquashed() || !younger->isExecuted() ||
+            !younger->hitExternalSnoop()) {
+            continue;
+        }
+
+        DPRINTF(LSQUnit,
+                "TSO load/load violation: older load completed [sn:%lli], "
+                "younger executed load observed an eviction/snoop "
+                "[sn:%lli]\n",
+                completed_load->seqNum, younger->seqNum);
+
+        if (younger->fault == NoFault) {
+            younger->fault = std::make_shared<ReExec>();
+            if (younger_it->hasRequest()) {
+                younger_it->request()->setStateToFault();
+            }
+            setMemOrderViolatorIfOlder(younger);
+            ++stats.barrierReschedulesLSQ;
+            ++stats.memOrderViolation;
+            ++stats.tsoLoadCompletionReschedules;
+        }
+
+        // Replaying the oldest hazardous younger load also removes every
+        // younger instruction.
+        break;
+    }
+}
+
+DynInstPtr
+LSQUnit::getMemOrderViolator()
+{
+    DynInstPtr temp = memOrderViolator;
+    memOrderViolator = NULL;
+    return temp;
+}
+
+DynInstPtr
+LSQUnit::peekMemOrderViolator() const
+{
+    return memOrderViolator;
+}
+
 unsigned
 LSQUnit::numFreeLoadEntries()
 {
@@ -935,6 +1008,42 @@ LSQUnit::numFreeStoreEntries()
     DPRINTF(LSQUnit, "SQ size: %d, #stores occupied: %d\n",
             storeQueue.capacity(), storeQueue.size());
     return storeQueue.capacity() - storeQueue.size();
+}
+
+void
+LSQUnit::checkL1Eviction(PacketPtr pkt)
+{
+    assert(pkt->req && pkt->req->isL1DEvictionNotify());
+
+    if (!needsTSO || loadQueue.empty()) {
+        return;
+    }
+
+    const Addr evict_addr = pkt->getAddr() & cacheBlockMask;
+    for (auto &entry : loadQueue) {
+        if (!entry.valid() || !entry.hasRequest()) {
+            continue;
+        }
+
+        const DynInstPtr &ld_inst = entry.instruction();
+        assert(ld_inst);
+        LSQRequest *request = entry.request();
+
+        if (ld_inst->isSquashed() || !ld_inst->isExecuted() ||
+            !ld_inst->effAddrValid() || ld_inst->strictlyOrdered() ||
+            !request->isCacheBlockHit(evict_addr, cacheBlockMask)) {
+            continue;
+        }
+
+        if (!ld_inst->hitExternalSnoop()) {
+            DPRINTF(LSQUnit,
+                    "Recording TSO L1 eviction hazard for addr %#x "
+                    "[sn:%lli]\n",
+                    evict_addr, ld_inst->seqNum);
+            ld_inst->hitExternalSnoop(true);
+            ++stats.tsoL1EvictionHazards;
+        }
+    }
 }
 
 void
@@ -1153,8 +1262,9 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
         auto ld_mem_version = ld_inst->getMemOrderVersion();
         // if a younger load bypassed an older store with older version,
         // mark this load as a potential violation on snoop
-        bool possible_ordering_hazard =
-            (inst_mem_version < ld_mem_version) && !ld_inst->stlfForwarded();
+        bool possible_ordering_hazard = cpu->versioningEnabled() &&
+                                        (inst_mem_version < ld_mem_version) &&
+                                        !ld_inst->stlfForwarded();
 
         Addr ld_eff_addr1 = ld_inst->effAddr >> depCheckShift;
         Addr ld_eff_addr2 =
@@ -1571,7 +1681,9 @@ LSQUnit::writebackStores()
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
             MergeBuffer::MergeBufferEntry *mb_entry2 = nullptr;
-            uint64_t store_version = inst->getMemOrderVersion();
+            // Ordering tags are metadata only in PO3 for now. Keep the
+            // merge buffer's versioning behavior disabled.
+            constexpr uint64_t store_version = 0;
 
             bool is_release_req = request->mainReq()->isRelease();
             bool is_release_store =
@@ -1601,7 +1713,6 @@ LSQUnit::writebackStores()
                 const size_t size0 = req0->getSize();
                 const size_t size1 = req1->getSize();
 
-                uint64_t store_version = inst->getMemOrderVersion();
                 bool mb_full = false;
                 bool can_merge_both = mergeBuffer.canAcceptSplitStore(
                     request, store_version, mb_full);
@@ -1892,6 +2003,9 @@ LSQUnit::squash(const InstSeqNum &squashed_num)
     if (memDepViolator && squashed_num < memDepViolator->seqNum) {
         memDepViolator = NULL;
     }
+    if (memOrderViolator && squashed_num < memOrderViolator->seqNum) {
+        memOrderViolator = NULL;
+    }
 
     while (storeQueue.size() != 0 &&
            storeQueue.back().instruction()->seqNum > squashed_num) {
@@ -1971,6 +2085,7 @@ void
 LSQUnit::writeback(const DynInstPtr &inst, PacketPtr pkt)
 {
     iewStage->wakeCPU();
+    bool completed_load = false;
 
     // Squashed instructions do not need to complete their access.
     if (inst->isSquashed()) {
@@ -1985,6 +2100,7 @@ LSQUnit::writeback(const DynInstPtr &inst, PacketPtr pkt)
         if (inst->fault == NoFault) {
             // Complete access to copy data to proper place.
             inst->completeAcc(pkt);
+            completed_load = inst->isLoad();
         } else {
             // If the instruction has an outstanding fault, we cannot complete
             // the access as this discards the current fault.
@@ -2020,6 +2136,10 @@ LSQUnit::writeback(const DynInstPtr &inst, PacketPtr pkt)
                     "due to pending fault.\n",
                     inst->seqNum);
         }
+    }
+
+    if (completed_load && needsTSO) {
+        checkCompletedLoadSnoopHazards(inst);
     }
 
     // Need to insert instruction into queue to commit
@@ -3541,6 +3661,10 @@ LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
         [entry](const MergeBufferEntry &e) { return &e == entry; });
     lsq_ptr->stats.mbAvgOccupancy =
         static_cast<double>(entries.size()) / numEntries;
+
+    if (lsq_ptr->needsTSO) {
+        lsq_ptr->storeInFlight = false;
+    }
 }
 
 } // namespace po3

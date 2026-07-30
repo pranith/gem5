@@ -194,6 +194,8 @@ class Request : public Extensible<Request>
         INVALIDATE                  = 0x0000000100000000,
         /** The request cleans a memory location */
         CLEAN                       = 0x0000000200000000,
+        /** An L1 data-cache replacement notification sent to the CPU. */
+        L1D_EVICTION_NOTIFY         = 0x0004000000000000,
 
         /** The request targets the point of unification */
         DST_POU                     = 0x0000001000000000,
@@ -1044,6 +1046,11 @@ class Request : public Extensible<Request>
     bool isSecure() const { return _flags.isSet(SECURE); }
     bool isPTWalk() const { return _flags.isSet(PT_WALK); }
     bool isRelease() const { return _flags.isSet(RELEASE); }
+    bool
+    isL1DEvictionNotify() const
+    {
+        return _flags.isSet(L1D_EVICTION_NOTIFY);
+    }
     bool isKernel() const { return _flags.isSet(KERNEL); }
     bool isAtomicReturn() const { return _flags.isSet(ATOMIC_RETURN_OP); }
     bool isAtomicNoReturn() const { return _flags.isSet(ATOMIC_NO_RETURN_OP); }

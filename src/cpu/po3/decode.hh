@@ -42,6 +42,7 @@
 #ifndef __CPU_O3_DECODE_HH__
 #define __CPU_O3_DECODE_HH__
 
+#include <array>
 #include <deque>
 #include <queue>
 
@@ -293,6 +294,18 @@ class Decode
     const bool po3DecodePipeline;
     const Cycles po3DecodeLatency;
     const unsigned po3DecodeStageWidth;
+
+    /** Per-thread ordering tag assigned to memory operations. */
+    std::array<uint64_t, MaxThreads> memOrderVersion;
+    /**
+     * Per-thread ordering tag assigned to TSO loads. Unlike the store-tag
+     * allocator, this advances only at a fence.
+     */
+    std::array<uint64_t, MaxThreads> loadMemOrderVersion;
+    /** Exclude optimized store releases from ordering-epoch boundaries. */
+    const bool optimizeStoreRelease;
+    /** Select TSO store tagging instead of RC barrier-epoch tagging. */
+    const bool needsTSO;
 
     struct PO3DecodeStageEntry
     {

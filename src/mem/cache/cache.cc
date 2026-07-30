@@ -965,6 +965,18 @@ Cache::evictBlock(CacheBlk *blk)
     PacketPtr pkt = (blk->isSet(CacheBlk::DirtyBit) || writebackClean) ?
         writebackBlk(blk) : cleanEvictBlk(blk);
 
+    if (pkt && notifyCpuOnEviction && forwardSnoops) {
+        // Send a private metadata-only notification directly toward the CPU.
+        // Do not leak the flag into the ordinary writeback/clean-evict
+        // transaction sent down the hierarchy.
+        Packet eviction_notify(pkt, true, false);
+        eviction_notify.req = std::make_shared<Request>(*pkt->req);
+        eviction_notify.req->setFlags(Request::L1D_EVICTION_NOTIFY);
+        eviction_notify.senderState = nullptr;
+        eviction_notify.setExpressSnoop();
+        cpuSidePort.sendTimingSnoopReq(&eviction_notify);
+    }
+
     invalidateBlock(blk);
 
     return pkt;
