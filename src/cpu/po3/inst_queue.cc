@@ -971,6 +971,23 @@ InstructionQueue::scheduleReadyInsts()
             }
             if (idx > FUPool::NoFreeFU) {
                 op_latency = fu_pool->getOpLatency(op_class);
+                if (issuing_inst->isMemRef()) {
+                    const bool load_store_pipe =
+                        issuing_inst->isStore() ||
+                        fu_pool->unitProvides(idx, enums::MemWrite);
+                    if (!load_store_pipe) {
+                        issuing_inst->memPipe(MemPipe::Load);
+                    } else {
+                        const unsigned pipe = fu_pool->unitCapabilityOrdinal(
+                            idx, enums::MemWrite);
+                        panic_if(pipe > 1,
+                                 "PO3 selected unexpected load/store pipe %u",
+                                 pipe);
+                        issuing_inst->memPipe(
+                            pipe == 0 ? MemPipe::LoadStore0
+                                      : MemPipe::LoadStore1);
+                    }
+                }
             }
         }
 

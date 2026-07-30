@@ -81,6 +81,15 @@ class ThreadState;
 class LSQEntry;
 class SQEntry;
 
+/** Memory execution pipe selected when the instruction issues. */
+enum class MemPipe : uint8_t
+{
+    Unassigned,
+    Load,
+    LoadStore0,
+    LoadStore1
+};
+
 class DynInst : public ExecContext, public RefCounted
 {
   private:
@@ -966,6 +975,18 @@ class DynInst : public ExecContext, public RefCounted
         return staticInst->opClass();
     }
 
+    MemPipe
+    memPipe() const
+    {
+        return _memPipe;
+    }
+
+    void
+    memPipe(MemPipe pipe)
+    {
+        _memPipe = pipe;
+    }
+
     /** Returns the branch target address. */
     std::unique_ptr<PCStateBase>
     branchTarget() const
@@ -1483,6 +1504,9 @@ class DynInst : public ExecContext, public RefCounted
     AddressMonitor *getAddrMonitor() override;
 
   private:
+    /** Memory pipe assigned by the issue-stage functional unit. */
+    MemPipe _memPipe = MemPipe::Unassigned;
+
     // hardware transactional memory
     uint64_t htmUid = -1;
     uint64_t htmDepth = 0;

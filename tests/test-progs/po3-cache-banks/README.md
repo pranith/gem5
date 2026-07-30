@@ -29,4 +29,11 @@ build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
 ```
 
 The relevant statistic is `system.cpu.loadStoreBankConflicts`.
+`loadPipeReadPortUses` and `loadStorePipe[01]ReadPortUses` report traffic on
+the three pipe-mapped cache read ports. `mergeBufferWritePortUses` and
+`writePortUseCycles[01]` report use of the merge buffer's single cache write
+port.
 Merge-buffer statistics are under `system.cpu.lsq0.mb*`.
+`mbLoadStorePipe[01]Writes` counts stores entering the merge buffer from each
+load/store pipe, while `mbDualPipeWriteCycles` counts cycles in which both
+input ports were used.

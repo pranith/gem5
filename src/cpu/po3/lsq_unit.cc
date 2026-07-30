@@ -91,6 +91,38 @@ extractValue(const uint8_t *data, size_t size)
     return value;
 }
 
+CachePort
+readPortFor(MemPipe pipe)
+{
+    switch (pipe) {
+      case MemPipe::Load:
+        return CachePort::LoadPipeRead;
+      case MemPipe::LoadStore0:
+        return CachePort::LoadStorePipe0Read;
+      case MemPipe::LoadStore1:
+        return CachePort::LoadStorePipe1Read;
+      case MemPipe::Unassigned:
+        panic("Memory request reached the cache without a memory pipe");
+    }
+    panic("Unknown PO3 memory pipe");
+}
+
+unsigned
+storePipeIndex(MemPipe pipe)
+{
+    switch (pipe) {
+      case MemPipe::LoadStore0:
+        return 0;
+      case MemPipe::LoadStore1:
+        return 1;
+      case MemPipe::Load:
+        panic("Load-only pipe cannot issue a store");
+      case MemPipe::Unassigned:
+        panic("Store reached the merge buffer without a memory pipe");
+    }
+    panic("Unknown PO3 memory pipe");
+}
+
 } // namespace
 
 LSQUnit::WritebackEvent::WritebackEvent(const DynInstPtr &_inst,
@@ -334,6 +366,8 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
     storeDeallocateWidth = params.storeDeallocateWidth;
     storeDeallocsThisCycle = 0;
     lastStoreDeallocCycle = cpu->curCycle();
+    mbStorePipe0Used = false;
+    mbStorePipe1Used = false;
 
     if (mergeBufferEnabled) {
         mergeBuffer.init(this, params.mergeBufferEntries, cacheLineSize(),
@@ -428,6 +462,15 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
                "Number of merge buffer entries retired"),
       ADD_STAT(mbDrains, statistics::units::Count::get(),
                "Number of merge buffer entries drained to cache"),
+      ADD_STAT(mbCacheWritePortUses, statistics::units::Count::get(),
+               "Merge buffer drains issued through its cache write port"),
+      ADD_STAT(mbLoadStorePipe0Writes, statistics::units::Count::get(),
+               "Stores written into the merge buffer by load/store pipe 0"),
+      ADD_STAT(mbLoadStorePipe1Writes, statistics::units::Count::get(),
+               "Stores written into the merge buffer by load/store pipe 1"),
+      ADD_STAT(mbDualPipeWriteCycles, statistics::units::Count::get(),
+               "Cycles in which both load/store pipes wrote into the merge "
+               "buffer"),
       ADD_STAT(mbUnretire, statistics::units::Count::get(),
                "Number of merge buffer entries unretired from RETIRED state"),
       ADD_STAT(mbForwards, statistics::units::Count::get(),
@@ -620,14 +663,15 @@ LSQUnit::reserveRMWWriteBank()
             continue;
         }
 
-        const bool port_available = lsq->cachePortAvailable(false);
+        const CachePort port = state.writePort;
+        const bool port_available = lsq->cachePortAvailable(port);
         const bool bank_available =
-            port_available && lsq->cacheBankAvailable(false, pkt->getAddr());
+            port_available && lsq->cacheBankAvailable(port, pkt->getAddr());
         if (bank_available) {
-            lsq->cachePortBusy(false, pkt->getAddr());
+            lsq->cachePortBusy(port, pkt->getAddr());
             state.writeReserved = true;
             DPRINTF(LSQUnit,
-                    "Reserved partial-write RMW bank write at addr %#x\n",
+                    "Reserved merge-buffer-port RMW write at addr %#x\n",
                     pkt->getAddr());
         } else if (port_available) {
             lsq->cacheBankConflict();
@@ -1430,12 +1474,14 @@ LSQUnit::writebackStores()
     }
 
     if (mergeBufferEnabled) {
-        if (!needsTSO || !storeInFlight) {
-            if (lsq->cachePortAvailable(false)) {
-                mergeBuffer.drainOne(this);
-            } else {
-                DPRINTF(LSQUnit, "Unable to drain merge buffer "
-                                 "since the cache is blocked.\n");
+        // Keep issuing independent drains while progress is possible. A
+        // partial drain may only start its RMW read here; drainOne() skips
+        // that entry until its X+2 write has the merge buffer's cache port,
+        // allowing another entry to enter the RMW pipeline.
+        while ((!needsTSO || !storeInFlight) && !lsq->cacheBlocked() &&
+               mergeBuffer.drainOne(this)) {
+            if (needsTSO) {
+                break;
             }
         }
     }
@@ -1443,6 +1489,8 @@ LSQUnit::writebackStores()
     // Track store queue deallocations per cycle for head removals.
     if (lastStoreDeallocCycle != cpu->curCycle()) {
         storeDeallocsThisCycle = 0;
+        mbStorePipe0Used = false;
+        mbStorePipe1Used = false;
         lastStoreDeallocCycle = cpu->curCycle();
     }
 
@@ -1479,6 +1527,8 @@ LSQUnit::writebackStores()
         DynInstPtr inst = storeWBIt->instruction();
         LSQRequest *request = storeWBIt->request();
         bool is_atomic_req = request->mainReq()->isAtomic();
+        const unsigned store_pipe = storePipeIndex(inst->memPipe());
+        constexpr CachePort store_port = CachePort::MergeBufferWrite;
 
         bool can_use_mb = mergeBufferEnabled &&
                           !request->mainReq()->isLocalAccess() &&
@@ -1508,6 +1558,15 @@ LSQUnit::writebackStores()
         assert(!storeWBIt->committed());
 
         if (can_use_mb) {
+            const bool pipe_used =
+                store_pipe == 0 ? mbStorePipe0Used : mbStorePipe1Used;
+            if (pipe_used) {
+                DPRINTF(LSQUnit,
+                        "Unable to write store [sn:%lli] into merge buffer: "
+                        "load/store pipe %u input is busy\n",
+                        inst->seqNum, store_pipe);
+                break;
+            }
 
             bool merged_ok = true;
             MergeBuffer::MergeBufferEntry *mb_entry = nullptr;
@@ -1584,6 +1643,16 @@ LSQUnit::writebackStores()
                     (mb_entry && merged_ok) ? "accepted" : "blocked");
 
             if (mb_entry && merged_ok) {
+                if (store_pipe == 0) {
+                    mbStorePipe0Used = true;
+                    ++stats.mbLoadStorePipe0Writes;
+                } else {
+                    mbStorePipe1Used = true;
+                    ++stats.mbLoadStorePipe1Writes;
+                }
+                if (mbStorePipe0Used && mbStorePipe1Used) {
+                    ++stats.mbDualPipeWriteCycles;
+                }
                 if (is_release_req) {
                     mb_entry->isRelease = true;
                     if (is_release_store) {
@@ -1630,7 +1699,7 @@ LSQUnit::writebackStores()
                 break;
             }
         } else if (((!needsTSO) || (!storeInFlight)) &&
-                   lsq->cachePortAvailable(false)) {
+                   lsq->cachePortAvailable(store_port)) {
 
             storeWBIt->committed() = true;
 
@@ -1713,6 +1782,14 @@ LSQUnit::writebackStores()
                         "will retry later\n",
                         inst->seqNum);
             }
+        } else {
+            // This store must use the write port associated with the
+            // load/store pipe on which it issued.
+            DPRINTF(LSQUnit,
+                    "Unable to write back store [sn:%lli]: its load/store "
+                    "pipe write port is busy\n",
+                    inst->seqNum);
+            break;
         }
         assert(storesToWB >= 0);
     }
@@ -2024,6 +2101,17 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(data_pkt->senderState);
     const bool isMergeBufferPkt = request == nullptr;
+    CachePort data_port = CachePort::MergeBufferWrite;
+    if (isLoad) {
+        if (isMergeBufferPkt) {
+            data_port =
+                lsq->cachePortAvailable(CachePort::LoadStorePipe0Read)
+                    ? CachePort::LoadStorePipe0Read
+                    : CachePort::LoadStorePipe1Read;
+        } else {
+            data_port = readPortFor(request->instruction()->memPipe());
+        }
+    }
 
     const bool partial_write =
         !isLoad && data_pkt->isWrite() &&
@@ -2034,14 +2122,18 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         // Cycle X: read the bank. The packet remains local while the old and
         // new bytes merge in X+1, then it is sent during the reserved write
         // phase in X+2.
-        const bool port_available = lsq->cachePortAvailable(true);
+        constexpr CachePort rmw_read_port = CachePort::MergeBufferRead;
+        constexpr CachePort rmw_write_port = CachePort::MergeBufferWrite;
+        const bool port_available =
+            lsq->cachePortAvailable(rmw_read_port);
         const bool bank_available =
             port_available &&
-            lsq->cacheBankAvailable(true, data_pkt->getAddr());
+            lsq->cacheBankAvailable(rmw_read_port, data_pkt->getAddr());
         if (!lsq->cacheBlocked() && bank_available) {
-            lsq->cachePortBusy(true, data_pkt->getAddr());
-            partialWriteRMWs.emplace(data_pkt,
-                                     PartialWriteRMWState{Cycles(2), false});
+            lsq->cachePortBusy(rmw_read_port, data_pkt->getAddr());
+            partialWriteRMWs.emplace(
+                data_pkt,
+                PartialWriteRMWState{Cycles(2), false, rmw_write_port});
             DPRINTF(LSQUnit,
                     "Started partial-write RMW bank read at addr %#x\n",
                     data_pkt->getAddr());
@@ -2054,18 +2146,22 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         }
         ret = false;
     } else if (partial_write && !rmw_it->second.writeReserved) {
+        data_port = rmw_it->second.writePort;
         // X+1 is the merge-only cycle. A write phase which could not reserve
         // its bank at X+2 also waits here for the next reservation cycle.
         ret = false;
     } else {
         const bool bank_reserved =
             partial_write && rmw_it->second.writeReserved;
+        if (bank_reserved) {
+            data_port = rmw_it->second.writePort;
+        }
         const bool port_available =
-            bank_reserved || lsq->cachePortAvailable(isLoad);
+            bank_reserved || lsq->cachePortAvailable(data_port);
         const bool bank_available =
             bank_reserved ||
             (port_available &&
-             lsq->cacheBankAvailable(isLoad, data_pkt->getAddr()));
+             lsq->cacheBankAvailable(data_port, data_pkt->getAddr()));
 
         if (!lsq->cacheBlocked() && bank_available) {
             if (!dcachePort->sendTimingReq(data_pkt)) {
@@ -2085,7 +2181,15 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
             if (bank_reserved) {
                 partialWriteRMWs.erase(rmw_it);
             } else {
-                lsq->cachePortBusy(isLoad, data_pkt->getAddr());
+                lsq->cachePortBusy(data_port, data_pkt->getAddr());
+            }
+            if (isMergeBufferPkt && !isLoad) {
+                assert(data_port == CachePort::MergeBufferWrite);
+                ++stats.mbCacheWritePortUses;
+                DPRINTF(LSQUnit,
+                        "Merge-buffer drain used its cache write port "
+                        "at addr %#x\n",
+                        data_pkt->getAddr());
             }
         } else if (bank_reserved) {
             rmw_it->second.writeReserved = false;
@@ -2809,14 +2913,19 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 // the read-port and bank constraints, but drop a rejected
                 // prefetch instead of marking the LSQ cache-blocked and
                 // stalling demand traffic behind it.
+                const CachePort port =
+                    lsqPtr->lsq->cachePortAvailable(
+                        CachePort::LoadStorePipe0Read)
+                        ? CachePort::LoadStorePipe0Read
+                        : CachePort::LoadStorePipe1Read;
                 const bool port_available =
-                    lsqPtr->lsq->cachePortAvailable(true);
+                    lsqPtr->lsq->cachePortAvailable(port);
                 const bool bank_available =
                     port_available &&
-                    lsqPtr->lsq->cacheBankAvailable(true, lineAddr);
+                    lsqPtr->lsq->cacheBankAvailable(port, lineAddr);
                 if (!lsqPtr->lsq->cacheBlocked() && bank_available &&
                     lsqPtr->dcachePort->sendTimingReq(pf_pkt)) {
-                    lsqPtr->lsq->cachePortBusy(true, lineAddr);
+                    lsqPtr->lsq->cachePortBusy(port, lineAddr);
                     ++lsqPtr->mergeBufferPfInFlight;
                 } else {
                     delete static_cast<MergeBufferPrefetchSenderState *>(
@@ -3223,6 +3332,12 @@ LSQUnit::loadBlockedByMBVersion(uint64_t version) const
 bool
 LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
 {
+    auto is_drainable = [](const MergeBufferEntry &entry) {
+        return entry.valid &&
+               (entry.state == EntryState::RETIRED ||
+                entry.state == EntryState::FORCE_RETIRED);
+    };
+
     // Oldest entry is at the front of the list; enforce FIFO draining in TSO.
     auto it = entries.begin();
     while (it != entries.end() && !it->valid) {
@@ -3230,23 +3345,26 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     }
 
     if (lsq_ptr->needsTSO) {
-        if (it == entries.end() || (it->state != EntryState::RETIRED &&
-                                    it->state != EntryState::FORCE_RETIRED)) {
+        if (it == entries.end() || !is_drainable(*it)) {
             return false;
         }
     } else {
-        it = std::find_if(it, entries.end(), [&](MergeBufferEntry &e) {
-            if (!e.valid) {
+        auto can_send_now = [&](MergeBufferEntry &entry) {
+            if (!is_drainable(entry) || !entry.drainPkt) {
                 return false;
             }
-            if (e.state != EntryState::RETIRED &&
-                e.state != EntryState::FORCE_RETIRED) {
+            auto rmw = lsq_ptr->partialWriteRMWs.find(entry.drainPkt);
+            return rmw == lsq_ptr->partialWriteRMWs.end() ||
+                   rmw->second.writeReserved;
+        };
+        auto can_start = [&](MergeBufferEntry &entry) {
+            if (!is_drainable(entry) || entry.drainPkt) {
                 return false;
             }
             // For release entries, check that all wait bits are cleared
-            if (e.isRelease) {
+            if (entry.isRelease) {
                 bool deps_clear =
-                    std::none_of(e.waitBits.begin(), e.waitBits.end(),
+                    std::none_of(entry.waitBits.begin(), entry.waitBits.end(),
                                  [](bool v) { return v; });
                 if (!deps_clear) {
                     if (lsq_ptr) {
@@ -3256,7 +3374,13 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
                 }
             }
             return true;
-        });
+        };
+
+        // Consume already-reserved RMW writes before starting more reads.
+        it = std::find_if(it, entries.end(), can_send_now);
+        if (it == entries.end()) {
+            it = std::find_if(entries.begin(), entries.end(), can_start);
+        }
         if (it == entries.end()) {
             dumpWaitBits();
             return false;
@@ -3283,8 +3407,11 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             entry.drainPkt = pkt;
         }
 
+        const bool rmw_pending =
+            lsq_ptr->partialWriteRMWs.contains(pkt);
         if (!lsq_ptr->trySendPacket(false, pkt)) {
-            return false;
+            return !rmw_pending &&
+                   lsq_ptr->partialWriteRMWs.contains(pkt);
         }
         entry.drainPkt = nullptr;
 
@@ -3334,8 +3461,9 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
         entry.drainPkt = pkt;
     }
 
+    const bool rmw_pending = lsq_ptr->partialWriteRMWs.contains(pkt);
     if (!lsq_ptr->trySendPacket(false, pkt)) {
-        return false;
+        return !rmw_pending && lsq_ptr->partialWriteRMWs.contains(pkt);
     }
     entry.drainPkt = nullptr;
 

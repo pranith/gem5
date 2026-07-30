@@ -115,7 +115,21 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU *_cpu)
                "Number of retry responses sent"),
       ADD_STAT(loadStoreBankConflicts, statistics::units::Count::get(),
                "Number of D-cache accesses rejected due to a load/store "
-               "bank conflict")
+               "bank conflict"),
+      ADD_STAT(loadPipeReadPortUses, statistics::units::Count::get(),
+               "Uses of the load-only pipe's D-cache read port"),
+      ADD_STAT(loadStorePipe0ReadPortUses, statistics::units::Count::get(),
+               "Uses of load/store pipe 0's D-cache read port"),
+      ADD_STAT(loadStorePipe1ReadPortUses, statistics::units::Count::get(),
+               "Uses of load/store pipe 1's D-cache read port"),
+      ADD_STAT(mergeBufferReadPortUses, statistics::units::Count::get(),
+               "RMW read phases using the merge-buffer cache port"),
+      ADD_STAT(mergeBufferWritePortUses, statistics::units::Count::get(),
+               "Writes using the merge-buffer cache port"),
+      ADD_STAT(writePortUseCycles0, statistics::units::Count::get(),
+               "Cycles in which the merge-buffer cache write port is idle"),
+      ADD_STAT(writePortUseCycles1, statistics::units::Count::get(),
+               "Cycles in which the merge-buffer cache write port is used")
 {
     recvRespAvgBW.precision(2);
     recvRespAvgBW = numRecvRespBytes / _cpu->baseStats.numCycles;
@@ -138,6 +152,10 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
       usedStorePorts(0),
       cacheLoadPorts(params.cacheLoadPorts),
       usedLoadPorts(0),
+      loadPipeReadPortUsed(false),
+      loadStorePipe0ReadPortUsed(false),
+      loadStorePipe1ReadPortUsed(false),
+      mergeBufferCachePortUsed(false),
       cacheBanks(params.cacheBanks),
       loadBanksUsed(cacheBanks, false),
       storeBanksUsed(cacheBanks, false),
@@ -163,6 +181,9 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
 {
     assert(numThreads > 0 && numThreads <= MaxThreads);
     fatal_if(cacheBanks == 0, "The PO3 D-cache must have at least one bank");
+    fatal_if(cacheLoadPorts != 3 || cacheStorePorts != 1,
+             "PO3 requires three pipe-mapped D-cache read ports and one "
+             "merge-buffer D-cache write port");
 
     //**********************************************
     //************ Handle SMT Parameters ***********
@@ -247,6 +268,10 @@ LSQ::takeOverFrom()
 {
     usedLoadPorts = 0;
     usedStorePorts = 0;
+    loadPipeReadPortUsed = false;
+    loadStorePipe0ReadPortUsed = false;
+    loadStorePipe1ReadPortUsed = false;
+    mergeBufferCachePortUsed = false;
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
     _cacheBlocked = false;
@@ -260,12 +285,29 @@ void
 LSQ::tick()
 {
     // Re-issue loads which exhausted the previous cycle's load ports.
-    if (usedLoadPorts == cacheLoadPorts && !_cacheBlocked) {
+    if (loadPipeReadPortUsed && loadStorePipe0ReadPortUsed &&
+        loadStorePipe1ReadPortUsed && !_cacheBlocked) {
         iewStage->cacheUnblocked();
+    }
+
+    switch (usedStorePorts) {
+      case 0:
+        ++dcachePort.dcachePortStats.writePortUseCycles0;
+        break;
+      case 1:
+        ++dcachePort.dcachePortStats.writePortUseCycles1;
+        break;
+      default:
+        panic("PO3 used %u D-cache write ports in one cycle",
+              usedStorePorts);
     }
 
     usedLoadPorts = 0;
     usedStorePorts = 0;
+    loadPipeReadPortUsed = false;
+    loadStorePipe0ReadPortUsed = false;
+    loadStorePipe1ReadPortUsed = false;
+    mergeBufferCachePortUsed = false;
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
 
@@ -300,15 +342,20 @@ LSQ::cacheBlocked(bool v)
 }
 
 bool
-LSQ::cachePortAvailable(bool is_load) const
+LSQ::cachePortAvailable(CachePort port) const
 {
-    bool ret;
-    if (is_load) {
-        ret = usedLoadPorts < cacheLoadPorts;
-    } else {
-        ret = usedStorePorts < cacheStorePorts;
+    switch (port) {
+      case CachePort::LoadPipeRead:
+        return cacheLoadPorts >= 1 && !loadPipeReadPortUsed;
+      case CachePort::LoadStorePipe0Read:
+        return cacheLoadPorts >= 2 && !loadStorePipe0ReadPortUsed;
+      case CachePort::LoadStorePipe1Read:
+        return cacheLoadPorts >= 3 && !loadStorePipe1ReadPortUsed;
+      case CachePort::MergeBufferRead:
+      case CachePort::MergeBufferWrite:
+        return cacheStorePorts >= 1 && !mergeBufferCachePortUsed;
     }
-    return ret;
+    panic("Unknown PO3 cache port");
 }
 
 unsigned
@@ -318,20 +365,22 @@ LSQ::cacheBank(Addr addr) const
 }
 
 bool
-LSQ::cacheBankAvailable(bool is_load, Addr addr) const
+LSQ::cacheBankAvailable(CachePort port, Addr addr) const
 {
-    if (!cachePortAvailable(is_load)) {
+    if (!cachePortAvailable(port)) {
         return false;
     }
 
+    const bool is_load = port != CachePort::MergeBufferWrite;
     const unsigned bank = cacheBank(addr);
     return is_load ? !storeBanksUsed[bank] : !loadBanksUsed[bank];
 }
 
 void
-LSQ::cachePortBusy(bool is_load, Addr addr)
+LSQ::cachePortBusy(CachePort port, Addr addr)
 {
-    assert(cacheBankAvailable(is_load, addr));
+    assert(cacheBankAvailable(port, addr));
+    const bool is_load = port != CachePort::MergeBufferWrite;
     const unsigned bank = cacheBank(addr);
     if (is_load) {
         usedLoadPorts++;
@@ -339,6 +388,29 @@ LSQ::cachePortBusy(bool is_load, Addr addr)
     } else {
         usedStorePorts++;
         storeBanksUsed[bank] = true;
+    }
+
+    switch (port) {
+      case CachePort::LoadPipeRead:
+        loadPipeReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadPipeReadPortUses;
+        break;
+      case CachePort::LoadStorePipe0Read:
+        loadStorePipe0ReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadStorePipe0ReadPortUses;
+        break;
+      case CachePort::LoadStorePipe1Read:
+        loadStorePipe1ReadPortUsed = true;
+        ++dcachePort.dcachePortStats.loadStorePipe1ReadPortUses;
+        break;
+      case CachePort::MergeBufferRead:
+        mergeBufferCachePortUsed = true;
+        ++dcachePort.dcachePortStats.mergeBufferReadPortUses;
+        break;
+      case CachePort::MergeBufferWrite:
+        mergeBufferCachePortUsed = true;
+        ++dcachePort.dcachePortStats.mergeBufferWritePortUses;
+        break;
     }
 }
 

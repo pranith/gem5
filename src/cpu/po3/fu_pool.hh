@@ -175,6 +175,12 @@ class FUPool : public SimObject
      */
     int getUnit(OpClass capability);
 
+    /** Returns whether a specific FU provides an operation capability. */
+    bool unitProvides(int fu_idx, OpClass capability) const;
+
+    /** Returns the FU's ordinal among units providing a capability. */
+    unsigned unitCapabilityOrdinal(int fu_idx, OpClass capability) const;
+
     /** Frees a FU at the end of this cycle. */
     void freeUnitNextCycle(int fu_idx);
 

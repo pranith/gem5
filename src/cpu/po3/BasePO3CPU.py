@@ -72,10 +72,10 @@ class BasePO3CPU(BaseCPU):
     activity = Param.Unsigned(0, "Initial count")
 
     cacheStorePorts = Param.Unsigned(
-        200, "Number of D-cache write ports available per cycle"
+        1, "Merge-buffer D-cache write ports available per cycle"
     )
     cacheLoadPorts = Param.Unsigned(
-        200, "Number of D-cache read ports available per cycle"
+        3, "One D-cache read port mapped to each memory pipe"
     )
     cacheBanks = Param.Unsigned(
         1,
@@ -184,7 +184,7 @@ class BasePO3CPU(BaseCPU):
         True, "Enable PO3 explicit commit/retire stage"
     )
     po3CommitLatency = Param.Cycles(1, "PO3 commit/retire stage latency")
-    po3CommitStageWidth = Param.Unsigned(1, "PO3 commit/retire stage width")
+    po3CommitStageWidth = Param.Unsigned(2, "PO3 commit/retire stage width")
     po3RedirectPipeline = Param.Bool(
         True, "Enable PO3 explicit branch redirect/recovery stage"
     )

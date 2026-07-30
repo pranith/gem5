@@ -803,6 +803,9 @@ class LSQUnit
     unsigned storeDeallocateWidth;
     unsigned storeDeallocsThisCycle;
     Cycles lastStoreDeallocCycle;
+    /** Store-pipe-to-merge-buffer input ports occupied this cycle. */
+    bool mbStorePipe0Used;
+    bool mbStorePipe1Used;
 
   private:
     /** The number of places to shift addresses in the LSQ before checking
@@ -871,6 +874,8 @@ class LSQUnit
         Cycles cyclesUntilWrite;
         /** Whether the write port/bank is reserved in the current cycle. */
         bool writeReserved = false;
+        /** Merge-buffer cache write port used by this RMW. */
+        CachePort writePort = CachePort::MergeBufferWrite;
     };
 
     /**
@@ -968,6 +973,14 @@ class LSQUnit
         statistics::Scalar mbRetired;
         /** Merge buffer drains issued */
         statistics::Scalar mbDrains;
+        /** Merge buffer drains using its cache write port. */
+        statistics::Scalar mbCacheWritePortUses;
+        /** Stores written into the merge buffer by load/store pipe 0. */
+        statistics::Scalar mbLoadStorePipe0Writes;
+        /** Stores written into the merge buffer by load/store pipe 1. */
+        statistics::Scalar mbLoadStorePipe1Writes;
+        /** Cycles in which both load/store pipes wrote into the merge buffer. */
+        statistics::Scalar mbDualPipeWriteCycles;
         /** Merge buffer unretire count */
         statistics::Scalar mbUnretire;
         /** Merge buffer forwards to loads */

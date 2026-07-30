@@ -74,6 +74,16 @@ class CPU;
 class IEW;
 class LSQUnit;
 
+/** Pipe-mapped read ports and the merge buffer's cache port. */
+enum class CachePort
+{
+    LoadPipeRead,
+    LoadStorePipe0Read,
+    LoadStorePipe1Read,
+    MergeBufferRead,
+    MergeBufferWrite
+};
+
 /** Memory operation metadata.
  * This class holds the information about a memory operation. It lives
  * from initiateAcc to resource deallocation at commit or squash.
@@ -715,6 +725,28 @@ class LSQ
 
             /* Number of read/write bank conflicts */
             statistics::Scalar loadStoreBankConflicts;
+
+            /** Uses of the read port mapped to the load-only pipe. */
+            statistics::Scalar loadPipeReadPortUses;
+
+            /** Uses of the read port mapped to load/store pipe 0. */
+            statistics::Scalar loadStorePipe0ReadPortUses;
+
+            /** Uses of the read port mapped to load/store pipe 1. */
+            statistics::Scalar loadStorePipe1ReadPortUses;
+
+            /** RMW read phases using the merge-buffer cache port. */
+            statistics::Scalar mergeBufferReadPortUses;
+
+            /** Writes using the merge-buffer cache port. */
+            statistics::Scalar mergeBufferWritePortUses;
+
+            /** Cycles with the merge-buffer cache write port idle. */
+            statistics::Scalar writePortUseCycles0;
+
+            /** Cycles with the merge-buffer cache write port occupied. */
+            statistics::Scalar writePortUseCycles1;
+
         } dcachePortStats;
 
       protected:
@@ -992,16 +1024,16 @@ class LSQ
     bool cacheBlocked() const;
     /** Set D-cache blocked status */
     void cacheBlocked(bool v);
-    /** Is a cache port of the requested type available? */
-    bool cachePortAvailable(bool is_load) const;
+    /** Is the requested pipe-mapped cache port available? */
+    bool cachePortAvailable(CachePort port) const;
     /**
      * Is a cache port and the address's bank available?
      * Read/read and write/write accesses do not conflict at the bank level;
      * their throughput is constrained by the corresponding port count.
      */
-    bool cacheBankAvailable(bool is_load, Addr addr) const;
-    /** Record use of a cache port and the address's bank. */
-    void cachePortBusy(bool is_load, Addr addr);
+    bool cacheBankAvailable(CachePort port, Addr addr) const;
+    /** Record use of a pipe-mapped cache port and the address's bank. */
+    void cachePortBusy(CachePort port, Addr addr);
     /** Record a rejected access caused by a read/write bank conflict. */
     void cacheBankConflict();
 
@@ -1024,6 +1056,14 @@ class LSQ
     int cacheLoadPorts;
     /** The number of used cache ports in this cycle by loads. */
     int usedLoadPorts;
+    /** Whether the load-only pipe's read port is occupied this cycle. */
+    bool loadPipeReadPortUsed;
+    /** Whether load/store pipe 0's read port is occupied this cycle. */
+    bool loadStorePipe0ReadPortUsed;
+    /** Whether load/store pipe 1's read port is occupied this cycle. */
+    bool loadStorePipe1ReadPortUsed;
+    /** Whether the merge buffer's cache port is occupied this cycle. */
+    bool mergeBufferCachePortUsed;
     /** Number of cache-line-interleaved D-cache banks. */
     const unsigned cacheBanks;
     /** Banks read in the current cycle. */
