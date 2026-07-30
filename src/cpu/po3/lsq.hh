@@ -852,6 +852,13 @@ class LSQ
     /** Gets the instruction that caused the memory ordering violation. */
     DynInstPtr getMemDepViolator(ThreadID tid);
 
+    /** Returns whether a completed load discovered a TSO ordering hazard. */
+    bool memOrderViolation(ThreadID tid);
+    /** Gets and clears the load that must be replayed. */
+    DynInstPtr getMemOrderViolator(ThreadID tid);
+    /** Gets the load that must be replayed without clearing it. */
+    DynInstPtr peekMemOrderViolator(ThreadID tid);
+
     /** Returns the head index of the load queue for a specific thread. */
     int getLoadHead(ThreadID tid);
 

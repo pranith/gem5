@@ -275,6 +275,10 @@ class IEW
                                                                barrier_sn);
     }
 
+    bool memOrderViolation(ThreadID tid);
+    DynInstPtr getMemOrderViolator(ThreadID tid);
+    DynInstPtr peekMemOrderViolator(ThreadID tid);
+
     /** Check misprediction  */
     void checkMisprediction(const DynInstPtr &inst);
 

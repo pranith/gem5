@@ -517,6 +517,24 @@ LSQ::getMemDepViolator(ThreadID tid)
     return thread.at(tid)->getMemDepViolator();
 }
 
+bool
+LSQ::memOrderViolation(ThreadID tid)
+{
+    return thread.at(tid)->memOrderViolation();
+}
+
+DynInstPtr
+LSQ::getMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid)->getMemOrderViolator();
+}
+
+DynInstPtr
+LSQ::peekMemOrderViolator(ThreadID tid)
+{
+    return thread.at(tid)->peekMemOrderViolator();
+}
+
 int
 LSQ::getLoadHead(ThreadID tid)
 {
@@ -686,8 +704,13 @@ LSQ::recvTimingSnoopReq(PacketPtr pkt)
     DPRINTF(LSQ, "received pkt for addr:%#x %s\n", pkt->getAddr(),
             pkt->cmdString());
 
-    // must be a snoop
-    if (pkt->isInvalidate()) {
+    if (pkt->req && pkt->req->isL1DEvictionNotify()) {
+        DPRINTF(LSQ, "received L1D eviction notification for addr:%#x\n",
+                pkt->getAddr());
+        for (ThreadID tid = 0; tid < numThreads; ++tid) {
+            thread[tid]->checkL1Eviction(pkt);
+        }
+    } else if (pkt->isInvalidate()) {
         DPRINTF(LSQ, "received invalidation for addr:%#x\n", pkt->getAddr());
         for (ThreadID tid = 0; tid < numThreads; tid++) {
             thread[tid]->checkSnoop(pkt);

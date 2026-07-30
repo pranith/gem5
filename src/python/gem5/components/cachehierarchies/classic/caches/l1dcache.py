@@ -64,4 +64,5 @@ class L1DCache(Cache):
         self.mshrs = mshrs
         self.tgts_per_mshr = tgts_per_mshr
         self.writeback_clean = writeback_clean
+        self.notify_cpu_on_eviction = True
         self.prefetcher = PrefetcherCls()

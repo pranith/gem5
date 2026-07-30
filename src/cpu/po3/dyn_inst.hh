@@ -676,11 +676,17 @@ class DynInst : public ExecContext, public RefCounted
         return staticInst->isStoreConditional();
     }
 
-    /** Memory ordering version (stub; always returns 0). */
+    /** Set the ordering tag assigned by decode. */
+    void
+    setMemOrderVersion(uint64_t version)
+    {
+        memOrderVersion = version;
+    }
+    /** Return the ordering tag assigned by decode. */
     uint64_t
     getMemOrderVersion() const
     {
-        return 0;
+        return memOrderVersion;
     }
     /** Whether this load was forwarded via STLF (stub). */
     bool
@@ -1506,6 +1512,8 @@ class DynInst : public ExecContext, public RefCounted
   private:
     /** Memory pipe assigned by the issue-stage functional unit. */
     MemPipe _memPipe = MemPipe::Unassigned;
+    /** Load/store ordering tag assigned at decode time. */
+    uint64_t memOrderVersion = 0;
 
     // hardware transactional memory
     uint64_t htmUid = -1;

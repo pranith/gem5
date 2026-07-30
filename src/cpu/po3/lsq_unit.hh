@@ -432,6 +432,11 @@ class LSQUnit
      * of the intermediate invalidate.
      */
     void checkSnoop(PacketPtr pkt);
+    /**
+     * Preserve TSO load-order hazards when an L1 replacement ends coherence
+     * monitoring for a speculative load's cache line.
+     */
+    void checkL1Eviction(PacketPtr pkt);
 
     /** Executes a load instruction. */
     Fault executeLoad(const DynInstPtr &inst);
@@ -486,6 +491,18 @@ class LSQUnit
 
     /** Returns the memory ordering violator. */
     DynInstPtr getMemDepViolator();
+
+    /** Returns if a completed load discovered a TSO load-order hazard. */
+    bool
+    memOrderViolation() const
+    {
+        return static_cast<bool>(memOrderViolator);
+    }
+
+    /** Returns and clears the TSO load-order violator. */
+    DynInstPtr getMemOrderViolator();
+    /** Returns the TSO load-order violator without clearing it. */
+    DynInstPtr peekMemOrderViolator() const;
 
     /** Returns the number of free LQ entries. */
     unsigned numFreeLoadEntries();
@@ -886,6 +903,15 @@ class LSQUnit
 
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
+    /** The oldest load that must be replayed for a TSO load-order hazard. */
+    DynInstPtr memOrderViolator;
+
+    /** Retain the oldest pending precise TSO replay point. */
+    void setMemOrderViolatorIfOlder(const DynInstPtr &inst);
+    /**
+     * Resolve hazards recorded on younger loads when an older load completes.
+     */
+    void checkCompletedLoadSnoopHazards(const DynInstPtr &completed_load);
 
     /** Flag for memory model. */
     bool needsTSO;
@@ -933,6 +959,12 @@ class LSQUnit
 
         /** Tota number of memory ordering violations. */
         statistics::Scalar memOrderViolation;
+
+        /** TSO loads replayed when an older load completes after a hazard. */
+        statistics::Scalar tsoLoadCompletionReschedules;
+
+        /** Executed TSO loads marked hazardous by an L1D replacement. */
+        statistics::Scalar tsoL1EvictionHazards;
 
         /** Number of possible consistency violations detected. */
         statistics::Scalar possibleConsistencyViolation;
