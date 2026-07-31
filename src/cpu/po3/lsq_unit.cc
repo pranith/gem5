@@ -660,7 +660,8 @@ LSQUnit::advancePO3MemPipeline()
 
     retirePO3MemStage(po3TLBLookupStage, po3MemTLBLookupWidth, "tlb-lookup",
                       [this](const DynInstPtr &inst) {
-                          if (inst->translationCompleted()) {
+                          if (inst->translationCompleted() ||
+                              !inst->readMemAccPredicate()) {
                               po3MemStageCycles[inst->seqNum] =
                                   po3MemCacheAccessLatency;
                               po3CacheAccessStage.push_back(inst);
@@ -678,7 +679,7 @@ LSQUnit::advancePO3MemPipeline()
             }
 
             if (inst->getFault() != NoFault || !inst->readPredicate() ||
-                inst->translationCompleted()) {
+                !inst->readMemAccPredicate() || inst->translationCompleted()) {
                 po3MemStageCycles[inst->seqNum] = po3MemTLBLookupLatency;
                 po3TLBLookupStage.push_back(inst);
             } else {
@@ -2225,6 +2226,12 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
     assert(store_idx->valid());
     assert(!store_idx->completed());
 
+    // Only a store sent directly from the SQ owns storeInFlight. Stores
+    // transferred into the merge buffer complete their SQ entry without
+    // completing an already-issued MB drain. Capture this before a head
+    // completion clears the SQ entry.
+    const bool completes_direct_store = store_idx->committed();
+
     store_idx->completed() = true;
     --storesToWB;
     // A bit conservative because a store completion may not free up entries,
@@ -2266,7 +2273,7 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
 
     store_inst->setCompleted();
 
-    if (needsTSO) {
+    if (needsTSO && completes_direct_store) {
         storeInFlight = false;
     }
 
@@ -3011,7 +3018,20 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 return nullptr;
             }
 
-            if (lsqPtr && lsqPtr->needsTSO && &(*it) != &entries.back()) {
+            // A partial write keeps its packet while the banked RMW read,
+            // merge cycle, and reserved write complete. The packet contains
+            // a snapshot of blockData, so accepting another store after it
+            // has been built would lose the newer bytes when that packet
+            // drains.
+            if (it->drainPkt) {
+                DPRINTF(LSQUnit,
+                        "Blocking merge into MB entry Addr:%#x with a "
+                        "staged drain packet\n",
+                        lineAddr);
+                return nullptr;
+            }
+
+            if (lsqPtr && &(*it) != &entries.back()) {
                 const bool mergeable_state =
                     it->state == EntryState::MERGING ||
                     (it->state == EntryState::RETIRED &&
@@ -3221,57 +3241,55 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
     auto req0 = request->req(0);
     auto req1 = request->req(1);
 
-    auto addr0 = req0->getPaddr() & ~(lineSize - 1);
-    auto addr1 = req1->getPaddr() & ~(lineSize - 1);
-
-    bool addr0_exists = false;
-    bool addr1_exists = false;
-
-    bool merge_req0 = false;
-    bool merge_req1 = false;
-
-    auto checkAddrMerge = [this](const Addr addr, bool &addr_exists,
-                                 bool &can_merge) {
-        return
-            [this, addr, &addr_exists, &can_merge](const MergeBufferEntry &e) {
-                if (e.blockAddr == addr) {
-                    addr_exists = true;
-
-                    if (e.isAtomic) {
-                        can_merge = false;
-                        return false;
-                    }
-
-                    if (e.state == EntryState::MERGING ||
-                        (e.state == EntryState::RETIRED &&
-                         e.unretireCount < maxUnretire)) {
-                        can_merge = true;
-                    }
-                }
-
-                return false;
-            };
+    std::vector<Addr> blocks;
+    auto append_blocks = [this, &blocks](Addr addr, size_t size) {
+        for (Addr current = addr; current < addr + size;) {
+            const Addr block = current & ~(lineSize - 1);
+            if (std::find(blocks.begin(), blocks.end(), block) ==
+                blocks.end()) {
+                blocks.push_back(block);
+            }
+            current = std::min<Addr>(block + lineSize, addr + size);
+        }
     };
+    append_blocks(req0->getPaddr(), req0->getSize());
+    append_blocks(req1->getPaddr(), req1->getSize());
 
-    std::for_each(entries.begin(), entries.end(),
-                  checkAddrMerge(addr0, addr0_exists, merge_req0));
-    std::for_each(entries.begin(), entries.end(),
-                  checkAddrMerge(addr1, addr1_exists, merge_req1));
+    size_t planned_allocations = 0;
+    bool planned_merge = false;
+    for (const Addr block : blocks) {
+        auto it =
+            std::find_if(entries.begin(), entries.end(),
+                         [block](const MergeBufferEntry &entry) {
+                             return entry.valid && entry.blockAddr == block;
+                         });
 
-    int num_allocs = !addr0_exists + !addr1_exists;
-
-    if (addr0_exists && !merge_req0) {
-        return false;
+        if (it == entries.end()) {
+            ++planned_allocations;
+            continue;
+        }
+        if (it->isAtomic || it->drainPkt ||
+            (it->state != EntryState::MERGING &&
+             !(it->state == EntryState::RETIRED &&
+               it->unretireCount < maxUnretire))) {
+            return false;
+        }
+        if (lsqPtr && &(*it) != &entries.back()) {
+            return false;
+        }
+        planned_merge = true;
     }
 
-    if (addr1_exists && !merge_req1) {
-        return false;
-    }
-
-    size_t valid_entries = entries.size();
-
-    if (valid_entries + num_allocs > numEntries) {
+    if (entries.size() + planned_allocations > numEntries) {
         mb_full = true;
+        return false;
+    }
+
+    // addStore() processes the fragments separately. In TSO mode an
+    // allocation changes which entry is the newest, so a split store that
+    // mixes an existing-entry merge with an allocation cannot be admitted
+    // atomically.
+    if (lsqPtr && planned_merge && planned_allocations != 0) {
         return false;
     }
 
@@ -3583,35 +3601,40 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             return false;
         }
     } else {
-        auto can_send_now = [&](MergeBufferEntry &entry) {
+        auto has_reserved_write = [&](MergeBufferEntry &entry) {
             if (!is_drainable(entry) || !entry.drainPkt) {
                 return false;
             }
             auto rmw = lsq_ptr->partialWriteRMWs.find(entry.drainPkt);
-            return rmw == lsq_ptr->partialWriteRMWs.end() ||
+            return rmw != lsq_ptr->partialWriteRMWs.end() &&
                    rmw->second.writeReserved;
+        };
+        auto can_begin_send = [&](MergeBufferEntry &entry) {
+            return is_drainable(entry) && entry.drainPkt &&
+                   !lsq_ptr->partialWriteRMWs.contains(entry.drainPkt);
         };
         auto can_start = [&](MergeBufferEntry &entry) {
             if (!is_drainable(entry) || entry.drainPkt) {
                 return false;
             }
-            // For release entries, check that all wait bits are cleared
             if (entry.isRelease) {
-                bool deps_clear =
+                const bool deps_clear =
                     std::none_of(entry.waitBits.begin(), entry.waitBits.end(),
-                                 [](bool v) { return v; });
+                                 [](bool value) { return value; });
                 if (!deps_clear) {
-                    if (lsq_ptr) {
-                        lsq_ptr->stats.mbReleaseWaitCycles++;
-                    }
+                    ++lsq_ptr->stats.mbReleaseWaitCycles;
                     return false;
                 }
             }
             return true;
         };
 
-        // Consume already-reserved RMW writes before starting more reads.
-        it = std::find_if(it, entries.end(), can_send_now);
+        // Consume an RMW write whose X+2 bank was reserved before choosing
+        // any packet that would begin a new RMW read.
+        it = std::find_if(it, entries.end(), has_reserved_write);
+        if (it == entries.end()) {
+            it = std::find_if(entries.begin(), entries.end(), can_begin_send);
+        }
         if (it == entries.end()) {
             it = std::find_if(entries.begin(), entries.end(), can_start);
         }
