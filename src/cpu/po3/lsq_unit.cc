@@ -1544,9 +1544,32 @@ LSQUnit::writebackStores()
 
         bool can_use_mb = mergeBufferEnabled &&
                           !request->mainReq()->isLocalAccess() &&
-                          !request->mainReq()->isLLSC() && !is_atomic_req;
+                          !request->mainReq()->isUncacheable() &&
+                          !request->mainReq()->isStrictlyOrdered() &&
+                          !request->mainReq()->isCacheMaintenance() &&
+                          !request->mainReq()->isLLSC() && !is_atomic_req &&
+                          !inst->inHtmTransactionalState();
+        if (can_use_mb && request->isSplit() && mergeBuffer.isEmpty()) {
+            bool mb_full = false;
+            // A store larger than the MB can hold must use the regular store
+            // path. Otherwise it would wait forever for free entries.
+            can_use_mb = mergeBuffer.canAcceptSplitStore(
+                request, inst->getMemOrderVersion(), mb_full);
+        }
+        bool can_use_mb_atomic =
+            mergeBufferEnabled && !request->mainReq()->isLocalAccess() &&
+            !request->mainReq()->isUncacheable() &&
+            !request->mainReq()->isStrictlyOrdered() &&
+            !request->mainReq()->isCacheMaintenance() &&
+            !request->mainReq()->isLLSC() && is_atomic_req &&
+            !inst->inHtmTransactionalState();
 
-        if (!can_use_mb && isStoreBlocked) {
+        if (!can_use_mb && !can_use_mb_atomic && !mergeBuffer.isEmpty()) {
+            mergeBuffer.forceRetireAll();
+            break;
+        }
+
+        if (!can_use_mb && !can_use_mb_atomic && isStoreBlocked) {
             DPRINTF(LSQUnit, "Unable to write back any more stores, cache"
                              " is blocked!\n");
             break;
@@ -1569,7 +1592,66 @@ LSQUnit::writebackStores()
 
         assert(!storeWBIt->committed());
 
-        if (can_use_mb) {
+        if (can_use_mb_atomic) {
+            const bool pipe_used =
+                store_pipe == 0 ? mbStorePipe0Used : mbStorePipe1Used;
+            if (pipe_used) {
+                DPRINTF(LSQUnit,
+                        "Unable to write atomic [sn:%lli] into merge buffer: "
+                        "load/store pipe %u input is busy\n",
+                        inst->seqNum, store_pipe);
+                break;
+            }
+
+            // Ordering tags are metadata only in PO3 for now.
+            constexpr uint64_t store_version = 0;
+            MergeBuffer::MergeBufferEntry *mb_entry =
+                mergeBuffer.addAtomic(now, request, storeWBIt, store_version);
+
+            DPRINTF(LSQUnit,
+                    "Merge for atomic store idx:%i PC:%s "
+                    "to Addr:%#x [sn:%lli] %s\n",
+                    storeWBIt.idx(), inst->pcState(),
+                    request->mainReq()->getPaddr(), inst->seqNum,
+                    mb_entry ? "accepted" : "blocked");
+
+            if (mb_entry) {
+                if (store_pipe == 0) {
+                    mbStorePipe0Used = true;
+                    ++stats.mbLoadStorePipe0Writes;
+                } else {
+                    mbStorePipe1Used = true;
+                    ++stats.mbLoadStorePipe1Writes;
+                }
+                if (mbStorePipe0Used && mbStorePipe1Used) {
+                    ++stats.mbDualPipeWriteCycles;
+                }
+
+                if (request->mainReq()->isRelease()) {
+                    mb_entry->isRelease = true;
+                    // Without version-aware wait bits, keep the release
+                    // atomic behind every older merge-buffer entry.
+                    mergeBuffer.forceRetireAll();
+                }
+
+                // The SQ entry and LSQRequest must remain live until the
+                // atomic response writes its result back.
+                storeWBIt->canWB() = false;
+            } else {
+                const bool mb_full = mergeBuffer.isFull();
+                if (mb_full) {
+                    ++stats.mbFullStoreDeallocStalls;
+                }
+                if (!forcedMBRetire &&
+                    (inst->isWriteBarrier() || inst->isSerializeBefore() ||
+                     inst->isSerializeAfter() ||
+                     request->mainReq()->isRelease())) {
+                    mergeBuffer.forceRetireAll();
+                    forcedMBRetire = true;
+                }
+                break;
+            }
+        } else if (can_use_mb) {
             const bool pipe_used =
                 store_pipe == 0 ? mbStorePipe0Used : mbStorePipe1Used;
             if (pipe_used) {
@@ -2988,6 +3070,16 @@ LSQUnit::MergeBuffer::addAtomic(Cycles now, LSQRequest *request,
     const Addr paddr = request->mainReq()->getPaddr();
     const Addr lineAddr = paddr & ~(lineSize - 1);
 
+    // A preceding buffered store to this line must become visible before the
+    // atomic reads it. Later stores are blocked from merging into an atomic
+    // entry by addStore().
+    if (std::any_of(entries.begin(), entries.end(),
+                    [lineAddr](const MergeBufferEntry &entry) {
+                        return entry.valid && entry.blockAddr == lineAddr;
+                    })) {
+        return nullptr;
+    }
+
     MergeBufferEntry newEntry(lineSize);
     newEntry.blockAddr = lineAddr;
     newEntry.baseReq =
@@ -3383,8 +3475,22 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             return is_drainable(entry) && entry.drainPkt &&
                    !lsq_ptr->partialWriteRMWs.contains(entry.drainPkt);
         };
+        auto has_older_valid_entry = [&](const MergeBufferEntry &entry) {
+            for (auto older = entries.begin();
+                 older != entries.end() && &(*older) != &entry; ++older) {
+                if (older->valid) {
+                    return true;
+                }
+            }
+            return false;
+        };
         auto can_start = [&](MergeBufferEntry &entry) {
             if (!is_drainable(entry) || entry.drainPkt) {
+                return false;
+            }
+            if (entry.isAtomic && entry.isRelease &&
+                has_older_valid_entry(entry)) {
+                ++lsq_ptr->stats.mbReleaseWaitCycles;
                 return false;
             }
             if (entry.isRelease) {
