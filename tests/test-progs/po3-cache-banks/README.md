@@ -13,6 +13,8 @@ aarch64-linux-gnu-gcc -O2 -nostdlib -static -fno-stack-protector \
     -Wl,-e,_start -o bank_conflict bank_conflict.c
 aarch64-linux-gnu-gcc -nostdlib -static -Wl,-e,_start \
     -o l1_eviction_hazard l1_eviction_hazard.S
+aarch64-linux-gnu-gcc -nostdlib -static -Wl,-e,_start \
+    -o rc_tso_ipc rc_tso_ipc.S
 ```
 
 Run, selecting the number of modeled banks:
@@ -54,3 +56,20 @@ overflow one L1D set. In TSO mode,
 `system.cpu.lsq0.tsoL1EvictionHazards` and
 `system.cpu.lsq0.tsoLoadCompletionReschedules` should both be nonzero. In RC
 mode both remain zero.
+
+`rc_tso_ipc` writes 8192 full cache lines to compare merge-buffer drain
+throughput. Run the same binary and configuration in each memory model:
+
+```sh
+build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
+    rc_tso_ipc 4 --memory-model rc --merge-buffer \
+    --merge-buffer-entries 4
+build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
+    rc_tso_ipc 4 --memory-model tso --merge-buffer \
+    --merge-buffer-entries 4
+```
+
+The four-entry merge buffer makes TSO drain serialization propagate into
+store-queue backpressure instead of absorbing the backlog until program exit.
+Compare `system.cpu.ipc`, `system.cpu.numCycles`, and
+`system.cpu.lsq0.mbTsoStoreInFlightDrainStallCycles`.
