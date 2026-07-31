@@ -128,6 +128,9 @@ PySource('gem5.components.cachehierarchies.classic',
     'private_l1_private_l2_cache_hierarchy.py')
 PySource('gem5.components.cachehierarchies.classic',
     'gem5/components/cachehierarchies/classic/'
+    'private_l1_private_l2_shared_l3_cache_hierarchy.py')
+PySource('gem5.components.cachehierarchies.classic',
+    'gem5/components/cachehierarchies/classic/'
     'two_level_fdp_cache_hierarchy.py')
 PySource('gem5.components.cachehierarchies.classic',
     'gem5/components/cachehierarchies/classic/'
