@@ -47,7 +47,10 @@
 #define __MEM_CACHE_CACHE_HH__
 
 #include <cstdint>
+#include <deque>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "base/compiler.hh"
 #include "base/types.hh"
@@ -78,6 +81,17 @@ class Cache : public BaseCache
      * generated and which ones were merely forwarded.
      */
     std::unordered_set<RequestPtr> outstandingSnoop;
+
+    /** Coherence snoops held until an early-lock publication completes. */
+    std::unordered_map<uint64_t, std::deque<std::pair<PacketPtr, bool>>>
+        earlyDeferredSnoops;
+    std::unordered_map<const Packet *, bool> earlyReplayCanRespond;
+    EventFunctionWrapper earlyDeferredReplayEvent;
+
+    void enqueueEarlyDeferredSnoop(const PacketPtr pkt, bool can_respond);
+    void scheduleEarlyDeferredReplay();
+    void processEarlyDeferredSnoops();
+    void notifyEarlyLineUnlocked(Addr block_addr, bool is_secure) override;
 
   protected:
     /**
@@ -134,8 +148,9 @@ class Cache : public BaseCache
      *
      * @return The snoop delay incurred by the upwards snoop
      */
-    uint32_t handleSnoop(PacketPtr pkt, CacheBlk *blk,
-                         bool is_timing, bool is_deferred, bool pending_inval);
+    uint32_t handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
+                         bool is_deferred, bool pending_inval,
+                         bool allow_respond = true);
 
     [[nodiscard]] PacketPtr evictBlock(CacheBlk *blk) override;
 

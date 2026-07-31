@@ -662,6 +662,10 @@ LSQ::recvTimingResp(PacketPtr pkt)
                    dynamic_cast<LSQUnit::MergeBufferPrefetchSenderState *>(
                        pkt->senderState)) {
         return mb_pf_state->lsqUnit->recvTimingResp(pkt);
+    } else if (auto *early_lock_state =
+                   dynamic_cast<LSQUnit::MergeBufferEarlyLockSenderState *>(
+                       pkt->senderState)) {
+        return early_lock_state->lsqUnit->recvTimingResp(pkt);
     }
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);

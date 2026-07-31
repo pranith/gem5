@@ -46,6 +46,7 @@
 
 #include "mem/cache/cache.hh"
 
+#include <algorithm>
 #include <cassert>
 
 #include "base/compiler.hh"
@@ -69,10 +70,87 @@ namespace gem5
 
 Cache::Cache(const CacheParams &p)
     : BaseCache(p, p.system->cacheLineSize()),
-      doFastWrites(true)
+      doFastWrites(true),
+      earlyDeferredReplayEvent([this] { processEarlyDeferredSnoops(); },
+                               name() + ".early_lock_snoop_replay")
 {
     assert(p.tags);
     assert(p.replacement_policy);
+}
+
+void
+Cache::enqueueEarlyDeferredSnoop(const PacketPtr pkt, bool can_respond)
+{
+    assert(pkt && pkt->req);
+    const uint64_t key =
+        earlyLockKey(pkt->getBlockAddr(blkSize), pkt->isSecure());
+    auto &queue = earlyDeferredSnoops[key];
+    for (auto &queued : queue) {
+        if (queued.first && queued.first->req == pkt->req) {
+            queued.second = queued.second || can_respond;
+            return;
+        }
+    }
+    PacketPtr copy = new Packet(pkt, true, true);
+    copy->headerDelay = copy->payloadDelay = 0;
+    queue.emplace_back(copy, can_respond);
+}
+
+void
+Cache::scheduleEarlyDeferredReplay()
+{
+    if (!earlyDeferredReplayEvent.scheduled()) {
+        schedule(earlyDeferredReplayEvent, curTick() + 1);
+    }
+}
+
+void
+Cache::notifyEarlyLineUnlocked(Addr, bool)
+{
+    scheduleEarlyDeferredReplay();
+}
+
+void
+Cache::processEarlyDeferredSnoops()
+{
+    std::deque<std::pair<PacketPtr, bool>> ready;
+    for (auto it = earlyDeferredSnoops.begin();
+         it != earlyDeferredSnoops.end();) {
+        const Addr block_addr = it->first & ~1ULL;
+        const bool is_secure = it->first & 1ULL;
+        auto queue = std::move(it->second);
+        std::deque<std::pair<PacketPtr, bool>> retained;
+        while (!queue.empty()) {
+            auto deferred = queue.front();
+            queue.pop_front();
+            PacketPtr pkt = deferred.first;
+            const bool blocked =
+                pkt && isEarlyLinePrelocked(block_addr, is_secure) &&
+                (pkt->isInvalidate() ||
+                 (pkt->isRead() &&
+                  isEarlyLineReadBlocked(block_addr, is_secure)));
+            (blocked ? retained : ready).push_back(deferred);
+        }
+        if (retained.empty()) {
+            it = earlyDeferredSnoops.erase(it);
+        } else {
+            it->second = std::move(retained);
+            ++it;
+        }
+    }
+
+    std::unordered_set<RequestPtr> replayed;
+    while (!ready.empty()) {
+        auto deferred = ready.front();
+        ready.pop_front();
+        PacketPtr pkt = deferred.first;
+        if (!pkt || !pkt->req || !replayed.insert(pkt->req).second) {
+            delete pkt;
+            continue;
+        }
+        earlyReplayCanRespond[pkt] = deferred.second;
+        recvTimingSnoopReq(pkt);
+    }
 }
 
 void
@@ -731,6 +809,16 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
     MSHR::TargetList targets = mshr->extractServiceableTargets(pkt);
     for (auto &target: targets) {
         Packet *tgt_pkt = target.pkt;
+        const auto &target_bytes = tgt_pkt->req->getByteEnable();
+        const bool early_acquire =
+            tgt_pkt->isWrite() && tgt_pkt->req->isEarlyLockLine() &&
+            !tgt_pkt->req->isEarlyLockRetainLine() && !target_bytes.empty() &&
+            std::none_of(target_bytes.begin(), target_bytes.end(),
+                         [](bool enabled) { return enabled; });
+        const bool failed_early_acquire =
+            early_acquire &&
+            (!isEarlyLockAcquisitionValid(tgt_pkt) || !blk ||
+             !blk->isValid() || !blk->isSet(CacheBlk::WritableBit));
         switch (target.source) {
           case MSHR::Target::FromCPU:
             from_core = true;
@@ -739,6 +827,21 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             // Here we charge on completion_time the delay of the xbar if the
             // packet comes from it, charged on headerDelay.
             completion_time = pkt->headerDelay;
+
+            if (blk == tempBlock && tgt_pkt->req && tgt_pkt->isWrite() &&
+                tgt_pkt->req->isEarlyLockLine() &&
+                !tgt_pkt->req->isEarlyLockRetainLine()) {
+                const auto &bytes = tgt_pkt->req->getByteEnable();
+                if (!bytes.empty() &&
+                    std::none_of(bytes.begin(), bytes.end(),
+                                 [](bool enabled) { return enabled; })) {
+                    // handleFill() sees the downstream miss request, while
+                    // the publication metadata belongs to this CPU target.
+                    // Reject through the original Request so PO3 observes
+                    // the capacity failure on its acquisition response.
+                    abortEarlyPublication(tgt_pkt);
+                }
+            }
 
             // Software prefetch handling for cache closest to core
             if (tgt_pkt->cmd.isSWPrefetch()) {
@@ -788,14 +891,35 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
                 assert(blk->isSet(CacheBlk::WritableBit));
             }
 
+            if (failed_early_acquire) {
+                // A speculative acquisition can be overtaken by a snoop or
+                // can share an MSHR whose original read returns only Shared.
+                // It carries no data, so reject it without executing the
+                // write against a non-writable block.
+                abortEarlyPublication(tgt_pkt);
+            }
+
+            if (!failed_early_acquire && tgt_pkt->needsWritable() && blk &&
+                blk->isValid() && !blk->isSet(CacheBlk::WritableBit)) {
+                // A revoked speculative acquisition can leave later stores
+                // coalesced on the transaction that lost the coherence race.
+                // Its response may only grant Shared state. Retry those
+                // stores so they obtain a fresh writable grant.
+                mshr->deferTarget(target);
+                break;
+            }
+
             // Here we decide whether we will satisfy the target using
             // data from the block or from the response. We use the
             // block data to satisfy the request when the block is
             // present and valid and in addition the response in not
             // forwarding data to the cache above (we didn't fill
             // either); otherwise we use the packet data.
-            if (blk && blk->isValid() &&
-                (!mshr->isForward || !pkt->hasData())) {
+            if (failed_early_acquire) {
+                completion_time +=
+                    clockEdge(responseLatency) + pkt->payloadDelay;
+            } else if (blk && blk->isValid() &&
+                       (!mshr->isForward || !pkt->hasData())) {
                 satisfyRequest(tgt_pkt, blk, true, mshr->hasPostDowngrade());
 
                 // How many bytes past the first request is this one
@@ -889,6 +1013,11 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
                 // carried over to cache above
                 tgt_pkt->copyResponderFlags(pkt);
             }
+            if (!isEarlyLockAcquisitionValid(tgt_pkt)) {
+                tgt_pkt->req->markEarlyLockFailed();
+            } else {
+                completeEarlyLockAcquisition(tgt_pkt);
+            }
             tgt_pkt->makeTimingResponse();
             // if this packet is an error copy that to the new packet
             if (is_error)
@@ -905,6 +1034,7 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             // Reset the bus additional time as it is now accounted for
             tgt_pkt->headerDelay = tgt_pkt->payloadDelay = 0;
             cpuSidePort.schedTimingResp(tgt_pkt, completion_time);
+            releaseEarlyLineLock(tgt_pkt, blk);
             break;
 
           case MSHR::Target::FromPrefetcher:
@@ -931,7 +1061,8 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
             assert(!is_invalidate || pkt->cmd == MemCmd::InvalidateResp ||
                    pkt->req->isCacheMaintenance() ||
                    mshr->hasPostInvalidate());
-            handleSnoop(tgt_pkt, blk, true, true, mshr->hasPostInvalidate());
+            handleSnoop(tgt_pkt, blk, true, true, mshr->hasPostInvalidate(),
+                        !tgt_pkt->req->isEarlyLockNoResponse());
             break;
 
           default:
@@ -1057,7 +1188,7 @@ Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
 
 uint32_t
 Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
-                   bool is_deferred, bool pending_inval)
+                   bool is_deferred, bool pending_inval, bool allow_respond)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
     // deferred snoops can only happen in timing mode
@@ -1161,7 +1292,7 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
 
             // we have passed the block to a cache upstream, that
             // cache should be responding
-            assert(pkt->cacheResponding());
+            assert(pkt->cacheResponding() || !allow_respond);
 
             delete pkt;
         }
@@ -1177,7 +1308,8 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
         // invalidation itself is taken care of below. We don't respond to
         // cache maintenance operations as this is done by the destination
         // xbar.
-        respond = blk->isSet(CacheBlk::DirtyBit) && pkt->needsResponse();
+        respond = allow_respond && blk->isSet(CacheBlk::DirtyBit) &&
+                  pkt->needsResponse();
 
         gem5_assert(!(isReadOnly && blk->isSet(CacheBlk::DirtyBit)),
             "Should never have a dirty block in a read-only cache %s\n",
@@ -1276,6 +1408,13 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 {
     DPRINTF(CacheVerbose, "%s: for %s\n", __func__, pkt->print());
 
+    bool replay_can_respond = true;
+    const auto replay = earlyReplayCanRespond.find(pkt);
+    if (replay != earlyReplayCanRespond.end()) {
+        replay_can_respond = replay->second;
+        earlyReplayCanRespond.erase(replay);
+    }
+
     // no need to snoop requests that are not in range
     if (!inRange(pkt->getAddr())) {
         return;
@@ -1286,6 +1425,52 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
 
     Addr blk_addr = pkt->getBlockAddr(blkSize);
     MSHR *mshr = mshrQueue.findMatch(blk_addr, is_secure);
+
+    const bool early_snoop_blocked =
+        isEarlyLinePrelocked(blk_addr, is_secure) &&
+        (pkt->isInvalidate() ||
+         (pkt->isRead() && isEarlyLineReadBlocked(blk_addr, is_secure)));
+    if (early_snoop_blocked) {
+        const auto &snoop_bytes = pkt->req->getByteEnable();
+        const bool speculative_acquire =
+            pkt->req->isEarlyLockLine() &&
+            !pkt->req->isEarlyLockRetainLine() && !snoop_bytes.empty() &&
+            std::none_of(snoop_bytes.begin(), snoop_bytes.end(),
+                         [](bool enabled) { return enabled; });
+        if (speculative_acquire) {
+            // The frozen publication wins. Mark the losing speculative
+            // request now so its own MSHR will not claim a publication write
+            // that the winner needs in order to release this line.
+            pkt->req->markEarlyLockFailed();
+        }
+
+        if (pkt->mustCheckAbove()) {
+            pkt->setBlockCached();
+            return;
+        }
+
+        const bool block_will_respond =
+            blk && blk->isValid() && blk->isSet(CacheBlk::DirtyBit) &&
+            pkt->needsResponse() && !pkt->isClean();
+        const bool mshr_will_respond = mshr && mshr->inService &&
+                                       mshr->isPendingModified() &&
+                                       pkt->needsResponse() && !pkt->isClean();
+        bool elected = block_will_respond || mshr_will_respond;
+        if (elected) {
+            if (!pkt->cacheResponding()) {
+                pkt->setCacheResponding();
+                if (blk && blk->isValid() &&
+                    blk->isSet(CacheBlk::WritableBit)) {
+                    pkt->setResponderHadWritable();
+                }
+            } else {
+                elected = false;
+            }
+        }
+        enqueueEarlyDeferredSnoop(pkt, elected);
+        pkt->setBlockCached();
+        return;
+    }
 
     // Update the latency cost of the snoop so that the crossbar can
     // account for it. Do not overwrite what other neighbouring caches
@@ -1386,7 +1571,8 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
     // We could be more selective and return here if the
     // request is non-exclusive or if the writeback is
     // exclusive.
-    uint32_t snoop_delay = handleSnoop(pkt, blk, true, false, false);
+    uint32_t snoop_delay =
+        handleSnoop(pkt, blk, true, false, false, replay_can_respond);
 
     // Override what we did when we first saw the snoop, as we now
     // also have the cost of the upwards snoops to account for

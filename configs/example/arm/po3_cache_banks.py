@@ -53,6 +53,17 @@ parser.add_argument(
     default="rc",
     help="Select RC barrier-epoch tags or TSO per-store ordering tags",
 )
+parser.add_argument(
+    "--tso-early-lock",
+    action="store_true",
+    help="Enable version-independent TSO early-lock publications",
+)
+parser.add_argument(
+    "--tso-early-lock-timeout",
+    type=int,
+    default=128,
+    help="Cycles allowed to acquire a complete early-lock group",
+)
 parser.add_argument("--max-ticks", type=int, default=10_000_000_000)
 args = parser.parse_args()
 
@@ -73,6 +84,8 @@ system.cpu.po3MemTLBLookupWidth = 3
 system.cpu.po3MemCacheAccessWidth = 3
 system.cpu.po3CommitStageWidth = 2
 system.cpu.needsTSO = args.memory_model == "tso"
+system.cpu.tsoEarlyLock = args.tso_early_lock
+system.cpu.tsoEarlyLockTimeout = args.tso_early_lock_timeout
 system.cpu.useMergeBuffer = args.merge_buffer
 system.cpu.mergeBufferEntries = args.merge_buffer_entries
 system.cpu.mergeBufferRetireCycles = args.merge_buffer_retire_cycles

@@ -49,6 +49,8 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "base/addr_range.hh"
 #include "base/compiler.hh"
@@ -410,6 +412,46 @@ class BaseCache : public ClockedObject
      * hold it for deletion until a subsequent call
      */
     std::unique_ptr<Packet> pendingDelete;
+
+    /** Early locks exist only in the CPU-facing L1D. */
+    std::unordered_map<uint64_t, uint32_t> earlyLineLockCount;
+    std::unordered_map<uint64_t, bool> earlyLinePrelocked;
+    std::unordered_map<uint64_t, uint32_t> earlyLineWritesInstalled;
+    struct EarlyPublicationState
+    {
+        struct Prelock
+        {
+            Addr line;
+            bool secure;
+        };
+        uint32_t expected = 0;
+        uint32_t acquired = 0;
+        uint32_t completed = 0;
+        bool active = false;
+        std::vector<Prelock> prelockedLines;
+        std::vector<RequestPtr> acquisitionRequests;
+    };
+    std::unordered_map<RequestorID,
+                       std::unordered_map<uint64_t, EarlyPublicationState>>
+        earlyPublications;
+
+    uint64_t earlyLockKey(Addr block_addr, bool is_secure) const;
+    bool isEarlyLineLocked(Addr block_addr, bool is_secure) const;
+    bool isEarlyLinePrelocked(Addr block_addr, bool is_secure) const;
+    bool isEarlyLineReadBlocked(Addr block_addr, bool is_secure) const;
+    bool isEarlyLockAcquisitionValid(const PacketPtr pkt) const;
+    void completeEarlyLockAcquisition(const PacketPtr pkt);
+    void revokeIncompleteEarlyPublication(Addr block_addr, bool is_secure);
+    void acquireEarlyLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseEarlyLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
+    void releaseEarlyLinePrelock(Addr block_addr, bool is_secure);
+    void releaseEarlyPublicationPrelock(const PacketPtr pkt);
+    void abortEarlyPublication(const PacketPtr pkt);
+    virtual void
+    notifyEarlyLineUnlocked(Addr block_addr, bool is_secure)
+    {}
+    void clearEarlyLineLock(Addr block_addr, bool is_secure,
+                            CacheBlk *blk = nullptr);
 
     /**
      * Mark a request as in service (sent downstream in the memory

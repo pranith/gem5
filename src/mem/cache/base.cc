@@ -68,6 +68,37 @@
 namespace gem5
 {
 
+namespace
+{
+
+bool
+isEarlyLockAcquire(const PacketPtr pkt)
+{
+    const bool tagged_write =
+        pkt && pkt->req && pkt->isWrite() && pkt->req->isEarlyLockLine();
+    if (!tagged_write || pkt->req->isEarlyLockRetainLine()) {
+        return false;
+    }
+    const auto &bytes = pkt->req->getByteEnable();
+    return !bytes.empty() && std::none_of(bytes.begin(), bytes.end(),
+                                          [](bool byte) { return byte; });
+}
+
+bool
+isEarlyLockRelease(const PacketPtr pkt)
+{
+    const bool tagged_write =
+        pkt && pkt->req && pkt->isWrite() && pkt->req->isEarlyLockLine();
+    if (!tagged_write || !pkt->req->isEarlyLockRetainLine()) {
+        return false;
+    }
+    const auto &bytes = pkt->req->getByteEnable();
+    return !bytes.empty() && std::none_of(bytes.begin(), bytes.end(),
+                                          [](bool byte) { return byte; });
+}
+
+} // anonymous namespace
+
 BaseCache::CacheResponsePort::CacheResponsePort(const std::string &_name,
                                           BaseCache& _cache,
                                           const std::string &_label)
@@ -272,6 +303,414 @@ BaseCache::markInService(WriteQueueEntry *entry)
     }
 }
 
+uint64_t
+BaseCache::earlyLockKey(Addr block_addr, bool is_secure) const
+{
+    return (static_cast<uint64_t>(block_addr) & ~1ULL) |
+           (is_secure ? 1ULL : 0ULL);
+}
+
+bool
+BaseCache::isEarlyLineLocked(Addr block_addr, bool is_secure) const
+{
+    if (!notifyCpuOnEviction) {
+        return false;
+    }
+    const auto it =
+        earlyLineLockCount.find(earlyLockKey(block_addr, is_secure));
+    return it != earlyLineLockCount.end() && it->second != 0;
+}
+
+bool
+BaseCache::isEarlyLinePrelocked(Addr block_addr, bool is_secure) const
+{
+    if (!notifyCpuOnEviction) {
+        return false;
+    }
+    const auto it =
+        earlyLinePrelocked.find(earlyLockKey(block_addr, is_secure));
+    return it != earlyLinePrelocked.end() && it->second;
+}
+
+bool
+BaseCache::isEarlyLineReadBlocked(Addr block_addr, bool is_secure) const
+{
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+    const auto it = earlyLineWritesInstalled.find(key);
+    return isEarlyLinePrelocked(block_addr, is_secure) &&
+           it != earlyLineWritesInstalled.end() && it->second != 0;
+}
+
+bool
+BaseCache::isEarlyLockAcquisitionValid(const PacketPtr pkt) const
+{
+    if (!notifyCpuOnEviction || !isEarlyLockAcquire(pkt)) {
+        return true;
+    }
+
+    const auto rid_it = earlyPublications.find(pkt->req->requestorId());
+    if (rid_it == earlyPublications.end()) {
+        return false;
+    }
+    const auto publication_it =
+        rid_it->second.find(pkt->req->earlyLockPublicationId());
+    if (publication_it == rid_it->second.end()) {
+        return false;
+    }
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    return std::any_of(
+        publication_it->second.prelockedLines.begin(),
+        publication_it->second.prelockedLines.end(), [&](const auto &prelock) {
+            return prelock.line == block_addr && prelock.secure == is_secure;
+        });
+}
+
+void
+BaseCache::acquireEarlyLineLock(const PacketPtr pkt, CacheBlk *blk)
+{
+    // The CPU-facing L1D is the coherence visibility point. Installing the
+    // state below L1 would leak locks when the later write hits in L1.
+    if (!notifyCpuOnEviction || !pkt || !pkt->req || !pkt->isWrite() ||
+        !pkt->req->isEarlyLockLine()) {
+        return;
+    }
+
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    if (isEarlyLockAcquire(pkt)) {
+        const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+        assert(publication_id != 0);
+        auto &publication =
+            earlyPublications[pkt->req->requestorId()][publication_id];
+        if (publication.expected == 0) {
+            publication.expected = pkt->req->earlyLockPublicationMembers();
+        } else {
+            assert(publication.expected ==
+                   pkt->req->earlyLockPublicationMembers());
+        }
+        const bool already_reserved = std::any_of(
+            publication.prelockedLines.begin(),
+            publication.prelockedLines.end(), [&](const auto &prelock) {
+                return prelock.line == block_addr &&
+                       prelock.secure == is_secure;
+            });
+        if (!already_reserved) {
+            publication.prelockedLines.push_back({block_addr, is_secure});
+            publication.acquisitionRequests.push_back(pkt->req);
+        }
+        return;
+    } else {
+        // Publication writes retain the prelock and add a transient
+        // write-lifetime reference.
+        assert(pkt->req->isEarlyLockRetainLine());
+        const uint64_t key = earlyLockKey(block_addr, is_secure);
+        assert(earlyLinePrelocked[key]);
+        ++earlyLineLockCount[key];
+
+        const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+        assert(publication_id != 0);
+        auto rid_it = earlyPublications.find(pkt->req->requestorId());
+        assert(rid_it != earlyPublications.end() &&
+               rid_it->second.contains(publication_id));
+    }
+
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+
+    if (!blk) {
+        blk = tags->findBlock({block_addr, is_secure});
+    }
+    if (blk && blk->isValid() && regenerateBlkAddr(blk) == block_addr) {
+        while (blk->earlyLockCount() < earlyLineLockCount[key]) {
+            blk->acquireEarlyLock();
+        }
+    }
+}
+
+void
+BaseCache::completeEarlyLockAcquisition(const PacketPtr pkt)
+{
+    if (!notifyCpuOnEviction || !isEarlyLockAcquire(pkt)) {
+        return;
+    }
+
+    const RequestorID rid = pkt->req->requestorId();
+    const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+    auto rid_it = earlyPublications.find(rid);
+    if (rid_it == earlyPublications.end()) {
+        return;
+    }
+    auto publication_it = rid_it->second.find(publication_id);
+    if (publication_it == rid_it->second.end()) {
+        return;
+    }
+    auto &publication = publication_it->second;
+    if (publication.active) {
+        return;
+    }
+
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const auto reservation = std::find_if(
+        publication.prelockedLines.begin(), publication.prelockedLines.end(),
+        [&](const auto &prelock) {
+            return prelock.line == block_addr && prelock.secure == is_secure;
+        });
+    if (reservation == publication.prelockedLines.end()) {
+        return;
+    }
+
+    ++publication.acquired;
+    assert(publication.acquired <= publication.expected);
+    if (publication.acquired != publication.expected) {
+        return;
+    }
+
+    // No member blocks coherence while the group is incomplete. Before
+    // freezing the group, verify that every speculative grant still owns a
+    // writable line, then make all prelocks visible together.
+    const bool all_writable = std::all_of(
+        publication.prelockedLines.begin(), publication.prelockedLines.end(),
+        [&](const auto &prelock) {
+            CacheBlk *blk = tags->findBlock({prelock.line, prelock.secure});
+            return blk && blk->isValid() &&
+                   regenerateBlkAddr(blk) == prelock.line &&
+                   blk->isSet(CacheBlk::WritableBit);
+        });
+    if (!all_writable) {
+        rid_it->second.erase(publication_it);
+        if (rid_it->second.empty()) {
+            earlyPublications.erase(rid_it);
+        }
+        pkt->req->markEarlyLockFailed();
+        return;
+    }
+
+    publication.active = true;
+    for (const auto &prelock : publication.prelockedLines) {
+        const uint64_t key = earlyLockKey(prelock.line, prelock.secure);
+        earlyLinePrelocked[key] = true;
+        ++earlyLineLockCount[key];
+        CacheBlk *blk = tags->findBlock({prelock.line, prelock.secure});
+        assert(blk && blk->isValid());
+        while (blk->earlyLockCount() < earlyLineLockCount[key]) {
+            blk->acquireEarlyLock();
+        }
+    }
+}
+
+void
+BaseCache::revokeIncompleteEarlyPublication(Addr block_addr, bool is_secure)
+{
+    if (!notifyCpuOnEviction) {
+        return;
+    }
+
+    for (auto rid_it = earlyPublications.begin();
+         rid_it != earlyPublications.end();) {
+        auto &publications = rid_it->second;
+        for (auto publication_it = publications.begin();
+             publication_it != publications.end();) {
+            const auto &publication = publication_it->second;
+            const bool contains_line = std::any_of(
+                publication.prelockedLines.begin(),
+                publication.prelockedLines.end(), [&](const auto &prelock) {
+                    return prelock.line == block_addr &&
+                           prelock.secure == is_secure;
+                });
+            if (!publication.active && contains_line) {
+                for (const auto &request : publication.acquisitionRequests) {
+                    if ((request->getPaddr() & ~(Addr(blkSize) - 1)) ==
+                            block_addr &&
+                        request->isSecure() == is_secure) {
+                        request->markEarlyLockFailed();
+                    }
+                }
+                publication_it = publications.erase(publication_it);
+            } else {
+                ++publication_it;
+            }
+        }
+        if (publications.empty()) {
+            rid_it = earlyPublications.erase(rid_it);
+        } else {
+            ++rid_it;
+        }
+    }
+}
+
+void
+BaseCache::abortEarlyPublication(const PacketPtr pkt)
+{
+    if (!notifyCpuOnEviction || !pkt || !pkt->req) {
+        return;
+    }
+    const RequestorID rid = pkt->req->requestorId();
+    const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+    auto rid_it = earlyPublications.find(rid);
+    if (rid_it == earlyPublications.end()) {
+        return;
+    }
+    auto publication_it = rid_it->second.find(publication_id);
+    if (publication_it == rid_it->second.end()) {
+        return;
+    }
+    const bool active = publication_it->second.active;
+    const auto prelocks = publication_it->second.prelockedLines;
+    rid_it->second.erase(publication_it);
+    if (rid_it->second.empty()) {
+        earlyPublications.erase(rid_it);
+    }
+    if (active) {
+        for (const auto &prelock : prelocks) {
+            releaseEarlyLinePrelock(prelock.line, prelock.secure);
+        }
+    }
+    pkt->req->markEarlyLockFailed();
+}
+
+void
+BaseCache::releaseEarlyLinePrelock(Addr block_addr, bool is_secure)
+{
+    if (!notifyCpuOnEviction) {
+        return;
+    }
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+    const auto prelock = earlyLinePrelocked.find(key);
+    if (prelock == earlyLinePrelocked.end() || !prelock->second) {
+        return;
+    }
+    earlyLinePrelocked.erase(prelock);
+    auto count = earlyLineLockCount.find(key);
+    assert(count != earlyLineLockCount.end() && count->second != 0);
+    --count->second;
+
+    CacheBlk *blk = tags->findBlock({block_addr, is_secure});
+    if (blk && blk->isValid() && regenerateBlkAddr(blk) == block_addr &&
+        blk->earlyLockCount() != 0) {
+        blk->releaseEarlyLock();
+    }
+    if (count->second == 0) {
+        earlyLineLockCount.erase(count);
+        earlyLineWritesInstalled.erase(key);
+    }
+    notifyEarlyLineUnlocked(block_addr, is_secure);
+}
+
+void
+BaseCache::releaseEarlyPublicationPrelock(const PacketPtr pkt)
+{
+    if (!notifyCpuOnEviction || !isEarlyLockRelease(pkt)) {
+        return;
+    }
+
+    const RequestorID rid = pkt->req->requestorId();
+    const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+    auto rid_it = earlyPublications.find(rid);
+    if (rid_it == earlyPublications.end()) {
+        return;
+    }
+    auto publication_it = rid_it->second.find(publication_id);
+    if (publication_it == rid_it->second.end()) {
+        return;
+    }
+
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const bool active = publication_it->second.active;
+    for (const auto &request : publication_it->second.acquisitionRequests) {
+        if ((request->getPaddr() & ~(Addr(blkSize) - 1)) == block_addr &&
+            request->isSecure() == is_secure) {
+            request->markEarlyLockFailed();
+        }
+    }
+    auto &prelocks = publication_it->second.prelockedLines;
+    const auto prelock = std::find_if(
+        prelocks.begin(), prelocks.end(), [&](const auto &candidate) {
+            return candidate.line == block_addr &&
+                   candidate.secure == is_secure;
+        });
+    if (prelock == prelocks.end()) {
+        return;
+    }
+    prelocks.erase(prelock);
+    if (active) {
+        releaseEarlyLinePrelock(block_addr, is_secure);
+    }
+
+    if (prelocks.empty()) {
+        rid_it->second.erase(publication_it);
+        if (rid_it->second.empty()) {
+            earlyPublications.erase(rid_it);
+        }
+    }
+}
+
+void
+BaseCache::releaseEarlyLineLock(const PacketPtr pkt, CacheBlk *blk)
+{
+    if (!notifyCpuOnEviction || !pkt || !pkt->req || !pkt->isWrite() ||
+        !pkt->req->isEarlyLockLine() || isEarlyLockAcquire(pkt)) {
+        return;
+    }
+
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+    ++earlyLineWritesInstalled[key];
+
+    auto count = earlyLineLockCount.find(key);
+    assert(count != earlyLineLockCount.end() && count->second >= 2);
+    --count->second;
+    if (!blk) {
+        blk = tags->findBlock({block_addr, is_secure});
+    }
+    if (blk && blk->isValid() && regenerateBlkAddr(blk) == block_addr) {
+        blk->releaseEarlyLock();
+    }
+
+    const RequestorID rid = pkt->req->requestorId();
+    const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+    auto rid_it = earlyPublications.find(rid);
+    assert(rid_it != earlyPublications.end());
+    auto publication_it = rid_it->second.find(publication_id);
+    assert(publication_it != rid_it->second.end());
+    auto &publication = publication_it->second;
+    ++publication.completed;
+    assert(publication.completed <= publication.expected);
+    if (publication.completed == publication.expected) {
+        // Keep every installed member hidden until the final member arrives,
+        // then release the complete publication together.
+        const auto prelocks = publication.prelockedLines;
+        rid_it->second.erase(publication_it);
+        if (rid_it->second.empty()) {
+            earlyPublications.erase(rid_it);
+        }
+        for (const auto &prelock : prelocks) {
+            releaseEarlyLinePrelock(prelock.line, prelock.secure);
+        }
+        pkt->req->markEarlyLockPublicationComplete();
+    }
+}
+
+void
+BaseCache::clearEarlyLineLock(Addr block_addr, bool is_secure, CacheBlk *blk)
+{
+    revokeIncompleteEarlyPublication(block_addr, is_secure);
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+    earlyLineLockCount.erase(key);
+    earlyLinePrelocked.erase(key);
+    earlyLineWritesInstalled.erase(key);
+    if (!blk) {
+        blk = tags->findBlock({block_addr, is_secure});
+    }
+    if (blk && blk->isValid() && regenerateBlkAddr(blk) == block_addr) {
+        while (blk->earlyLockCount() != 0) {
+            blk->releaseEarlyLock();
+        }
+    }
+}
+
 void
 BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
 {
@@ -329,6 +768,12 @@ BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
     }
 
     if (pkt->needsResponse()) {
+        if (!isEarlyLockAcquisitionValid(pkt)) {
+            pkt->req->markEarlyLockFailed();
+        } else {
+            completeEarlyLockAcquisition(pkt);
+        }
+
         // These delays should have been consumed by now
         assert(pkt->headerDelay == 0);
         assert(pkt->payloadDelay == 0);
@@ -341,6 +786,7 @@ BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
         // just as the value of lat overriden by access(), which calls
         // the calculateAccessLatency() function.
         cpuSidePort.schedTimingResp(pkt, request_time);
+        releaseEarlyLineLock(pkt, blk);
     } else {
         DPRINTF(Cache, "%s satisfied %s, no response needed\n", __func__,
                 pkt->print());
@@ -350,6 +796,7 @@ BaseCache::handleTimingReqHit(PacketPtr pkt, CacheBlk *blk, Tick request_time)
         // CleanEvict and Writeback messages will be deleted
         // here as well
         pendingDelete.reset(pkt);
+        releaseEarlyLineLock(pkt, blk);
     }
 }
 
@@ -458,6 +905,19 @@ BaseCache::recvTimingReq(PacketPtr pkt)
     // the delay provided by the crossbar
     Tick forward_time = clockEdge(forwardLatency) + pkt->headerDelay;
 
+    if (notifyCpuOnEviction && isEarlyLockRelease(pkt)) {
+        releaseEarlyPublicationPrelock(pkt);
+        const Tick done = clockEdge(forwardLatency) + pkt->headerDelay;
+        pkt->headerDelay = pkt->payloadDelay = 0;
+        if (pkt->needsResponse()) {
+            pkt->makeTimingResponse();
+            cpuSidePort.schedTimingResp(pkt, done);
+        } else {
+            pendingDelete.reset(pkt);
+        }
+        return;
+    }
+
     if (pkt->cmd == MemCmd::LockedRMWWriteReq) {
         // For LockedRMW accesses, we mark the block inaccessible after the
         // read (see below), to make sure no one gets in before the write.
@@ -471,6 +931,8 @@ BaseCache::recvTimingReq(PacketPtr pkt)
         blk->setCoherenceBits(CacheBlk::ReadableBit);
         blk->setCoherenceBits(CacheBlk::WritableBit);
     }
+
+    acquireEarlyLineLock(pkt);
 
     Cycles lat;
     CacheBlk *blk = nullptr;
@@ -596,15 +1058,17 @@ BaseCache::recvTimingResp(PacketPtr pkt)
 
     PacketList writebacks;
 
-    bool is_fill = !mshr->isForward &&
-        (pkt->isRead() || pkt->cmd == MemCmd::UpgradeResp ||
-         mshr->wasWholeLineWrite);
+    CacheBlk *blk = tags->findBlock({pkt->getAddr(), pkt->isSecure()});
+    const bool canceled_early_upgrade = pkt->cmd == MemCmd::UpgradeResp &&
+                                        (!blk || !blk->isValid()) &&
+                                        mshr->hasFailedEarlyLockAcquisition();
+    bool is_fill = !canceled_early_upgrade && !mshr->isForward &&
+                   (pkt->isRead() || pkt->cmd == MemCmd::UpgradeResp ||
+                    mshr->wasWholeLineWrite);
 
     // make sure that if the mshr was due to a whole line write then
     // the response is an invalidation
     assert(!mshr->wasWholeLineWrite || pkt->isInvalidate());
-
-    CacheBlk *blk = tags->findBlock({pkt->getAddr(), pkt->isSecure()});
 
     if (is_fill && !is_error) {
         DPRINTF(Cache, "Block for addr %#llx being updated in Cache\n",
@@ -1006,6 +1470,9 @@ BaseCache::handleEvictions(std::vector<CacheBlk*> &evict_blks,
     bool replacement = false;
     for (const auto& blk : evict_blks) {
         if (blk->isValid()) {
+            if (blk->earlyLocked()) {
+                return false;
+            }
             replacement = true;
 
             const MSHR* mshr =
@@ -1667,6 +2134,16 @@ BaseCache::handleFill(PacketPtr pkt, CacheBlk *blk, PacketList &writebacks,
     blk->setWhenReady(clockEdge(fillLatency) + pkt->headerDelay +
                       pkt->payloadDelay);
 
+    if (notifyCpuOnEviction && blk != tempBlock) {
+        const uint64_t key = earlyLockKey(addr, is_secure);
+        const auto count = earlyLineLockCount.find(key);
+        const uint32_t target =
+            count == earlyLineLockCount.end() ? 0 : count->second;
+        while (blk->earlyLockCount() < target) {
+            blk->acquireEarlyLock();
+        }
+    }
+
     return blk;
 }
 
@@ -1733,6 +2210,10 @@ BaseCache::allocateBlock(const PacketPtr pkt, PacketList &writebacks)
 void
 BaseCache::invalidateBlock(CacheBlk *blk)
 {
+    if (notifyCpuOnEviction && blk && blk->isValid()) {
+        clearEarlyLineLock(regenerateBlkAddr(blk), blk->isSecure(), blk);
+    }
+
     // If block is still marked as prefetched, then it hasn't been used
     if (blk->wasPrefetched()) {
         prefetcher->prefetchUnused();

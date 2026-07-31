@@ -470,8 +470,13 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
 
     // Start by determining if we will eventually respond or not,
     // matching the conditions checked in Cache::handleSnoop
+    // A revoked TAG acquire is no longer an ordering point. If this MSHR
+    // claims a sibling write, each private L1 can wait for the other's
+    // request. Record the snoop below so a late fill is invalidated, but let
+    // the observing request continue to the next coherence ordering point.
     const bool will_respond = isPendingModified() && pkt->needsResponse() &&
-        !pkt->isClean();
+                              !pkt->isClean() &&
+                              !hasFailedEarlyLockAcquisition();
     if (isPendingModified() || pkt->isInvalidate()) {
         // We need to save and replay the packet in two cases:
         // 1. We're awaiting a writable copy (Modified or Exclusive),
@@ -494,6 +499,12 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
         PacketPtr cp_pkt = will_respond ? new Packet(pkt, true, true) :
             new Packet(std::make_shared<Request>(*pkt->req), pkt->cmd,
                        blkSize, pkt->id);
+
+        if (!will_respond) {
+            // This private replay exists only to apply the eventual
+            // invalidation; the original snoop continued downstream.
+            cp_pkt->req->setFlags(Request::EARLY_LOCK_NO_RESPONSE);
+        }
 
         if (will_respond) {
             // we are the ordering point, and will consequently
@@ -538,6 +549,34 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
     }
 
     return will_respond;
+}
+
+bool
+MSHR::hasFailedEarlyLockAcquisition() const
+{
+    const auto is_acquire = [](const Target &target) {
+        const PacketPtr pkt = target.pkt;
+        if (!pkt || !pkt->req || !pkt->isWrite() ||
+            !pkt->req->isEarlyLockLine() ||
+            pkt->req->isEarlyLockRetainLine()) {
+            return false;
+        }
+        const auto &bytes = pkt->req->getByteEnable();
+        return pkt->req->earlyLockFailed() && !bytes.empty() &&
+               std::none_of(bytes.begin(), bytes.end(),
+                            [](bool enabled) { return enabled; });
+    };
+    return std::any_of(targets.begin(), targets.end(), is_acquire) ||
+           std::any_of(deferredTargets.begin(), deferredTargets.end(),
+                       is_acquire);
+}
+
+void
+MSHR::deferTarget(const Target &target)
+{
+    assert(target.source == Target::FromCPU);
+    deferredTargets.add(target.pkt, target.readyTime, target.order,
+                        target.source, true, target.allocOnFill);
 }
 
 MSHR::TargetList

@@ -194,6 +194,12 @@ class Request : public Extensible<Request>
         INVALIDATE                  = 0x0000000100000000,
         /** The request cleans a memory location */
         CLEAN                       = 0x0000000200000000,
+        /** Acquire/hold an L1D line for an early-lock publication. */
+        EARLY_LOCK_LINE             = 0x0000000400000000,
+        /** Keep the prelock until every member of a publication completes. */
+        EARLY_LOCK_RETAIN_LINE      = 0x0000000800000000,
+        /** Internal deferred snoop that must not generate a response. */
+        EARLY_LOCK_NO_RESPONSE      = 0x0000004000000000,
         /** An L1 data-cache replacement notification sent to the CPU. */
         L1D_EVICTION_NOTIFY         = 0x0004000000000000,
         /** The request was satisfied by the CPU-facing L1 data cache. */
@@ -473,6 +479,12 @@ class Request : public Extensible<Request>
     /** A pointer to an atomic operation */
     AtomicOpFunctorPtr atomicOpFunctor = nullptr;
 
+    /** Cache-owned metadata for an atomic early-lock publication. */
+    uint64_t _earlyLockPublicationId = 0;
+    uint32_t _earlyLockPublicationMembers = 0;
+    bool _earlyLockPublicationComplete = false;
+    bool _earlyLockFailed = false;
+
     LocalAccessor _localAccessor;
 
     /** The instruction count at the time this request is created */
@@ -516,21 +528,30 @@ class Request : public Extensible<Request>
         _isGPUFuncAccess = false;
     }
 
-    Request(const Request& other)
+    Request(const Request &other)
         : Extensible<Request>(other),
-          _paddr(other._paddr), _size(other._size),
+          _paddr(other._paddr),
+          _size(other._size),
           _byteEnable(other._byteEnable),
           _requestorId(other._requestorId),
           _flags(other._flags),
           _cacheCoherenceFlags(other._cacheCoherenceFlags),
           privateFlags(other.privateFlags),
           _time(other._time),
-          _taskId(other._taskId), _vaddr(other._vaddr),
-          _extraData(other._extraData), _contextId(other._contextId),
-          _pc(other._pc), _reqInstSeqNum(other._reqInstSeqNum),
+          _taskId(other._taskId),
+          _vaddr(other._vaddr),
+          _extraData(other._extraData),
+          _contextId(other._contextId),
+          _pc(other._pc),
+          _reqInstSeqNum(other._reqInstSeqNum),
+          _earlyLockPublicationId(other._earlyLockPublicationId),
+          _earlyLockPublicationMembers(other._earlyLockPublicationMembers),
+          _earlyLockPublicationComplete(other._earlyLockPublicationComplete),
+          _earlyLockFailed(other._earlyLockFailed),
           _localAccessor(other._localAccessor),
           translateDelta(other.translateDelta),
-          accessDelta(other.accessDelta), depth(other.depth)
+          accessDelta(other.accessDelta),
+          depth(other.depth)
     {
         atomicOpFunctor.reset(other.atomicOpFunctor ?
                                 other.atomicOpFunctor->clone() : nullptr);
@@ -1048,6 +1069,60 @@ class Request : public Extensible<Request>
     bool isSecure() const { return _flags.isSet(SECURE); }
     bool isPTWalk() const { return _flags.isSet(PT_WALK); }
     bool isRelease() const { return _flags.isSet(RELEASE); }
+    bool
+    isEarlyLockLine() const
+    {
+        return _flags.isSet(EARLY_LOCK_LINE);
+    }
+    bool
+    isEarlyLockRetainLine() const
+    {
+        return _flags.isSet(EARLY_LOCK_RETAIN_LINE);
+    }
+    bool
+    isEarlyLockNoResponse() const
+    {
+        return _flags.isSet(EARLY_LOCK_NO_RESPONSE);
+    }
+    void
+    setEarlyLockPublication(uint64_t id, uint32_t members)
+    {
+        assert(id != 0 && members != 0);
+        _earlyLockPublicationId = id;
+        _earlyLockPublicationMembers = members;
+        _earlyLockPublicationComplete = false;
+        _earlyLockFailed = false;
+    }
+    uint64_t
+    earlyLockPublicationId() const
+    {
+        return _earlyLockPublicationId;
+    }
+    uint32_t
+    earlyLockPublicationMembers() const
+    {
+        return _earlyLockPublicationMembers;
+    }
+    bool
+    isEarlyLockPublicationComplete() const
+    {
+        return _earlyLockPublicationComplete;
+    }
+    void
+    markEarlyLockPublicationComplete()
+    {
+        _earlyLockPublicationComplete = true;
+    }
+    bool
+    earlyLockFailed() const
+    {
+        return _earlyLockFailed;
+    }
+    void
+    markEarlyLockFailed()
+    {
+        _earlyLockFailed = true;
+    }
     bool
     isL1DEvictionNotify() const
     {

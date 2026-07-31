@@ -366,6 +366,12 @@ class MSHR : public QueueEntry, public Printable
      */
     bool hasLockedRMWReadTarget();
 
+    /** Whether this MSHR carries a revoked metadata-only TAG acquire. */
+    bool hasFailedEarlyLockAcquisition() const;
+
+    /** Requeue a target when a canceled transaction returns no write grant. */
+    void deferTarget(const Target &target);
+
   private:
     /**
      * Promotes deferred targets that satisfy a predicate

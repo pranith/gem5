@@ -151,6 +151,8 @@ class CacheBlk : public TaggedEntry
     /** List of thread contexts that have performed a load-locked (LL)
      * on the block since the last store. */
     std::list<Lock> lockList;
+    /** Number of early-lock references protecting this L1D line. */
+    uint32_t _earlyLockCount = 0;
 
   public:
     CacheBlk() : TaggedEntry()
@@ -189,6 +191,8 @@ class CacheBlk : public TaggedEntry
         setRefCount(other.getRefCount());
         setSrcRequestorId(other.getSrcRequestorId());
         std::swap(lockList, other.lockList);
+        _earlyLockCount = other._earlyLockCount;
+        other._earlyLockCount = 0;
 
         other.invalidate();
 
@@ -212,6 +216,7 @@ class CacheBlk : public TaggedEntry
         setRefCount(0);
         setSrcRequestorId(Request::invldRequestorId);
         lockList.clear();
+        _earlyLockCount = 0;
     }
 
     /**
@@ -232,6 +237,28 @@ class CacheBlk : public TaggedEntry
      * @param bits The coherence bits to be cleared.
      */
     void clearCoherenceBits(unsigned bits) { coherence &= ~bits; }
+
+    bool
+    earlyLocked() const
+    {
+        return _earlyLockCount != 0;
+    }
+    uint32_t
+    earlyLockCount() const
+    {
+        return _earlyLockCount;
+    }
+    void
+    acquireEarlyLock()
+    {
+        ++_earlyLockCount;
+    }
+    void
+    releaseEarlyLock()
+    {
+        assert(_earlyLockCount != 0);
+        --_earlyLockCount;
+    }
 
     /**
      * Checks the given coherence bits are set.
