@@ -909,6 +909,15 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
                 break;
             }
 
+            if (blk == tempBlock && tgt_pkt->req->isEarlyLockLine()) {
+                // A temporary fill has coherence ownership but no retained
+                // L1 tag/data entry on which the publication can remain
+                // protected. Keep the real store target pending and retry it
+                // after the temporary block is written back.
+                mshr->deferTarget(target);
+                break;
+            }
+
             // Here we decide whether we will satisfy the target using
             // data from the block or from the response. We use the
             // block data to satisfy the request when the block is
@@ -920,6 +929,14 @@ Cache::serviceMSHRTargets(MSHR *mshr, const PacketPtr pkt, CacheBlk *blk)
                     clockEdge(responseLatency) + pkt->payloadDelay;
             } else if (blk && blk->isValid() &&
                        (!mshr->isForward || !pkt->hasData())) {
+                // ReadExResp supplies data and ownership; UpgradeResp supplies
+                // ownership without data.  In either case WritableBit must be
+                // established before a publication pre-lock is installed.
+                if (tgt_pkt->req->isEarlyLockLine()) {
+                    assert(tgt_pkt->needsWritable());
+                    assert(blk->isSet(CacheBlk::WritableBit));
+                    acquireEarlyLineLock(tgt_pkt, blk);
+                }
                 satisfyRequest(tgt_pkt, blk, true, mshr->hasPostDowngrade());
 
                 // How many bytes past the first request is this one

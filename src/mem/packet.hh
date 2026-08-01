@@ -90,6 +90,7 @@ class MemCmd
         WriteReq,
         WriteResp,
         WriteCompleteResp,
+        EarlyLockResp,
         WritebackDirty,
         WritebackClean,
         WriteClean,            // writes dirty data below without evicting

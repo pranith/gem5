@@ -266,17 +266,6 @@ class LSQUnit
 
         struct MergeBufferEntry
         {
-            enum class EarlyLockState
-            {
-                NONE,
-                ACQUIRING,
-                ACQUIRED,
-                CANCELING,
-                WAITING_ACQUIRE,
-                RELEASING,
-                RELEASED
-            };
-
             Addr blockAddr;
             uint64_t version = 0;
             std::vector<bool> byteValids;
@@ -296,12 +285,11 @@ class LSQUnit
             std::vector<bool> waitBits;
             /** Packet retained while a banked drain is retried or staged. */
             PacketPtr drainPkt = nullptr;
-            /** Packet retained while an early lock is retried. */
-            PacketPtr earlyLockPkt = nullptr;
-            EarlyLockState earlyLockState = EarlyLockState::NONE;
             uint64_t earlyPublicationId = 0;
             uint32_t earlyPublicationMembers = 0;
-            bool earlyLockDisabled = false;
+            bool earlyLockResponseReceived = false;
+            /** This entry may only drain as part of a TAG publication. */
+            bool requiresEarlyPublication = false;
 
             MergeBufferEntry(size_t size)
                 : byteValids(size, false),
@@ -333,8 +321,6 @@ class LSQUnit
         Cycles resetRetireWindow;
         uint64_t activeEarlyPublication = 0;
         uint64_t nextEarlyPublication = 1;
-        Cycles earlyPublicationDeadline = Cycles(0);
-        bool abortingEarlyPublication = false;
 
       public:
         MergeBuffer() {}
@@ -367,8 +353,6 @@ class LSQUnit
         {
             return activeEarlyPublication != 0;
         }
-        void completeEarlyLock(uint64_t publication_id, Addr block_addr,
-                               bool failed, bool release);
         void completeEarlyPublication(uint64_t publication_id);
         bool hasDrainableEntry() const;
         void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
@@ -409,11 +393,6 @@ class LSQUnit
 
       private:
         bool startEarlyLockGroup();
-        bool trySendEarlyLock(LSQUnit *lsq_ptr);
-        bool trySendEarlyUnlock(LSQUnit *lsq_ptr);
-        void abortEarlyLockGroup(bool capacity_failure);
-        bool finishAbortedEarlyLockGroup();
-        bool earlyGroupReadyToDrain() const;
         void
         updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
                     size_t size, bool is_all_zero)
@@ -827,22 +806,6 @@ class LSQUnit
         {}
     };
 
-    /** Sender state used by metadata-only early-lock requests. */
-    struct MergeBufferEarlyLockSenderState : public Packet::SenderState
-    {
-        uint64_t publicationId;
-        Addr blockAddr;
-        LSQUnit *lsqUnit;
-        bool release;
-        MergeBufferEarlyLockSenderState(MergeBuffer::MergeBufferEntry *e,
-                                        LSQUnit *unit, bool is_release)
-            : publicationId(e->earlyPublicationId),
-              blockAddr(e->blockAddr),
-              lsqUnit(unit),
-              release(is_release)
-        {}
-    };
-
     /** Sender state for merge buffer prefetches. */
     struct MergeBufferPrefetchSenderState : public Packet::SenderState
     {
@@ -903,7 +866,6 @@ class LSQUnit
     /** Enable version-independent early-lock groups for TSO drains. */
     bool tsoEarlyLock;
     unsigned tsoEarlyLockMaxLines;
-    Cycles tsoEarlyLockTimeout;
     /** Optimize store-release by tracking release entries in MB. */
     bool optimizeStoreRelease = false;
 
@@ -1073,6 +1035,8 @@ class LSQUnit
         statistics::Scalar mbTsoBlockedMergeOpportunities;
         /** TSO merges blocked by the newest-allocation constraint. */
         statistics::Scalar mbTsoMergeBlockedByAllocationOrder;
+        /** Older TSO entries closed when a new line is allocated. */
+        statistics::Scalar mbTsoAllocationForceRetires;
         /** Blocked TSO merges observed while SQ occupancy was high. */
         statistics::Scalar mbTsoBlockedMergesUnderSqPressure;
         /** Blocked TSO merges observed while MB free space was low. */
@@ -1091,8 +1055,14 @@ class LSQUnit
         statistics::Scalar mbEarlyLockGroups;
         /** Entries placed in TSO early-lock publication groups. */
         statistics::Scalar mbEarlyLockGroupEntries;
-        /** Metadata-only early-lock requests sent to L1D. */
+        /** Data-bearing MB drains carrying early-lock metadata. */
         statistics::Scalar mbEarlyLockRequests;
+        /** Cycles from a tagged drain issue to its ownership response. */
+        statistics::Distribution mbEarlyLockAcquisitionLatency;
+        /** Tagged hit/upgrade latency when lock and completion are merged. */
+        statistics::Distribution mbEarlyLockMergedResponseLatency;
+        /** Permission-response latency for a true coherence-point data miss. */
+        statistics::Distribution mbEarlyLockMissResponseLatency;
         /** Groups rejected because their lines could not be retained. */
         statistics::Scalar mbEarlyLockCapacityFailures;
         /** Groups revoked after failing to acquire before their deadline. */

@@ -88,6 +88,9 @@ MemCmd::commandInfo[] =
      * counters can be updated. Wait counters in the CU is how memory
      * dependences are handled in the GPU ISA. */
     { {IsWrite, IsResponse}, InvalidCmd, "WriteCompleteResp" },
+    /* EarlyLockResp - A permission-only response for a tagged write. The
+     * original request remains outstanding until its ordinary WriteResp. */
+    { {IsResponse}, InvalidCmd, "EarlyLockResp" },
     /* WritebackDirty */
     { {IsWrite, IsRequest, IsEviction, HasData, FromCache},
             InvalidCmd, "WritebackDirty" },

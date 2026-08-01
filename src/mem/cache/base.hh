@@ -442,6 +442,7 @@ class BaseCache : public ClockedObject
     bool isEarlyLockAcquisitionValid(const PacketPtr pkt) const;
     void completeEarlyLockAcquisition(const PacketPtr pkt);
     void revokeIncompleteEarlyPublication(Addr block_addr, bool is_secure);
+    void acquireEarlyLinePermission(const PacketPtr pkt);
     void acquireEarlyLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
     void releaseEarlyLineLock(const PacketPtr pkt, CacheBlk *blk = nullptr);
     void releaseEarlyLinePrelock(Addr block_addr, bool is_secure);
@@ -723,6 +724,9 @@ class BaseCache : public ClockedObject
      * so it can preserve speculative-load ordering information.
      */
     const bool notifyCpuOnEviction;
+
+    /** This cache is the shared coherence ordering point for early locks. */
+    const bool earlyLockCoherencePoint;
 
     /**
      * Writebacks from the tempBlock, resulting on the response path

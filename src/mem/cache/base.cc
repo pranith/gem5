@@ -71,6 +71,24 @@ namespace gem5
 namespace
 {
 
+/**
+ * An independent copy of one cache hop in an early-lock response route.
+ *
+ * The normal response still owns the MSHR sender-state stack.  Reusing that
+ * stack for the permission-only response would let whichever response arrives
+ * first destructively pop state needed by the other. These small wrappers
+ * snapshot the per-hop route without modifying any MSHR state.
+ */
+class EarlyLockResponseRouteState : public Packet::SenderState
+{
+  public:
+    explicit EarlyLockResponseRouteState(Addr blk_addr)
+        : blkAddr(blk_addr)
+    {}
+
+    const Addr blkAddr;
+};
+
 bool
 isEarlyLockAcquire(const PacketPtr pkt)
 {
@@ -124,6 +142,7 @@ BaseCache::BaseCache(const BaseCacheParams &p, unsigned blk_size)
       writeAllocator(p.write_allocator),
       writebackClean(p.writeback_clean),
       notifyCpuOnEviction(p.notify_cpu_on_eviction),
+      earlyLockCoherencePoint(p.early_lock_coherence_point),
       tempBlockWriteback(nullptr),
       writebackTempBlockAtomicEvent([this] { writebackTempBlockAtomic(); },
                                     name(), false,
@@ -335,10 +354,11 @@ BaseCache::isEarlyLinePrelocked(Addr block_addr, bool is_secure) const
 bool
 BaseCache::isEarlyLineReadBlocked(Addr block_addr, bool is_secure) const
 {
-    const uint64_t key = earlyLockKey(block_addr, is_secure);
-    const auto it = earlyLineWritesInstalled.find(key);
-    return isEarlyLinePrelocked(block_addr, is_secure) &&
-           it != earlyLineWritesInstalled.end() && it->second != 0;
+    // Once coherence ownership has been acknowledged, neither an invalidate
+    // nor a downgrade may pass the retained permission lock. The data fill
+    // and publication write are allowed to complete behind this address-only
+    // lock.
+    return isEarlyLinePrelocked(block_addr, is_secure);
 }
 
 bool
@@ -364,6 +384,51 @@ BaseCache::isEarlyLockAcquisitionValid(const PacketPtr pkt) const
         publication_it->second.prelockedLines.end(), [&](const auto &prelock) {
             return prelock.line == block_addr && prelock.secure == is_secure;
         });
+}
+
+void
+BaseCache::acquireEarlyLinePermission(const PacketPtr pkt)
+{
+    if (!notifyCpuOnEviction || !pkt || !pkt->req ||
+        !pkt->req->isEarlyLockLine() ||
+        !pkt->req->isEarlyLockRetainLine()) {
+        return;
+    }
+
+    const Addr block_addr = pkt->getBlockAddr(blkSize);
+    const bool is_secure = pkt->isSecure();
+    const uint64_t publication_id = pkt->req->earlyLockPublicationId();
+    assert(publication_id != 0);
+    auto &publication =
+        earlyPublications[pkt->req->requestorId()][publication_id];
+    if (publication.expected == 0) {
+        publication.expected = pkt->req->earlyLockPublicationMembers();
+    } else {
+        assert(publication.expected ==
+               pkt->req->earlyLockPublicationMembers());
+    }
+    publication.active = true;
+
+    const bool already_reserved = std::any_of(
+        publication.prelockedLines.begin(),
+        publication.prelockedLines.end(), [&](const auto &prelock) {
+            return prelock.line == block_addr &&
+                   prelock.secure == is_secure;
+        });
+    const uint64_t key = earlyLockKey(block_addr, is_secure);
+    if (!already_reserved) {
+        publication.prelockedLines.push_back({block_addr, is_secure});
+        earlyLinePrelocked[key] = true;
+        ++earlyLineLockCount[key];
+    }
+    pkt->req->markEarlyLockAcquired();
+
+    CacheBlk *blk = tags->findBlock({block_addr, is_secure});
+    if (blk && blk->isValid() && regenerateBlkAddr(blk) == block_addr) {
+        while (blk->earlyLockCount() < earlyLineLockCount[key]) {
+            blk->acquireEarlyLock();
+        }
+    }
 }
 
 void
@@ -401,18 +466,17 @@ BaseCache::acquireEarlyLineLock(const PacketPtr pkt, CacheBlk *blk)
         }
         return;
     } else {
-        // Publication writes retain the prelock and add a transient
-        // write-lifetime reference.
+        // The ordinary data-bearing publication write also acquires its
+        // lock. Record the group and take both its persistent publication
+        // lock and its transient write-lifetime lock here; no metadata-only
+        // request precedes it.
         assert(pkt->req->isEarlyLockRetainLine());
+        assert(blk && blk != tempBlock && blk->isValid());
+        assert(regenerateBlkAddr(blk) == block_addr);
+        assert(blk->isSet(CacheBlk::WritableBit));
         const uint64_t key = earlyLockKey(block_addr, is_secure);
-        assert(earlyLinePrelocked[key]);
+        acquireEarlyLinePermission(pkt);
         ++earlyLineLockCount[key];
-
-        const uint64_t publication_id = pkt->req->earlyLockPublicationId();
-        assert(publication_id != 0);
-        auto rid_it = earlyPublications.find(pkt->req->requestorId());
-        assert(rid_it != earlyPublications.end() &&
-               rid_it->second.contains(publication_id));
     }
 
     const uint64_t key = earlyLockKey(block_addr, is_secure);
@@ -932,8 +996,6 @@ BaseCache::recvTimingReq(PacketPtr pkt)
         blk->setCoherenceBits(CacheBlk::WritableBit);
     }
 
-    acquireEarlyLineLock(pkt);
-
     Cycles lat;
     CacheBlk *blk = nullptr;
     bool satisfied = false;
@@ -1013,6 +1075,29 @@ BaseCache::recvTimingResp(PacketPtr pkt)
     // this is a prefetch response from above
     panic_if(pkt->headerDelay != 0 && pkt->cmd != MemCmd::HardPFResp,
              "%s saw a non-zero packet delay\n", name());
+
+    if (pkt->cmd == MemCmd::EarlyLockResp) {
+        // This response acknowledges coherence permission only. Consume an
+        // independent route wrapper; the real MSHR stack remains owned by the
+        // later data/final response.
+        auto *route = dynamic_cast<EarlyLockResponseRouteState *>(
+            pkt->popSenderState());
+        assert(route);
+        const Addr expected_blk_addr = route->blkAddr;
+        delete route;
+        assert(pkt->req && pkt->req->isEarlyLockLine() &&
+               pkt->req->isEarlyLockRetainLine());
+        assert(expected_blk_addr == pkt->getBlockAddr(blkSize));
+
+        if (notifyCpuOnEviction) {
+            acquireEarlyLinePermission(pkt);
+            assert(pkt->req->isEarlyLockAcquired());
+        }
+
+        pkt->headerDelay = pkt->payloadDelay = 0;
+        cpuSidePort.schedTimingResp(pkt, clockEdge(responseLatency));
+        return;
+    }
 
     const bool is_error = pkt->isError();
 
@@ -2007,6 +2092,11 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
             lat = calculateTagOnlyLatency(pkt->headerDelay, tag_latency);
         }
 
+        // A publication request may carry lock intent into the cache, but
+        // ownership is the grant.  A hit reaches this point only with the
+        // required permission, so install the pre-lock immediately before
+        // making the write visible in the data array.
+        acquireEarlyLineLock(pkt, blk);
         satisfyRequest(pkt, blk);
         maintainClusivity(pkt->fromCache(), blk);
 
@@ -2498,6 +2588,65 @@ BaseCache::sendMSHRQueuePacket(MSHR* mshr)
         bool pending_modified_resp = !pkt->hasSharers() &&
             pkt->cacheResponding();
         markInService(mshr, pending_modified_resp);
+
+        // At the shared coherence point, a successfully ordered writable
+        // miss has acquired permission even though its data response may
+        // still be outstanding below. Return a second, permission-only
+        // response along the existing MSHR route. Crossbars retain that
+        // route for the eventual data/final response.
+        const bool early_lock_data_unavailable = pkt->hasRespData() &&
+            (!blk || !blk->isValid()) && !pkt->cacheResponding();
+        if (earlyLockCoherencePoint && early_lock_data_unavailable &&
+            pkt->req && pkt->needsWritable() &&
+            pkt->req->isEarlyLockLine() &&
+            pkt->req->isEarlyLockRetainLine() &&
+            pkt->req->claimEarlyLockPermissionResponse()) {
+            PacketPtr permission = new Packet(pkt, true, false);
+
+            // Snapshot the upstream MSHR route before the normal response can
+            // pop it. The terminal (CPU) sender state is shared read-only and
+            // remains owned by the final response.
+            auto *local_mshr = dynamic_cast<MSHR *>(
+                permission->senderState);
+            assert(local_mshr == mshr);
+
+            // A miss packet contains only this cache's MSHR. Each MSHR's
+            // saved CPU-side target contains the sender state for the next
+            // cache above, so follow those saved targets to recover the
+            // complete return route.
+            Packet::SenderState *state = nullptr;
+            std::vector<MSHR *> upstream_mshrs;
+            MSHR *route_mshr = local_mshr;
+            while (true) {
+                PacketPtr route_target = route_mshr->getTarget()->pkt;
+                assert(route_target && route_target->req == pkt->req);
+                state = route_target->senderState;
+                auto *upstream_mshr = dynamic_cast<MSHR *>(state);
+                if (!upstream_mshr) {
+                    break;
+                }
+                upstream_mshrs.push_back(upstream_mshr);
+                route_mshr = upstream_mshr;
+            }
+            assert(state);
+            permission->senderState = state;
+            for (auto it = upstream_mshrs.rbegin();
+                 it != upstream_mshrs.rend(); ++it) {
+                permission->pushSenderState(
+                    new EarlyLockResponseRouteState((*it)->blkAddr));
+            }
+
+            permission->cmd = MemCmd::EarlyLockResp;
+            permission->headerDelay = permission->payloadDelay = 0;
+            cpuSidePort.schedTimingResp(
+                permission, clockEdge(responseLatency));
+            DPRINTF(Cache,
+                    "Sent early ownership response for publication %llu "
+                    "block %#x\n",
+                    (unsigned long long)
+                        pkt->req->earlyLockPublicationId(),
+                    pkt->getBlockAddr(blkSize));
+        }
 
         if (pkt->isClean() && blk && blk->isSet(CacheBlk::DirtyBit)) {
             // A cache clean opearation is looking for a dirty

@@ -482,6 +482,8 @@ class Request : public Extensible<Request>
     /** Cache-owned metadata for an atomic early-lock publication. */
     uint64_t _earlyLockPublicationId = 0;
     uint32_t _earlyLockPublicationMembers = 0;
+    bool _earlyLockPermissionResponseIssued = false;
+    bool _earlyLockAcquired = false;
     bool _earlyLockPublicationComplete = false;
     bool _earlyLockFailed = false;
 
@@ -546,6 +548,9 @@ class Request : public Extensible<Request>
           _reqInstSeqNum(other._reqInstSeqNum),
           _earlyLockPublicationId(other._earlyLockPublicationId),
           _earlyLockPublicationMembers(other._earlyLockPublicationMembers),
+          _earlyLockPermissionResponseIssued(
+              other._earlyLockPermissionResponseIssued),
+          _earlyLockAcquired(other._earlyLockAcquired),
           _earlyLockPublicationComplete(other._earlyLockPublicationComplete),
           _earlyLockFailed(other._earlyLockFailed),
           _localAccessor(other._localAccessor),
@@ -1090,6 +1095,8 @@ class Request : public Extensible<Request>
         assert(id != 0 && members != 0);
         _earlyLockPublicationId = id;
         _earlyLockPublicationMembers = members;
+        _earlyLockPermissionResponseIssued = false;
+        _earlyLockAcquired = false;
         _earlyLockPublicationComplete = false;
         _earlyLockFailed = false;
     }
@@ -1102,6 +1109,30 @@ class Request : public Extensible<Request>
     earlyLockPublicationMembers() const
     {
         return _earlyLockPublicationMembers;
+    }
+    bool
+    claimEarlyLockPermissionResponse()
+    {
+        if (_earlyLockPermissionResponseIssued) {
+            return false;
+        }
+        _earlyLockPermissionResponseIssued = true;
+        return true;
+    }
+    bool
+    hasEarlyLockPermissionResponse() const
+    {
+        return _earlyLockPermissionResponseIssued;
+    }
+    bool
+    isEarlyLockAcquired() const
+    {
+        return _earlyLockAcquired;
+    }
+    void
+    markEarlyLockAcquired()
+    {
+        _earlyLockAcquired = true;
     }
     bool
     isEarlyLockPublicationComplete() const

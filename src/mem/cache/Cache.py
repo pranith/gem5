@@ -155,6 +155,11 @@ class BaseCache(ClockedObject):
         False,
         "Send metadata-only replacement notifications toward the CPU",
     )
+    early_lock_coherence_point = Param.Bool(
+        False,
+        "Issue early-lock permission responses after globally ordering a "
+        "tagged writable miss",
+    )
 
     # Control whether this cache should be mostly inclusive or mostly
     # exclusive with respect to upstream caches. The behaviour on a

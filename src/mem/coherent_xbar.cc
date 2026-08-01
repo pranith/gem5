@@ -446,6 +446,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 bool
 CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
 {
+    const bool early_lock_response = pkt->cmd == MemCmd::EarlyLockResp;
+
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
 
@@ -481,7 +483,7 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     // determine how long to be crossbar layer is busy
     Tick packetFinishTime = clockEdge(headerLatency) + pkt->payloadDelay;
 
-    if (snoopFilter && !system->bypassCaches()) {
+    if (!early_lock_response && snoopFilter && !system->bypassCaches()) {
         // let the snoop filter inspect the response and update its state
         snoopFilter->updateResponse(pkt, *cpuSidePorts[cpu_side_port_id]);
     }
@@ -493,8 +495,12 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
     cpuSidePorts[cpu_side_port_id]->schedTimingResp(pkt, curTick()
                                         + latency);
 
-    // remove the request from the routing table
-    routeTo.erase(route_lookup);
+    // A permission-only early-lock response is deliberately not terminal.
+    // Preserve the route for the data-bearing/final response of the same
+    // request.
+    if (!early_lock_response) {
+        routeTo.erase(route_lookup);
+    }
 
     respLayers[cpu_side_port_id]->succeededTiming(packetFinishTime);
 

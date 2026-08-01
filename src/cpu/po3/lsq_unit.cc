@@ -170,6 +170,23 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         return true;
     } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
                    pkt->senderState)) {
+        if (pkt->cmd == MemCmd::EarlyLockResp) {
+            assert(mb_state->entry && !mb_state->entry->isAtomic);
+            assert(mb_state->entry->earlyPublicationId != 0);
+            assert(pkt->req->isEarlyLockAcquired());
+            if (!mb_state->entry->earlyLockResponseReceived) {
+                const Cycles latency =
+                    cpu->curCycle() - mb_state->entry->drainIssueCycle;
+                stats.mbEarlyLockAcquisitionLatency.sample(latency);
+                stats.mbEarlyLockMissResponseLatency.sample(latency);
+                mb_state->entry->earlyLockResponseReceived = true;
+            }
+            // The final write response owns and deletes the shared sender
+            // state. This permission response only owns its packet clone.
+            delete pkt;
+            return true;
+        }
+
         if (mb_state->entry && mb_state->entry->isAtomic) {
             LSQRequest *req = mb_state->entry->atomicReq;
             if (req && !req->isReleased()) {
@@ -196,21 +213,20 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         ++stats.mbDrainHitMiss[pkt->req->isL1DCacheHit() ? 0 : 1];
         const uint64_t publication_id =
             mb_state->entry ? mb_state->entry->earlyPublicationId : 0;
+        assert(publication_id == 0 || pkt->req->isEarlyLockAcquired());
+        if (publication_id != 0 &&
+            !mb_state->entry->earlyLockResponseReceived) {
+            const Cycles latency =
+                cpu->curCycle() - mb_state->entry->drainIssueCycle;
+            stats.mbEarlyLockAcquisitionLatency.sample(latency);
+            stats.mbEarlyLockMergedResponseLatency.sample(latency);
+        }
         mergeBuffer.handleDrainResp(mb_state->entry, this);
         if (publication_id != 0 &&
             pkt->req->isEarlyLockPublicationComplete()) {
             mergeBuffer.completeEarlyPublication(publication_id);
         }
         delete mb_state;
-        delete pkt;
-        return true;
-    } else if (auto *lock_state =
-                   dynamic_cast<MergeBufferEarlyLockSenderState *>(
-                       pkt->senderState)) {
-        mergeBuffer.completeEarlyLock(
-            lock_state->publicationId, lock_state->blockAddr,
-            pkt->req->earlyLockFailed(), lock_state->release);
-        delete lock_state;
         delete pkt;
         return true;
     } else {
@@ -383,11 +399,8 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
     mergeBufferPfInFlight = 0;
     tsoEarlyLock = params.tsoEarlyLock;
     tsoEarlyLockMaxLines = params.tsoEarlyLockMaxLines;
-    tsoEarlyLockTimeout = params.tsoEarlyLockTimeout;
     fatal_if(tsoEarlyLock && tsoEarlyLockMaxLines < 2,
              "tsoEarlyLockMaxLines must be at least two");
-    fatal_if(tsoEarlyLock && tsoEarlyLockTimeout == Cycles(0),
-             "tsoEarlyLockTimeout must be nonzero");
     mbRetireWhenFullValid = params.mbRetireWhenFullValid;
     optimizeStoreRelease = params.optimizeStoreRelease;
 
@@ -497,6 +510,10 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(mbTsoMergeBlockedByAllocationOrder,
                statistics::units::Count::get(),
                "TSO merges blocked by the newest-allocation constraint"),
+      ADD_STAT(mbTsoAllocationForceRetires,
+               statistics::units::Count::get(),
+               "Older plain-TSO entries force-retired when a new line is "
+               "allocated"),
       ADD_STAT(mbTsoBlockedMergesUnderSqPressure,
                statistics::units::Count::get(),
                "Blocked TSO merges while SQ occupancy met its threshold"),
@@ -520,7 +537,19 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
       ADD_STAT(mbEarlyLockGroupEntries, statistics::units::Count::get(),
                "Entries placed in TSO early-lock publication groups"),
       ADD_STAT(mbEarlyLockRequests, statistics::units::Count::get(),
-               "Metadata-only early-lock requests sent to L1D"),
+               "Data-bearing MB drains carrying early-lock metadata"),
+      ADD_STAT(mbEarlyLockAcquisitionLatency,
+               statistics::units::Cycle::get(),
+               "Cycles from tagged MB drain issue to coherence ownership "
+               "and lock response"),
+      ADD_STAT(mbEarlyLockMergedResponseLatency,
+               statistics::units::Cycle::get(),
+               "Tagged drain latency when lock and ordinary cache response "
+               "are merged"),
+      ADD_STAT(mbEarlyLockMissResponseLatency,
+               statistics::units::Cycle::get(),
+               "Permission-only response latency for a coherence-point "
+               "data miss"),
       ADD_STAT(mbEarlyLockCapacityFailures, statistics::units::Count::get(),
                "Early-lock groups rejected by L1D capacity"),
       ADD_STAT(mbEarlyLockTimeouts, statistics::units::Count::get(),
@@ -575,6 +604,12 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
 {
     loadToUse.init(0, 299, 10).flags(statistics::nozero);
     mbDrainLatency.init(0, 299, 10).flags(statistics::nozero);
+    mbEarlyLockAcquisitionLatency.init(0, 299, 10)
+        .flags(statistics::nozero);
+    mbEarlyLockMergedResponseLatency.init(0, 299, 10)
+        .flags(statistics::nozero);
+    mbEarlyLockMissResponseLatency.init(0, 299, 10)
+        .flags(statistics::nozero);
     mbDrainHitMiss.init(2);
     mbDrainHitMiss.subname(0, "hit");
     mbDrainHitMiss.subname(1, "miss");
@@ -2396,9 +2431,6 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
 
     LSQRequest *request = dynamic_cast<LSQRequest *>(data_pkt->senderState);
     const bool isMergeBufferPkt = request == nullptr;
-    const bool isEarlyLockPkt =
-        dynamic_cast<MergeBufferEarlyLockSenderState *>(
-            data_pkt->senderState) != nullptr;
     CachePort data_port = CachePort::MergeBufferWrite;
     if (isLoad) {
         if (isMergeBufferPkt) {
@@ -2411,15 +2443,9 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
         }
     }
 
-    const auto &byte_enable = data_pkt->req->getByteEnable();
-    const bool early_lock_metadata =
-        data_pkt->req->isEarlyLockLine() && !byte_enable.empty() &&
-        std::none_of(byte_enable.begin(), byte_enable.end(),
-                     [](bool enabled) { return enabled; });
     const bool partial_write =
         !isLoad && data_pkt->isWrite() &&
-        !data_pkt->isWholeLineWrite(cpu->cacheLineSize()) &&
-        !early_lock_metadata;
+        !data_pkt->isWholeLineWrite(cpu->cacheLineSize());
 
     auto rmw_it = partialWriteRMWs.find(data_pkt);
     if (partial_write && rmw_it == partialWriteRMWs.end()) {
@@ -2487,7 +2513,7 @@ LSQUnit::trySendPacket(bool isLoad, PacketPtr data_pkt)
             } else {
                 lsq->cachePortBusy(data_port, data_pkt->getAddr());
             }
-            if (isMergeBufferPkt && !isLoad && !isEarlyLockPkt) {
+            if (isMergeBufferPkt && !isLoad) {
                 assert(data_port == CachePort::MergeBufferWrite);
                 ++stats.mbCacheWritePortUses;
                 DPRINTF(LSQUnit,
@@ -3140,35 +3166,63 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 return nullptr;
             }
 
-            if (lsqPtr && &(*it) != &entries.back()) {
-                const bool mergeable_state =
-                    it->state == EntryState::MERGING ||
-                    (it->state == EntryState::RETIRED &&
-                     it->unretireCount < maxUnretire);
-                if (mergeable_state) {
-                    ++lsqPtr->stats.mbTsoBlockedMergeOpportunities;
-                    ++lsqPtr->stats.mbTsoMergeBlockedByAllocationOrder;
+            bool require_early_publication = false;
+            if (lsqPtr && lsqPtr->needsTSO &&
+                &(*it) != &entries.back()) {
+                // A TAG publication can safely coalesce a younger store into
+                // an older entry without changing its list position. Every
+                // older entry crossed by the merge must fit in one group and
+                // remain unpublished until that group completes.
+                const bool tag_group_can_cover =
+                    lsqPtr->tsoEarlyLock && activeEarlyPublication == 0 &&
+                    entries.size() <= lsqPtr->tsoEarlyLockMaxLines &&
+                    std::all_of(
+                        entries.begin(), entries.end(),
+                        [](const MergeBufferEntry &entry) {
+                            return entry.valid && !entry.isAtomic &&
+                                   !entry.isRelease && entry.baseReq &&
+                                   !entry.baseReq->isUncacheable() &&
+                                   !entry.baseReq->isStrictlyOrdered() &&
+                                   !entry.drainPkt &&
+                                   entry.earlyPublicationId == 0 &&
+                                   (entry.state == EntryState::MERGING ||
+                                    entry.state == EntryState::RETIRED);
+                        });
+                if (tag_group_can_cover) {
+                    require_early_publication = true;
+                } else {
+                    const bool mergeable_state =
+                        it->state == EntryState::MERGING ||
+                        (it->state == EntryState::RETIRED &&
+                         it->unretireCount < maxUnretire);
+                    if (mergeable_state) {
+                        ++lsqPtr->stats.mbTsoBlockedMergeOpportunities;
+                        ++lsqPtr->stats.mbTsoMergeBlockedByAllocationOrder;
 
-                    const size_t sq_pressure_count =
-                        (lsqPtr->storeQueue.capacity() *
-                             lsqPtr->mergeBufferSqPressureThreshold +
-                         99) /
-                        100;
-                    if (lsqPtr->storeQueue.size() >= sq_pressure_count) {
-                        ++lsqPtr->stats.mbTsoBlockedMergesUnderSqPressure;
-                    }
+                        const size_t sq_pressure_count =
+                            (lsqPtr->storeQueue.capacity() *
+                                 lsqPtr->mergeBufferSqPressureThreshold +
+                             99) /
+                            100;
+                        if (lsqPtr->storeQueue.size() >= sq_pressure_count) {
+                            ++lsqPtr->stats
+                                  .mbTsoBlockedMergesUnderSqPressure;
+                        }
 
-                    const size_t free_entries = numEntries - entries.size();
-                    if (free_entries <
-                        lsqPtr->mergeBufferFreeEntryPressureThreshold) {
-                        ++lsqPtr->stats.mbTsoBlockedMergesUnderMbPressure;
+                        const size_t free_entries =
+                            numEntries - entries.size();
+                        if (free_entries <
+                            lsqPtr->mergeBufferFreeEntryPressureThreshold) {
+                            ++lsqPtr->stats
+                                  .mbTsoBlockedMergesUnderMbPressure;
+                        }
                     }
+                    DPRINTF(LSQUnit,
+                            "Blocking merge for Addr:%#x; matching MB "
+                            "entry is not the most recent allocation\n",
+                            lineAddr);
+                    return nullptr;
                 }
-                DPRINTF(LSQUnit,
-                        "Blocking merge for Addr:%#x; matching MB "
-                        "entry is not the most recent allocation\n",
-                        lineAddr);
-                return nullptr;
             }
 
             DPRINTF(LSQUnit,
@@ -3206,6 +3260,19 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             if (lsqPtr) {
                 lsqPtr->stats.mbMerges++;
             }
+            if (require_early_publication) {
+                // Freeze the complete crossed prefix. startEarlyLockGroup()
+                // will tag these entries before drainOne() may send any of
+                // their data-bearing writes.
+                for (auto &entry : entries) {
+                    entry.requiresEarlyPublication = true;
+                    if (entry.state == EntryState::MERGING ||
+                        entry.state == EntryState::RETIRED) {
+                        entry.state = EntryState::FORCE_RETIRED;
+                        entry.retireCycle = Cycles(0);
+                    }
+                }
+            }
             last_entry = &(*it);
         } else {
             if (entries.size() >= numEntries) {
@@ -3221,6 +3288,23 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
             updateEntry(newEntry, data + (currAddr - addr), offset, chunk,
                         is_all_zero);
 
+            // Plain TSO can only merge into the newest allocation. Once a
+            // different line is appended, keeping the previous newest entry
+            // open merely makes a later same-line store spin at the SQ head
+            // until its retire timer expires. Close it now so FIFO draining
+            // can make progress. TAG deliberately keeps old entries open so
+            // a later same-line store can merge behind an atomic publication.
+            if (lsqPtr && lsqPtr->needsTSO && !lsqPtr->tsoEarlyLock &&
+                !entries.empty()) {
+                auto &previous_newest = entries.back();
+                if (previous_newest.valid &&
+                    previous_newest.state == EntryState::MERGING) {
+                    previous_newest.state = EntryState::FORCE_RETIRED;
+                    previous_newest.retireCycle = Cycles(0);
+                    ++lsqPtr->stats.mbTsoAllocationForceRetires;
+                }
+            }
+
             entries.push_back(std::move(newEntry));
             last_entry = &entries.back();
 
@@ -3228,7 +3312,8 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 lsqPtr->mergeBufferPfInFlight == 0) {
                 // Prefetch the cache line to speed up later drains.
                 RequestPtr base = store_it->request()->mainReq();
-                Request::Flags flags = base->getFlags() | Request::PREFETCH;
+                Request::Flags flags =
+                    base->getFlags() | Request::PF_EXCLUSIVE;
                 RequestorID rid = base->requestorId();
                 RequestPtr pf_req =
                     std::make_shared<Request>(lineAddr, lineSize, flags, rid);
@@ -3241,9 +3326,11 @@ LSQUnit::MergeBuffer::addStore(Cycles now, Addr addr, uint8_t *data,
                 pf_req->taskId(base->taskId());
 
                 PacketPtr pf_pkt = Packet::createRead(pf_req);
-                // Use a soft prefetch so it can go through cache/MSHR
-                // normally.
-                pf_pkt->cmd = MemCmd::SoftPFReq;
+                // Fetch writable ownership opportunistically. If this
+                // completes before the drain, the ordinary data-bearing
+                // store becomes an L1 hit; drain readiness never waits for
+                // this prefetch.
+                assert(pf_pkt->cmd == MemCmd::SoftPFExReq);
                 // Give the packet a data buffer to satisfy downstream asserts.
                 pf_pkt->allocate();
                 pf_pkt->senderState =
@@ -3393,7 +3480,8 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
                it->unretireCount < maxUnretire))) {
             return false;
         }
-        if (lsqPtr && &(*it) != &entries.back()) {
+        if (lsqPtr && lsqPtr->needsTSO &&
+            &(*it) != &entries.back()) {
             return false;
         }
         planned_merge = true;
@@ -3408,7 +3496,8 @@ LSQUnit::MergeBuffer::canAcceptSplitStore(LSQRequest *request,
     // allocation changes which entry is the newest, so a split store that
     // mixes an existing-entry merge with an allocation cannot be admitted
     // atomically.
-    if (lsqPtr && planned_merge && planned_allocations != 0) {
+    if (lsqPtr && lsqPtr->needsTSO && planned_merge &&
+        planned_allocations != 0) {
         return false;
     }
 
@@ -3591,11 +3680,6 @@ void
 LSQUnit::MergeBuffer::reset()
 {
     for (auto &entry : entries) {
-        if (entry.earlyLockPkt) {
-            delete static_cast<MergeBufferEarlyLockSenderState *>(
-                entry.earlyLockPkt->senderState);
-            delete entry.earlyLockPkt;
-        }
         if (!entry.drainPkt) {
             continue;
         }
@@ -3609,8 +3693,6 @@ LSQUnit::MergeBuffer::reset()
     entries.clear();
     activeEarlyPublication = 0;
     nextEarlyPublication = 1;
-    earlyPublicationDeadline = Cycles(0);
-    abortingEarlyPublication = false;
 }
 
 void
@@ -3723,17 +3805,19 @@ LSQUnit::MergeBuffer::startEarlyLockGroup()
         if (!entry.valid) {
             continue;
         }
-        if (entry.state == EntryState::DRAINING || entry.isAtomic ||
+        const bool drainable = entry.state == EntryState::RETIRED ||
+                               entry.state == EntryState::FORCE_RETIRED;
+        if (!drainable || entry.isAtomic ||
             entry.isRelease || !entry.baseReq ||
             entry.baseReq->isUncacheable() ||
             entry.baseReq->isStrictlyOrdered() || entry.drainPkt ||
-            entry.earlyPublicationId != 0 || entry.earlyLockDisabled) {
+            entry.earlyPublicationId != 0) {
             break;
         }
         const uint64_t line_key =
             (static_cast<uint64_t>(entry.blockAddr) & ~1ULL) |
             (entry.baseReq->isSecure() ? 1ULL : 0ULL);
-        // A publication has one prelock and one write per line. Stop before a
+        // A publication has one data-bearing write per line. Stop before a
         // duplicate rather than importing version-aware same-line grouping.
         if (!lines.insert(line_key).second) {
             break;
@@ -3752,13 +3836,9 @@ LSQUnit::MergeBuffer::startEarlyLockGroup()
     if (nextEarlyPublication == 0) {
         nextEarlyPublication = 1;
     }
-    earlyPublicationDeadline =
-        lsqPtr->cpu->curCycle() + lsqPtr->tsoEarlyLockTimeout;
-    abortingEarlyPublication = false;
     for (auto *entry : candidates) {
         entry->earlyPublicationId = activeEarlyPublication;
         entry->earlyPublicationMembers = candidates.size();
-        entry->earlyLockState = MergeBufferEntry::EarlyLockState::NONE;
     }
     ++lsqPtr->stats.mbEarlyLockGroups;
     lsqPtr->stats.mbEarlyLockGroupEntries += candidates.size();
@@ -3768,259 +3848,12 @@ LSQUnit::MergeBuffer::startEarlyLockGroup()
     return true;
 }
 
-bool
-LSQUnit::MergeBuffer::trySendEarlyLock(LSQUnit *lsq_ptr)
-{
-    MergeBufferEntry *candidate = nullptr;
-    for (auto &entry : entries) {
-        if (!entry.valid ||
-            entry.earlyPublicationId != activeEarlyPublication) {
-            continue;
-        }
-        if (entry.earlyLockState != MergeBufferEntry::EarlyLockState::NONE) {
-            continue;
-        }
-        candidate = &entry;
-        break;
-    }
-
-    if (!candidate) {
-        return false;
-    }
-
-    PacketPtr pkt = candidate->earlyLockPkt;
-    if (!pkt) {
-        RequestPtr req = std::make_shared<Request>(
-            candidate->blockAddr, lineSize, candidate->baseReq->getFlags(),
-            candidate->baseReq->requestorId());
-        if (candidate->baseReq->hasContextId()) {
-            req->setContext(candidate->baseReq->contextId());
-        }
-        if (candidate->baseReq->hasPC()) {
-            req->setPC(candidate->baseReq->getPC());
-        }
-        req->taskId(candidate->baseReq->taskId());
-        req->setByteEnable(std::vector<bool>(lineSize, false));
-        req->setFlags(Request::EARLY_LOCK_LINE);
-        req->setEarlyLockPublication(candidate->earlyPublicationId,
-                                     candidate->earlyPublicationMembers);
-        pkt = Packet::createWrite(req);
-        uint8_t *data = new uint8_t[lineSize]();
-        pkt->dataDynamic(data);
-        pkt->senderState =
-            new MergeBufferEarlyLockSenderState(candidate, lsq_ptr, false);
-        candidate->earlyLockPkt = pkt;
-    }
-
-    if (!lsq_ptr->trySendPacket(false, pkt)) {
-        return false;
-    }
-    candidate->earlyLockPkt = nullptr;
-    candidate->earlyLockState = MergeBufferEntry::EarlyLockState::ACQUIRING;
-    ++lsq_ptr->stats.mbEarlyLockRequests;
-    DPRINTF(LSQUnit, "Sent early lock for publication %llu line %#x\n",
-            (unsigned long long)activeEarlyPublication, candidate->blockAddr);
-    return true;
-}
-
-void
-LSQUnit::MergeBuffer::abortEarlyLockGroup(bool capacity_failure)
-{
-    if (abortingEarlyPublication) {
-        return;
-    }
-
-    assert(activeEarlyPublication != 0);
-    abortingEarlyPublication = true;
-    earlyPublicationDeadline = Cycles(0);
-    for (auto &entry : entries) {
-        if (!entry.valid ||
-            entry.earlyPublicationId != activeEarlyPublication) {
-            continue;
-        }
-        entry.earlyLockDisabled = true;
-        if (entry.earlyLockState == MergeBufferEntry::EarlyLockState::NONE) {
-            entry.earlyLockState = MergeBufferEntry::EarlyLockState::RELEASED;
-        }
-    }
-    if (capacity_failure) {
-        ++lsqPtr->stats.mbEarlyLockCapacityFailures;
-    } else {
-        ++lsqPtr->stats.mbEarlyLockTimeouts;
-    }
-    DPRINTF(LSQUnit, "Revoking early-lock publication %llu after %s\n",
-            (unsigned long long)activeEarlyPublication,
-            capacity_failure ? "capacity failure" : "timeout");
-}
-
-bool
-LSQUnit::MergeBuffer::trySendEarlyUnlock(LSQUnit *lsq_ptr)
-{
-    auto it =
-        std::find_if(entries.begin(), entries.end(), [&](const auto &entry) {
-            return entry.valid &&
-                   entry.earlyPublicationId == activeEarlyPublication &&
-                   (entry.earlyLockState ==
-                        MergeBufferEntry::EarlyLockState::ACQUIRED ||
-                    entry.earlyLockState ==
-                        MergeBufferEntry::EarlyLockState::ACQUIRING);
-        });
-    if (it == entries.end()) {
-        return false;
-    }
-
-    auto &entry = *it;
-    PacketPtr pkt = entry.earlyLockPkt;
-    if (!pkt) {
-        RequestPtr req = std::make_shared<Request>(
-            entry.blockAddr, lineSize, entry.baseReq->getFlags(),
-            entry.baseReq->requestorId());
-        if (entry.baseReq->hasContextId()) {
-            req->setContext(entry.baseReq->contextId());
-        }
-        if (entry.baseReq->hasPC()) {
-            req->setPC(entry.baseReq->getPC());
-        }
-        req->taskId(entry.baseReq->taskId());
-        req->setByteEnable(std::vector<bool>(lineSize, false));
-        req->setFlags(Request::EARLY_LOCK_LINE |
-                      Request::EARLY_LOCK_RETAIN_LINE);
-        req->setEarlyLockPublication(entry.earlyPublicationId,
-                                     entry.earlyPublicationMembers);
-        pkt = Packet::createWrite(req);
-        pkt->dataDynamic(new uint8_t[lineSize]());
-        pkt->senderState =
-            new MergeBufferEarlyLockSenderState(&entry, lsq_ptr, true);
-        entry.earlyLockPkt = pkt;
-    }
-
-    if (!lsq_ptr->trySendPacket(false, pkt)) {
-        return false;
-    }
-    entry.earlyLockPkt = nullptr;
-    entry.earlyLockState =
-        entry.earlyLockState == MergeBufferEntry::EarlyLockState::ACQUIRING
-            ? MergeBufferEntry::EarlyLockState::CANCELING
-            : MergeBufferEntry::EarlyLockState::RELEASING;
-    ++lsq_ptr->stats.mbEarlyLockRevokedLines;
-    return true;
-}
-
-bool
-LSQUnit::MergeBuffer::finishAbortedEarlyLockGroup()
-{
-    for (const auto &entry : entries) {
-        if (entry.valid &&
-            entry.earlyPublicationId == activeEarlyPublication &&
-            entry.earlyLockState !=
-                MergeBufferEntry::EarlyLockState::RELEASED) {
-            return false;
-        }
-    }
-
-    const uint64_t publication_id = activeEarlyPublication;
-    for (auto &entry : entries) {
-        if (!entry.valid || entry.earlyPublicationId != publication_id) {
-            continue;
-        }
-        entry.earlyLockState = MergeBufferEntry::EarlyLockState::NONE;
-        entry.earlyPublicationId = 0;
-        entry.earlyPublicationMembers = 0;
-    }
-    activeEarlyPublication = 0;
-    earlyPublicationDeadline = Cycles(0);
-    abortingEarlyPublication = false;
-    return true;
-}
-
-void
-LSQUnit::MergeBuffer::completeEarlyLock(uint64_t publication_id,
-                                        Addr block_addr, bool failed,
-                                        bool release)
-{
-    auto entry_it = std::find_if(
-        entries.begin(), entries.end(), [&](const auto &candidate) {
-            return candidate.valid &&
-                   candidate.earlyPublicationId == publication_id &&
-                   candidate.blockAddr == block_addr;
-        });
-    if (entry_it == entries.end() ||
-        publication_id != activeEarlyPublication) {
-        // A revoked group may have fallen back and retired before an old
-        // acquisition response returns. Publication IDs keep that response
-        // from touching a reused merge-buffer entry.
-        return;
-    }
-    auto *entry = &*entry_it;
-    if (release) {
-        if (entry->earlyLockState ==
-            MergeBufferEntry::EarlyLockState::CANCELING) {
-            entry->earlyLockState = MergeBufferEntry::EarlyLockState::RELEASED;
-        } else {
-            assert(entry->earlyLockState ==
-                   MergeBufferEntry::EarlyLockState::RELEASING);
-            entry->earlyLockState = MergeBufferEntry::EarlyLockState::RELEASED;
-        }
-        return;
-    }
-
-    if (entry->earlyLockState == MergeBufferEntry::EarlyLockState::RELEASED) {
-        return;
-    }
-
-    if (entry->earlyLockState == MergeBufferEntry::EarlyLockState::CANCELING) {
-        entry->earlyLockState = MergeBufferEntry::EarlyLockState::RELEASING;
-        return;
-    }
-    if (entry->earlyLockState ==
-        MergeBufferEntry::EarlyLockState::WAITING_ACQUIRE) {
-        entry->earlyLockState = MergeBufferEntry::EarlyLockState::RELEASED;
-        return;
-    }
-
-    assert(entry->earlyLockState ==
-           MergeBufferEntry::EarlyLockState::ACQUIRING);
-    if (failed) {
-        if (entry->earlyLockPkt) {
-            delete static_cast<MergeBufferEarlyLockSenderState *>(
-                entry->earlyLockPkt->senderState);
-            delete entry->earlyLockPkt;
-            entry->earlyLockPkt = nullptr;
-        }
-        entry->earlyLockState = MergeBufferEntry::EarlyLockState::RELEASED;
-        abortEarlyLockGroup(true);
-    } else {
-        entry->earlyLockState = MergeBufferEntry::EarlyLockState::ACQUIRED;
-    }
-}
-
 void
 LSQUnit::MergeBuffer::completeEarlyPublication(uint64_t publication_id)
 {
     assert(publication_id != 0);
     assert(publication_id == activeEarlyPublication);
     activeEarlyPublication = 0;
-    earlyPublicationDeadline = Cycles(0);
-    abortingEarlyPublication = false;
-}
-
-bool
-LSQUnit::MergeBuffer::earlyGroupReadyToDrain() const
-{
-    bool found = false;
-    for (const auto &entry : entries) {
-        if (!entry.valid ||
-            entry.earlyPublicationId != activeEarlyPublication) {
-            continue;
-        }
-        found = true;
-        if (entry.earlyLockState !=
-                MergeBufferEntry::EarlyLockState::ACQUIRED ||
-            entry.state == EntryState::MERGING) {
-            return false;
-        }
-    }
-    return found;
 }
 
 bool
@@ -4041,34 +3874,6 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     if (lsq_ptr->needsTSO) {
         startEarlyLockGroup();
         if (activeEarlyPublication != 0) {
-            if (abortingEarlyPublication) {
-                if (finishAbortedEarlyLockGroup()) {
-                    return false;
-                }
-                return trySendEarlyUnlock(lsq_ptr);
-            }
-            const bool all_acquired = std::all_of(
-                entries.begin(), entries.end(), [&](const auto &entry) {
-                    return !entry.valid ||
-                           entry.earlyPublicationId !=
-                               activeEarlyPublication ||
-                           entry.earlyLockState ==
-                               MergeBufferEntry::EarlyLockState::ACQUIRED;
-                });
-            if (!all_acquired) {
-                if (lsq_ptr->cpu->curCycle() >= earlyPublicationDeadline) {
-                    abortEarlyLockGroup(false);
-                    if (finishAbortedEarlyLockGroup()) {
-                        return false;
-                    }
-                    return trySendEarlyUnlock(lsq_ptr);
-                }
-                return trySendEarlyLock(lsq_ptr);
-            }
-            if (!earlyGroupReadyToDrain()) {
-                return false;
-            }
-
             auto in_group = [&](MergeBufferEntry &entry) {
                 return entry.earlyPublicationId == activeEarlyPublication;
             };
@@ -4103,6 +3908,12 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
             if (it == entries.end()) {
                 return false;
             }
+        } else if (it != entries.end() &&
+                   it->requiresEarlyPublication) {
+            // An out-of-order merge may not fall back to an ordinary FIFO
+            // drain. Its final value is safe only behind the publication
+            // locks covering all entries it crossed.
+            return false;
         } else if (it == entries.end() || !is_drainable(*it)) {
             return false;
         }
@@ -4235,6 +4046,8 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
         merged_req->taskId(base->taskId());
         merged_req->setByteEnable(byte_enable);
         if (entry.earlyPublicationId != 0) {
+            // Piggyback the publication metadata on the ordinary store. TAG
+            // mode must not inject a metadata-only cache transaction.
             merged_req->setFlags(Request::EARLY_LOCK_LINE |
                                  Request::EARLY_LOCK_RETAIN_LINE);
             merged_req->setEarlyLockPublication(entry.earlyPublicationId,
@@ -4259,6 +4072,7 @@ LSQUnit::MergeBuffer::drainOne(LSQUnit *lsq_ptr)
     if (lsqPtr) {
         lsqPtr->stats.mbDrains++;
         if (entry.earlyPublicationId != 0) {
+            ++lsqPtr->stats.mbEarlyLockRequests;
             ++lsqPtr->stats.mbEarlyLockDrains;
         }
     }
@@ -4337,12 +4151,15 @@ LSQUnit::MergeBuffer::handleDrainResp(MergeBufferEntry *entry,
                                          entry->drainIssueCycle);
     lsq_ptr->handleMBDrain(entry);
 
+    const bool ordinary_tso_drain =
+        lsq_ptr->needsTSO && entry->earlyPublicationId == 0;
+
     entries.remove_if(
         [entry](const MergeBufferEntry &e) { return &e == entry; });
     lsq_ptr->stats.mbAvgOccupancy =
         static_cast<double>(entries.size()) / numEntries;
 
-    if (lsq_ptr->needsTSO && entry->earlyPublicationId == 0) {
+    if (ordinary_tso_drain) {
         lsq_ptr->storeInFlight = false;
     }
 }

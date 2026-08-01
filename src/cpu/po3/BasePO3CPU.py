@@ -283,16 +283,16 @@ class BasePO3CPU(BaseCPU):
     )
     tsoEarlyLock = Param.Bool(
         False,
-        "Speculatively acquire an L1D lock group and issue TSO "
-        "merge-buffer writes out of order",
+        "Tag ordinary TSO merge-buffer writes as one retained L1D "
+        "publication and issue its members out of order",
     )
     tsoEarlyLockMaxLines = Param.Unsigned(
         8, "Maximum unique cache lines in one TSO early-lock group"
     )
     tsoEarlyLockTimeout = Param.Cycles(
         128,
-        "Cycles allowed to acquire an entire speculative TSO early-lock "
-        "group before revoking it",
+        "Deprecated compatibility parameter; piggybacked TSO publications "
+        "do not issue separately revocable acquisition requests",
     )
     storeDeallocateWidth = Param.Unsigned(
         2, "Number of stores that can retire from the store queue per cycle"
