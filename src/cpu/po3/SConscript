@@ -67,6 +67,7 @@ if env['CONF']['BUILD_ISA']:
     Source('rename_map.cc')
     Source('rob.cc')
     Source('scoreboard.cc')
+    Source('phast.cc')
     Source('segmented_counting_bloom_filter.cc')
     Source('store_set.cc')
     Source('thread_context.cc')

@@ -721,6 +721,8 @@ InstructionQueue::insert(const DynInstPtr &new_inst)
     // Make sure the instruction is valid
     assert(new_inst);
 
+    memDepUnit[new_inst->threadNumber].observeInstruction(new_inst);
+
     DPRINTF(IQ, "Adding instruction [sn:%llu] PC %s to the IQ.\n",
             new_inst->seqNum, new_inst->pcState());
 
@@ -761,6 +763,8 @@ InstructionQueue::insertNonSpec(const DynInstPtr &new_inst)
     }
 
     assert(new_inst);
+
+    memDepUnit[new_inst->threadNumber].observeInstruction(new_inst);
 
     nonSpecInsts[new_inst->seqNum] = new_inst;
 
@@ -1130,6 +1134,7 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid)
     ListIt iq_it = instList[tid].begin();
 
     while (iq_it != instList[tid].end() && (*iq_it)->seqNum <= inst) {
+        memDepUnit[tid].commitInstruction(*iq_it);
         ++iq_it;
         instList[tid].pop_front();
     }
@@ -1344,6 +1349,13 @@ InstructionQueue::violation(const DynInstPtr &store,
 {
     iqIOStats.intInstQueueWrites++;
     memDepUnit[store->threadNumber].violation(store, faulting_load);
+}
+
+void
+InstructionQueue::resolveBranch(const DynInstPtr &inst, bool taken,
+                                Addr target)
+{
+    memDepUnit[inst->threadNumber].resolveBranch(inst, taken, target);
 }
 
 unsigned

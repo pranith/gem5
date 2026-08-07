@@ -688,11 +688,57 @@ class DynInst : public ExecContext, public RefCounted
     {
         return memOrderVersion;
     }
-    /** Whether this load was forwarded via STLF (stub). */
+    /** Whether this load was forwarded from an older SQ store. */
     bool
     stlfForwarded() const
     {
-        return false;
+        return instFlags[StlfForwarded];
+    }
+    /** Record the dynamic store that forwarded data to this load. */
+    void
+    setStlfForwarded(InstSeqNum store_seq_num)
+    {
+        instFlags[StlfForwarded] = true;
+        stlfStoreSeq = store_seq_num;
+    }
+    /** Sequence number of the store that forwarded data to this load. */
+    InstSeqNum
+    stlfStoreSeqNum() const
+    {
+        return stlfStoreSeq;
+    }
+    /** Record the store named by the memory-dependence prediction. */
+    void
+    setMemDepPredictedStore(InstSeqNum store_seq_num)
+    {
+        memDepPredictedStoreSeq = store_seq_num;
+    }
+    bool
+    hasMemDepPredictedStore() const
+    {
+        return memDepPredictedStoreSeq != 0;
+    }
+    InstSeqNum
+    memDepPredictedStore() const
+    {
+        return memDepPredictedStoreSeq;
+    }
+    /** Validate the predicted store against the load's resolved address. */
+    void
+    validateMemDepPrediction(bool correct)
+    {
+        memDepPredictionValidated = true;
+        memDepPredictionWasCorrect = correct;
+    }
+    bool
+    hasMemDepPredictionValidation() const
+    {
+        return memDepPredictionValidated;
+    }
+    bool
+    memDepPredictionCorrect() const
+    {
+        return memDepPredictionValidated && memDepPredictionWasCorrect;
     }
     /** Version of the store that forwarded this load via STLF (stub). */
     uint64_t
@@ -1514,6 +1560,12 @@ class DynInst : public ExecContext, public RefCounted
     MemPipe _memPipe = MemPipe::Unassigned;
     /** Load/store ordering tag assigned at decode time. */
     uint64_t memOrderVersion = 0;
+    /** Dynamic store that most recently forwarded data to this load. */
+    InstSeqNum stlfStoreSeq = 0;
+    /** Store named by the MDP, plus its address-validation result. */
+    InstSeqNum memDepPredictedStoreSeq = 0;
+    bool memDepPredictionValidated = false;
+    bool memDepPredictionWasCorrect = false;
 
     // hardware transactional memory
     uint64_t htmUid = -1;

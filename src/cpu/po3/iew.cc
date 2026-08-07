@@ -523,6 +523,8 @@ IEW::squashDueToBranch(const DynInstPtr &inst, ThreadID tid)
 
         set(redirect.pc[tid], inst->pcState());
         inst->staticInst->advancePC(*redirect.pc[tid]);
+        instQueue.resolveBranch(inst, redirect.branchTaken[tid],
+                                redirect.pc[tid]->instAddr());
 
         redirect.mispredictInst[tid] = inst;
         redirect.includeSquashInst[tid] = false;

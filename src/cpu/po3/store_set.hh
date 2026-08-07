@@ -115,7 +115,8 @@ class StoreSet : public MemDepPredictor
 
     /** Records a memory ordering violation between the younger load
      * and the older store. */
-    void violation(Addr store_PC, Addr load_PC) override;
+    void violation(Addr store_PC, Addr load_PC, InstSeqNum store_seq_num,
+                   InstSeqNum load_seq_num) override;
 
     /** Clears the store set predictor every so often so that all the
      * entries aren't used and stores are constantly predicted as
@@ -137,7 +138,7 @@ class StoreSet : public MemDepPredictor
      * any store.  @return Returns the sequence number of the store
      * instruction this PC is dependent upon.  Returns 0 if none.
      */
-    InstSeqNum checkInst(Addr PC) override;
+    InstSeqNum checkInst(Addr PC, InstSeqNum seq_num, bool is_load) override;
 
     /** Records this PC/sequence number as issued. */
     void issued(Addr issued_PC, InstSeqNum issued_seq_num,

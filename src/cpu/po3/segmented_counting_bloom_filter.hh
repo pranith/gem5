@@ -64,11 +64,13 @@ class SegmentedCountingBloomFilter : public MemDepPredictor
                                  unsigned entries_per_segment,
                                  unsigned history_entries);
 
-    void violation(Addr store_pc, Addr load_pc) override;
+    void violation(Addr store_pc, Addr load_pc, InstSeqNum store_seq_num,
+                   InstSeqNum load_seq_num) override;
     void insertLoad(Addr load_pc, InstSeqNum load_seq_num) override;
     void insertStore(Addr store_pc, InstSeqNum store_seq_num,
                      ThreadID tid) override;
-    InstSeqNum checkInst(Addr load_pc) override;
+    InstSeqNum checkInst(Addr load_pc, InstSeqNum seq_num,
+                         bool is_load) override;
     void issued(Addr issued_pc, InstSeqNum issued_seq_num,
                 bool is_store) override;
     void squash(InstSeqNum squashed_num, ThreadID tid) override;

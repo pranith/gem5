@@ -108,7 +108,8 @@ StoreSet::init(uint64_t clear_period, size_t _SSIT_entries, int _SSIT_assoc,
 }
 
 void
-StoreSet::violation(Addr store_PC, Addr load_PC)
+StoreSet::violation(Addr store_PC, Addr load_PC, InstSeqNum store_seq_num,
+                    InstSeqNum load_seq_num)
 {
     auto ld_entry = SSIT.findEntry({load_PC});
     auto st_entry = SSIT.findEntry({store_PC});
@@ -233,7 +234,7 @@ StoreSet::insertStore(Addr store_PC, InstSeqNum store_seq_num, ThreadID tid)
 }
 
 InstSeqNum
-StoreSet::checkInst(Addr PC)
+StoreSet::checkInst(Addr PC, InstSeqNum seq_num, bool is_load)
 {
     auto entry = SSIT.findEntry({PC});
     bool valid_ssit = entry && entry->isValid();

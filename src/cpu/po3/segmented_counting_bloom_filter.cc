@@ -127,7 +127,9 @@ SegmentedCountingBloomFilter::remove(uint64_t signature)
 }
 
 void
-SegmentedCountingBloomFilter::violation(Addr store_pc, Addr load_pc)
+SegmentedCountingBloomFilter::violation(Addr store_pc, Addr load_pc,
+                                        InstSeqNum store_seq_num,
+                                        InstSeqNum load_seq_num)
 {
     const uint64_t signature = pairSignature(store_pc, load_pc);
     if (history.size() == historyEntries) {
@@ -170,7 +172,8 @@ SegmentedCountingBloomFilter::insertStore(Addr store_pc,
 }
 
 InstSeqNum
-SegmentedCountingBloomFilter::checkInst(Addr load_pc)
+SegmentedCountingBloomFilter::checkInst(Addr load_pc, InstSeqNum seq_num,
+                                        bool is_load)
 {
     candidateChecks = 0;
     filterPositivePairs = 0;

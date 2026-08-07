@@ -122,6 +122,9 @@ checkpoint_filter = {
 }
 simpoint_interval = int(os.environ.get("SPEC_SIMPOINT_INTERVAL", "200000000"))
 warmup_interval = int(os.environ.get("SPEC_WARMUP_INTERVAL", "50000000"))
+measure_cycles = int(os.environ.get("SPEC_MEASURE_CYCLES", "0"))
+if measure_cycles < 0:
+    raise ValueError("SPEC_MEASURE_CYCLES must be non-negative")
 
 spec_dir = "/home/pranith/work/spec2017_chkpts_r_arm64_gem5_20260710_hardlink/{x_workload}"
 
@@ -197,6 +200,29 @@ class CustomCore(BaseCPUCore):
         cpu.scbf_history_entries = int(
             os.environ.get("SPEC_SCBF_HISTORY_ENTRIES", "1024")
         )
+        cpu.scbf_filter_forwarded_nukes = os.environ.get(
+            "SPEC_SCBF_FILTER_FORWARDED_NUKES", "true"
+        ).lower() in {"1", "true", "yes", "on"}
+        cpu.phast_history_lengths = [
+            int(length)
+            for length in os.environ.get(
+                "SPEC_PHAST_HISTORY_LENGTHS", "0,2,4,6,8,12,16,32"
+            ).split(",")
+        ]
+        cpu.phast_num_sets = int(os.environ.get("SPEC_PHAST_NUM_SETS", "128"))
+        cpu.phast_associativity = int(
+            os.environ.get("SPEC_PHAST_ASSOCIATIVITY", "4")
+        )
+        cpu.phast_tag_bits = int(os.environ.get("SPEC_PHAST_TAG_BITS", "16"))
+        cpu.phast_distance_bits = int(
+            os.environ.get("SPEC_PHAST_DISTANCE_BITS", "7")
+        )
+        cpu.phast_confidence_bits = int(
+            os.environ.get("SPEC_PHAST_CONFIDENCE_BITS", "4")
+        )
+        cpu.phast_filter_forwarded_nukes = os.environ.get(
+            "SPEC_PHAST_FILTER_FORWARDED_NUKES", "true"
+        ).lower() in {"1", "true", "yes", "on"}
         super().__init__(cpu, ISA.ARM)
 
         # self.core.branchPred = Rancho_BP()
@@ -263,9 +289,13 @@ class CheckpointRun:
         print(
             "\n\n\n################## end of warmup, starting to simulate SimPoint"
         )
-        self.simulator.schedule_max_insts(
-            self.board.get_simpoint().get_simpoint_interval()
-        )
+        if measure_cycles:
+            clock_period = self.board.get_clock_domain().clock[0].getValue()
+            m5.scheduleTickExitFromCurrent(measure_cycles * clock_period)
+        else:
+            self.simulator.schedule_max_insts(
+                self.board.get_simpoint().get_simpoint_interval()
+            )
         # dump()
         reset()
 
@@ -283,15 +313,18 @@ class CheckpointSimulator(Simulator):
 
     def __init__(self, board, checkpoint, id):
         self.checkpoint_run = CheckpointRun(checkpoint, self, board)
-        on_exit_event = {
-            ExitEvent.MAX_INSTS: (
-                func()
-                for func in [
-                    self.checkpoint_run.simpoint_warmup_end,
-                    self.checkpoint_run.simpoint_interval_end,
-                ]
+        max_inst_callbacks = [self.checkpoint_run.simpoint_warmup_end]
+        if not measure_cycles:
+            max_inst_callbacks.append(
+                self.checkpoint_run.simpoint_interval_end
             )
+        on_exit_event = {
+            ExitEvent.MAX_INSTS: (func() for func in max_inst_callbacks)
         }
+        if measure_cycles:
+            on_exit_event[ExitEvent.SCHEDULED_TICK] = (
+                func() for func in [self.checkpoint_run.simpoint_interval_end]
+            )
         super().__init__(
             board=board,
             id=id,

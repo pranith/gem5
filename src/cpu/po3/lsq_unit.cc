@@ -349,6 +349,11 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
     checkLoads = params.LSQCheckLoads;
     needsTSO = params.needsTSO;
     po3MemPipeline = params.po3MemPipeline;
+    filterForwardedMemDepViolations =
+        (params.memory_dep_predictor == "scbf" &&
+         params.scbf_filter_forwarded_nukes) ||
+        (params.memory_dep_predictor == "phast" &&
+         params.phast_filter_forwarded_nukes);
     po3MemAddrGenLatency = params.po3MemAddrGenLatency;
     po3MemTLBLookupLatency = params.po3MemTLBLookupLatency;
     po3MemCacheAccessLatency = params.po3MemCacheAccessLatency;
@@ -424,6 +429,10 @@ LSQUnit::LSQUnitStats::LSQUnitStats(statistics::Group *parent)
     : statistics::Group(parent),
       ADD_STAT(forwLoads, statistics::units::Count::get(),
                "Number of loads that had data forwarded from stores"),
+      ADD_STAT(forwardedMemDepViolationsFiltered,
+               statistics::units::Count::get(),
+               "Store-load overlaps ignored because a younger store "
+               "forwarded the load"),
       ADD_STAT(squashedLoads, statistics::units::Count::get(),
                "Number of loads squashed"),
       ADD_STAT(ignoredResponses, statistics::units::Count::get(),
@@ -1316,6 +1325,20 @@ LSQUnit::checkViolations(typename LoadQueue::iterator &loadIt,
                 // later read-after-read squash merely because it observed a
                 // snoop.
             } else {
+                if (filterForwardedMemDepViolations &&
+                    ld_inst->stlfForwarded() &&
+                    ld_inst->stlfStoreSeqNum() > inst->seqNum) {
+                    DPRINTF(LSQUnit,
+                            "Ignoring apparent violation between store "
+                            "[sn:%lli] and load [sn:%lli]: store [sn:%lli] "
+                            "already forwarded the load\n",
+                            inst->seqNum, ld_inst->seqNum,
+                            ld_inst->stlfStoreSeqNum());
+                    ++stats.forwardedMemDepViolationsFiltered;
+                    ++loadIt;
+                    continue;
+                }
+
                 // A load/store incorrectly passed this store.
                 // Check if we already have a violator, or if it's newer
                 // squash and refetch.
@@ -2592,6 +2615,10 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
         store_it--;
         assert(store_it->valid());
         assert(store_it->instruction()->seqNum < load_inst->seqNum);
+        const bool validates_prediction =
+            load_inst->hasMemDepPredictedStore() &&
+            load_inst->memDepPredictedStore() ==
+                store_it->instruction()->seqNum;
         int store_size = store_it->size();
 
         // Cache maintenance instructions go down via the store
@@ -2647,6 +2674,11 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                   (store_has_upper_limit || lower_load_has_store_part)))) {
 
                 coverage = AddrRangeCoverage::PartialAddrRangeCoverage;
+            }
+
+            if (validates_prediction) {
+                load_inst->validateMemDepPrediction(
+                    coverage != AddrRangeCoverage::NoAddrRangeCoverage);
             }
 
             if (coverage == AddrRangeCoverage::FullAddrRangeCoverage) {
@@ -2721,6 +2753,8 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 WritebackEvent *wb =
                     new WritebackEvent(load_inst, data_pkt, this);
 
+                load_inst->setStlfForwarded(store_it->instruction()->seqNum);
+
                 // We'll say this has a 1 cycle load-store forwarding latency
                 // for now.
                 // @todo: Need to make this a parameter.
@@ -2770,6 +2804,8 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
                 load_entry.setRequest(nullptr);
                 return NoFault;
             }
+        } else if (validates_prediction) {
+            load_inst->validateMemDepPrediction(false);
         }
     }
 

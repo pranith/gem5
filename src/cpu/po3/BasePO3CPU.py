@@ -315,7 +315,7 @@ class BasePO3CPU(BaseCPU):
     )
     memory_dep_predictor = Param.String(
         "store_set",
-        "Memory dependence predictor: 'store_set' or 'scbf'",
+        "Memory dependence predictor: 'store_set', 'scbf', or 'phast'",
     )
     scbf_num_segments = Param.Unsigned(
         4, "Number of independently hashed SCBF counter/bit segments"
@@ -326,6 +326,29 @@ class BasePO3CPU(BaseCPU):
     scbf_history_entries = Param.Unsigned(
         1024,
         "Number of recent violating PC-pair signatures retained by SCBF",
+    )
+    scbf_filter_forwarded_nukes = Param.Bool(
+        True,
+        "For SCBF, ignore older-store violations after a younger store "
+        "forwarded to the load",
+    )
+    phast_history_lengths = VectorParam.Unsigned(
+        [0, 2, 4, 6, 8, 12, 16, 32],
+        "Divergent-branch history lengths searched by PHAST",
+    )
+    phast_num_sets = Param.Unsigned(128, "Sets in each PHAST history table")
+    phast_associativity = Param.Unsigned(4, "Ways in each PHAST table")
+    phast_tag_bits = Param.Unsigned(16, "Tag width in each PHAST entry")
+    phast_distance_bits = Param.Unsigned(
+        7, "Store-distance width in each PHAST entry"
+    )
+    phast_confidence_bits = Param.Unsigned(
+        4, "Confidence-counter width in each PHAST entry"
+    )
+    phast_filter_forwarded_nukes = Param.Bool(
+        True,
+        "For PHAST, ignore older-store violations after a younger store "
+        "forwarded to the load",
     )
     LFSTSize = Param.Unsigned(1024, "Last fetched store table size")
     SSITSize = Param.MemorySize("1024", "Store set ID table size")

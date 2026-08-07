@@ -48,6 +48,7 @@
 #include <unordered_set>
 
 #include "base/statistics.hh"
+#include "base/types.hh"
 #include "cpu/inst_seq.hh"
 #include "cpu/po3/dyn_inst_ptr.hh"
 #include "cpu/po3/limits.hh"
@@ -123,6 +124,15 @@ class MemDepUnit
 
     /** Sets the pointer to the IQ. */
     void setIQ(InstructionQueue *iq_ptr);
+
+    /** Supplies dispatch-order and speculative path information. */
+    void observeInstruction(const DynInstPtr &inst);
+
+    /** Supplies the resolved outcome of a mispredicted divergent branch. */
+    void resolveBranch(const DynInstPtr &inst, bool taken, Addr target);
+
+    /** Supplies commit-time forwarding feedback and releases context. */
+    void commitInstruction(const DynInstPtr &inst);
 
     /** Inserts a memory instruction. */
     void insert(const DynInstPtr &inst);
@@ -215,6 +225,10 @@ class MemDepUnit
         bool completed = false;
         /** If the instruction is squashed. */
         bool squashed = false;
+        /** Whether a ready load is stalled on its predicted store. */
+        bool waitingOnPredictedStore = false;
+        /** Cycle when the predicted-store stall began. */
+        Cycles predictedStoreWaitStart = Cycles(0);
 
         /** For debugging. */
 #ifdef GEM5_DEBUG
@@ -229,6 +243,15 @@ class MemDepUnit
 
     /** Moves an entry to the ready list. */
     void moveToReady(MemDepEntryPtr &ready_inst_entry);
+
+    /** Starts charging cycles stalled behind a predicted store. */
+    void startPredictedStoreWait(MemDepEntryPtr &inst_entry);
+
+    /** Stops charging cycles stalled behind a predicted store. */
+    void finishPredictedStoreWait(MemDepEntryPtr &inst_entry);
+
+    /** Accumulates work reported by the predictor's latest operation. */
+    void collectPredictorStats();
 
     typedef std::unordered_map<InstSeqNum, MemDepEntryPtr, SNHash> MemDepHash;
 
@@ -297,10 +320,30 @@ class MemDepUnit
         statistics::Scalar predictorPredictions;
         /** Number of memory-order violations used for training. */
         statistics::Scalar predictorViolations;
+        /** Aggregate ready-load cycles stalled on predicted stores. */
+        statistics::Scalar predictedStoreWaitCycles;
         /** Number of in-flight store candidates tested by the SCBF. */
         statistics::Scalar predictorCandidateChecks;
         /** Number of candidate pairs that passed every SCBF segment. */
         statistics::Scalar predictorFilterPositivePairs;
+        /** Number of PHAST history tables searched. */
+        statistics::Scalar predictorTableLookups;
+        /** Number of PHAST entries allocated. */
+        statistics::Scalar predictorAllocations;
+        /** Number of PHAST confidence-counter updates. */
+        statistics::Scalar predictorConfidenceUpdates;
+        /** PHAST distances that did not name a tracked store. */
+        statistics::Scalar predictorDistanceOutOfRange;
+        /** PHAST lookups with no tracked stores. */
+        statistics::Scalar predictorNoTrackedStores;
+        /** PHAST lookup distances larger than the latest store ordinal. */
+        statistics::Scalar predictorDistanceUnderflows;
+        /** PHAST lookup target ordinals absent from the tracked stores. */
+        statistics::Scalar predictorTargetOrdinalMissing;
+        /** PHAST training STID deltas beyond the encoded range. */
+        statistics::Scalar predictorTrainingDistanceOverflows;
+        /** Exact distribution of PHAST training STID deltas. */
+        statistics::SparseHistogram predictorStoreIdDelta;
     } stats;
 };
 

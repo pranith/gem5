@@ -374,6 +374,9 @@ class InstructionQueue
     /** Indicates an ordering violation between a store and a load. */
     void violation(const DynInstPtr &store, const DynInstPtr &faulting_load);
 
+    /** Supplies the resolved outcome of a divergent branch. */
+    void resolveBranch(const DynInstPtr &inst, bool taken, Addr target);
+
     /**
      * Squashes instructions for a thread. Squashing information is obtained
      * from the time buffer.

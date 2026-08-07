@@ -44,6 +44,7 @@
 #include "cpu/po3/dyn_inst_ptr.hh"
 #include "cpu/po3/inst_queue.hh"
 #include "cpu/po3/limits.hh"
+#include "cpu/po3/phast.hh"
 #include "cpu/po3/segmented_counting_bloom_filter.hh"
 #include "cpu/po3/store_set.hh"
 #include "debug/MemDepUnit.hh"
@@ -73,9 +74,15 @@ makePredictor(const BasePO3CPUParams &params, const std::string &name)
             params.scbf_num_segments, params.scbf_entries_per_segment,
             params.scbf_history_entries);
     }
-
+    if (params.memory_dep_predictor == "phast") {
+        return std::make_unique<PHAST>(
+            name + ".phast", params.phast_history_lengths,
+            params.phast_num_sets, params.phast_associativity,
+            params.phast_tag_bits, params.phast_distance_bits,
+            params.phast_confidence_bits);
+    }
     fatal("Unknown PO3 memory dependence predictor '%s'; expected "
-          "'store_set' or 'scbf'",
+          "'store_set', 'scbf', or 'phast'",
           params.memory_dep_predictor);
 }
 
@@ -154,11 +161,34 @@ MemDepUnit::MemDepUnitStats::MemDepUnitStats(statistics::Group *parent)
                "Memory dependence predictor positive lookups."),
       ADD_STAT(predictorViolations, statistics::units::Count::get(),
                "Memory-order violations used to train the predictor."),
+      ADD_STAT(predictedStoreWaitCycles, statistics::units::Cycle::get(),
+               "Aggregate cycles ready loads waited for predicted stores."),
       ADD_STAT(predictorCandidateChecks, statistics::units::Count::get(),
                "In-flight store candidates checked by the SCBF."),
       ADD_STAT(predictorFilterPositivePairs, statistics::units::Count::get(),
-               "Candidate pairs that passed every SCBF segment.")
-{}
+               "Candidate pairs that passed every SCBF segment."),
+      ADD_STAT(predictorTableLookups, statistics::units::Count::get(),
+               "PHAST history tables searched."),
+      ADD_STAT(predictorAllocations, statistics::units::Count::get(),
+               "Distance-predictor entries allocated."),
+      ADD_STAT(predictorConfidenceUpdates, statistics::units::Count::get(),
+               "Distance-predictor confidence/usefulness updates."),
+      ADD_STAT(predictorDistanceOutOfRange, statistics::units::Count::get(),
+               "Predicted distances that did not name a tracked store."),
+      ADD_STAT(predictorNoTrackedStores, statistics::units::Count::get(),
+               "Confident distance lookups with no tracked stores."),
+      ADD_STAT(predictorDistanceUnderflows, statistics::units::Count::get(),
+               "Distances larger than the latest store ordinal."),
+      ADD_STAT(predictorTargetOrdinalMissing, statistics::units::Count::get(),
+               "Predicted store ordinals not currently tracked."),
+      ADD_STAT(predictorTrainingDistanceOverflows,
+               statistics::units::Count::get(),
+               "Training STID deltas beyond the encoded range."),
+      ADD_STAT(predictorStoreIdDelta, statistics::units::Count::get(),
+               "Exact distance-predictor training STID delta distribution.")
+{
+    predictorStoreIdDelta.init(128).flags(statistics::nozero);
+}
 
 bool
 MemDepUnit::isDrained() const
@@ -197,6 +227,40 @@ void
 MemDepUnit::setIQ(InstructionQueue *iq_ptr)
 {
     iqPtr = iq_ptr;
+}
+
+void
+MemDepUnit::observeInstruction(const DynInstPtr &inst)
+{
+    MemDepPredInstruction info;
+    info.pc = inst->pcState().instAddr();
+    info.seqNum = inst->seqNum;
+    info.isLoad = inst->isLoad();
+    info.isStore = inst->isStore() || inst->isAtomic();
+    info.isControl = inst->isControl();
+    info.isConditional = inst->isCondCtrl();
+    info.isIndirect = inst->isIndirectCtrl();
+    if (info.isControl) {
+        info.predictedTaken = inst->readPredTaken() || inst->isUncondCtrl();
+        info.predictedTarget = inst->readPredTarg().instAddr();
+    }
+    depPred->observeInstruction(info);
+}
+
+void
+MemDepUnit::resolveBranch(const DynInstPtr &inst, bool taken, Addr target)
+{
+    depPred->resolveBranch(inst->seqNum, taken, target);
+}
+
+void
+MemDepUnit::commitInstruction(const DynInstPtr &inst)
+{
+    depPred->commitInstruction(inst->seqNum, inst->isLoad(),
+                               inst->stlfForwarded(), inst->stlfStoreSeqNum(),
+                               inst->hasMemDepPredictionValidation(),
+                               inst->memDepPredictionCorrect());
+    collectPredictorStats();
 }
 
 void
@@ -272,12 +336,12 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                 std::end(storeBarrierSNs));
     } else {
         ++stats.predictorLookups;
-        InstSeqNum dep = depPred->checkInst(inst->pcState().instAddr());
-        stats.predictorCandidateChecks += depPred->lastCandidateChecks();
-        stats.predictorFilterPositivePairs +=
-            depPred->lastFilterPositivePairs();
+        InstSeqNum dep = depPred->checkInst(inst->pcState().instAddr(),
+                                            inst->seqNum, inst->isLoad());
+        collectPredictorStats();
         if (dep != 0) {
             ++stats.predictorPredictions;
+            inst->setMemDepPredictedStore(dep);
             producing_stores.push_back(dep);
         }
     }
@@ -335,6 +399,9 @@ MemDepUnit::insert(const DynInstPtr &inst)
 
         if (inst->isLoad()) {
             ++stats.conflictingLoads;
+            if (inst_entry->regsReady && inst->hasMemDepPredictedStore()) {
+                startPredictedStoreWait(inst_entry);
+            }
         } else {
             ++stats.conflictingStores;
         }
@@ -423,6 +490,9 @@ MemDepUnit::regsReady(const DynInstPtr &inst)
     } else {
         DPRINTF(MemDepUnit, "Instruction still waiting on "
                             "memory dependency.\n");
+        if (inst->isLoad() && inst->hasMemDepPredictedStore()) {
+            startPredictedStoreWait(inst_entry);
+        }
     }
 }
 
@@ -547,6 +617,10 @@ MemDepUnit::wakeDependents(const DynInstPtr &inst)
         assert(woken_inst->memDeps > 0);
         woken_inst->memDeps -= 1;
 
+        if (woken_inst->memDeps == 0) {
+            finishPredictedStoreWait(woken_inst);
+        }
+
         if ((woken_inst->memDeps == 0) && woken_inst->regsReady &&
             !woken_inst->squashed) {
             moveToReady(woken_inst);
@@ -615,6 +689,7 @@ MemDepUnit::squash(const InstSeqNum &squashed_num, ThreadID tid)
 
         assert(hash_it != memDepHash.end());
 
+        finishPredictedStoreWait((*hash_it).second);
         (*hash_it).second->squashed = true;
 
         (*hash_it).second = NULL;
@@ -643,7 +718,9 @@ MemDepUnit::violation(const DynInstPtr &store_inst,
     // Tell the memory dependence unit of the violation.
     ++stats.predictorViolations;
     depPred->violation(store_inst->pcState().instAddr(),
-                       violating_load->pcState().instAddr());
+                       violating_load->pcState().instAddr(),
+                       store_inst->seqNum, violating_load->seqNum);
+    collectPredictorStats();
 }
 
 void
@@ -676,6 +753,52 @@ MemDepUnit::moveToReady(MemDepEntryPtr &woken_inst_entry)
     assert(!woken_inst_entry->squashed);
 
     iqPtr->addReadyMemInst(woken_inst_entry->inst);
+}
+
+void
+MemDepUnit::startPredictedStoreWait(MemDepEntryPtr &inst_entry)
+{
+    assert(inst_entry->inst->isLoad());
+    assert(inst_entry->inst->hasMemDepPredictedStore());
+    assert(inst_entry->regsReady);
+    assert(inst_entry->memDeps > 0);
+
+    if (!inst_entry->waitingOnPredictedStore) {
+        inst_entry->waitingOnPredictedStore = true;
+        inst_entry->predictedStoreWaitStart =
+            inst_entry->inst->cpu->curCycle();
+    }
+}
+
+void
+MemDepUnit::finishPredictedStoreWait(MemDepEntryPtr &inst_entry)
+{
+    if (!inst_entry->waitingOnPredictedStore) {
+        return;
+    }
+
+    stats.predictedStoreWaitCycles += inst_entry->inst->cpu->curCycle() -
+                                      inst_entry->predictedStoreWaitStart;
+    inst_entry->waitingOnPredictedStore = false;
+}
+
+void
+MemDepUnit::collectPredictorStats()
+{
+    stats.predictorCandidateChecks += depPred->lastCandidateChecks();
+    stats.predictorFilterPositivePairs += depPred->lastFilterPositivePairs();
+    stats.predictorTableLookups += depPred->lastTableLookups();
+    stats.predictorAllocations += depPred->lastAllocations();
+    stats.predictorConfidenceUpdates += depPred->lastConfidenceUpdates();
+    stats.predictorDistanceOutOfRange += depPred->lastDistanceOutOfRange();
+    stats.predictorNoTrackedStores += depPred->lastNoTrackedStores();
+    stats.predictorDistanceUnderflows += depPred->lastDistanceUnderflows();
+    stats.predictorTargetOrdinalMissing += depPred->lastTargetOrdinalMissing();
+    stats.predictorTrainingDistanceOverflows +=
+        depPred->lastTrainingDistanceOverflows();
+    if (depPred->hasLastStoreIdDelta()) {
+        stats.predictorStoreIdDelta.sample(depPred->lastStoreIdDelta());
+    }
 }
 
 void

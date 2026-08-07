@@ -919,6 +919,9 @@ class LSQUnit
     /** Whether to use explicit PO3 load/store execute sub-stages. */
     bool po3MemPipeline;
 
+    /** Suppress conflicts with stores older than the forwarding store. */
+    bool filterForwardedMemDepViolations;
+
     /** PO3 memory sub-stage latencies. */
     Cycles po3MemAddrGenLatency;
     Cycles po3MemTLBLookupLatency;
@@ -949,6 +952,9 @@ class LSQUnit
 
         /** Total number of loads forwaded from LSQ stores. */
         statistics::Scalar forwLoads;
+
+        /** Apparent violations hidden by a younger forwarding store. */
+        statistics::Scalar forwardedMemDepViolationsFiltered;
 
         /** Total number of squashed loads. */
         statistics::Scalar squashedLoads;
