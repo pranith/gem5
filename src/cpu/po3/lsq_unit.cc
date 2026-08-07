@@ -353,7 +353,9 @@ LSQUnit::init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
         (params.memory_dep_predictor == "scbf" &&
          params.scbf_filter_forwarded_nukes) ||
         (params.memory_dep_predictor == "phast" &&
-         params.phast_filter_forwarded_nukes);
+         params.phast_filter_forwarded_nukes) ||
+        (params.memory_dep_predictor == "mdp_tage" &&
+         params.mdp_tage_filter_forwarded_nukes);
     po3MemAddrGenLatency = params.po3MemAddrGenLatency;
     po3MemTLBLookupLatency = params.po3MemTLBLookupLatency;
     po3MemCacheAccessLatency = params.po3MemCacheAccessLatency;

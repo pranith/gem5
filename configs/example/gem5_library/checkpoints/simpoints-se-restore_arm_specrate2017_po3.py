@@ -223,6 +223,42 @@ class CustomCore(BaseCPUCore):
         cpu.phast_filter_forwarded_nukes = os.environ.get(
             "SPEC_PHAST_FILTER_FORWARDED_NUKES", "true"
         ).lower() in {"1", "true", "yes", "on"}
+        cpu.mdp_tage_history_lengths = [
+            int(length)
+            for length in os.environ.get(
+                "SPEC_MDP_TAGE_HISTORY_LENGTHS",
+                "6,10,17,29,50,84,143,242,410,696,1179,2000",
+            ).split(",")
+        ]
+        cpu.mdp_tage_table_entries = [
+            int(entries)
+            for entries in os.environ.get(
+                "SPEC_MDP_TAGE_TABLE_ENTRIES",
+                "2048,2048,2048,2048,1024,1024,1024,1024,"
+                "1024,1024,1024,1024",
+            ).split(",")
+        ]
+        cpu.mdp_tage_tag_bits = [
+            int(bits)
+            for bits in os.environ.get(
+                "SPEC_MDP_TAGE_TAG_BITS",
+                "7,7,8,8,9,10,11,12,12,13,14,15",
+            ).split(",")
+        ]
+        cpu.mdp_tage_distance_bits = int(
+            os.environ.get("SPEC_MDP_TAGE_DISTANCE_BITS", "7")
+        )
+        cpu.mdp_tage_useful_reset_period = int(
+            os.environ.get(
+                "SPEC_MDP_TAGE_USEFUL_RESET_PERIOD", str(512 * 1024)
+            )
+        )
+        cpu.mdp_tage_false_decay_log2 = int(
+            os.environ.get("SPEC_MDP_TAGE_FALSE_DECAY_LOG2", "8")
+        )
+        cpu.mdp_tage_filter_forwarded_nukes = os.environ.get(
+            "SPEC_MDP_TAGE_FILTER_FORWARDED_NUKES", "true"
+        ).lower() in {"1", "true", "yes", "on"}
         super().__init__(cpu, ISA.ARM)
 
         # self.core.branchPred = Rancho_BP()

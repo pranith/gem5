@@ -315,7 +315,8 @@ class BasePO3CPU(BaseCPU):
     )
     memory_dep_predictor = Param.String(
         "store_set",
-        "Memory dependence predictor: 'store_set', 'scbf', or 'phast'",
+        "Memory dependence predictor: 'store_set', 'scbf', 'phast', or "
+        "'mdp_tage'",
     )
     scbf_num_segments = Param.Unsigned(
         4, "Number of independently hashed SCBF counter/bit segments"
@@ -348,6 +349,46 @@ class BasePO3CPU(BaseCPU):
     phast_filter_forwarded_nukes = Param.Bool(
         True,
         "For PHAST, ignore older-store violations after a younger store "
+        "forwarded to the load",
+    )
+    mdp_tage_history_lengths = VectorParam.Unsigned(
+        [6, 10, 17, 29, 50, 84, 143, 242, 410, 696, 1179, 2000],
+        "Geometric global branch-history lengths used by MDP-TAGE",
+    )
+    mdp_tage_table_entries = VectorParam.Unsigned(
+        [
+            2048,
+            2048,
+            2048,
+            2048,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+        ],
+        "Entries in each MDP-TAGE component (16K total by default)",
+    )
+    mdp_tage_tag_bits = VectorParam.Unsigned(
+        [7, 7, 8, 8, 9, 10, 11, 12, 12, 13, 14, 15],
+        "Tag width in each MDP-TAGE component",
+    )
+    mdp_tage_distance_bits = Param.Unsigned(
+        7, "Store-distance width in each MDP-TAGE entry"
+    )
+    mdp_tage_useful_reset_period = Param.Unsigned(
+        512 * 1024, "Load-prediction accesses between MDP-TAGE u-bit resets"
+    )
+    mdp_tage_false_decay_log2 = Param.Unsigned(
+        8,
+        "Log2 denominator for probabilistically forgetting false dependencies",
+    )
+    mdp_tage_filter_forwarded_nukes = Param.Bool(
+        True,
+        "For MDP-TAGE, ignore older-store violations after a younger store "
         "forwarded to the load",
     )
     LFSTSize = Param.Unsigned(1024, "Last fetched store table size")

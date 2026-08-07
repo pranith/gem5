@@ -44,6 +44,7 @@
 #include "cpu/po3/dyn_inst_ptr.hh"
 #include "cpu/po3/inst_queue.hh"
 #include "cpu/po3/limits.hh"
+#include "cpu/po3/mdp_tage.hh"
 #include "cpu/po3/phast.hh"
 #include "cpu/po3/segmented_counting_bloom_filter.hh"
 #include "cpu/po3/store_set.hh"
@@ -81,8 +82,15 @@ makePredictor(const BasePO3CPUParams &params, const std::string &name)
             params.phast_tag_bits, params.phast_distance_bits,
             params.phast_confidence_bits);
     }
+    if (params.memory_dep_predictor == "mdp_tage") {
+        return std::make_unique<MDPTage>(
+            name + ".mdp_tage", params.mdp_tage_history_lengths,
+            params.mdp_tage_table_entries, params.mdp_tage_tag_bits,
+            params.mdp_tage_distance_bits, params.mdp_tage_useful_reset_period,
+            params.mdp_tage_false_decay_log2);
+    }
     fatal("Unknown PO3 memory dependence predictor '%s'; expected "
-          "'store_set', 'scbf', or 'phast'",
+          "'store_set', 'scbf', 'phast', or 'mdp_tage'",
           params.memory_dep_predictor);
 }
 
@@ -168,7 +176,7 @@ MemDepUnit::MemDepUnitStats::MemDepUnitStats(statistics::Group *parent)
       ADD_STAT(predictorFilterPositivePairs, statistics::units::Count::get(),
                "Candidate pairs that passed every SCBF segment."),
       ADD_STAT(predictorTableLookups, statistics::units::Count::get(),
-               "PHAST history tables searched."),
+               "PHAST/MDP-TAGE history tables searched."),
       ADD_STAT(predictorAllocations, statistics::units::Count::get(),
                "Distance-predictor entries allocated."),
       ADD_STAT(predictorConfidenceUpdates, statistics::units::Count::get(),
