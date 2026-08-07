@@ -313,6 +313,20 @@ class BasePO3CPU(BaseCPU):
         "Number of load/store insts before the dep predictor "
         "should be invalidated",
     )
+    memory_dep_predictor = Param.String(
+        "store_set",
+        "Memory dependence predictor: 'store_set' or 'scbf'",
+    )
+    scbf_num_segments = Param.Unsigned(
+        4, "Number of independently hashed SCBF counter/bit segments"
+    )
+    scbf_entries_per_segment = Param.Unsigned(
+        512, "Number of counters and presence bits in each SCBF segment"
+    )
+    scbf_history_entries = Param.Unsigned(
+        1024,
+        "Number of recent violating PC-pair signatures retained by SCBF",
+    )
     LFSTSize = Param.Unsigned(1024, "Last fetched store table size")
     SSITSize = Param.MemorySize("1024", "Store set ID table size")
     SSITAssoc = Param.Unsigned(1, "SSIT table associativity")

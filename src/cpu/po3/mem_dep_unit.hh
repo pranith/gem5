@@ -51,7 +51,7 @@
 #include "cpu/inst_seq.hh"
 #include "cpu/po3/dyn_inst_ptr.hh"
 #include "cpu/po3/limits.hh"
-#include "cpu/po3/store_set.hh"
+#include "cpu/po3/mem_dep_predictor.hh"
 #include "debug/MemDepUnit.hh"
 
 namespace gem5
@@ -248,7 +248,7 @@ class MemDepUnit
      *  this unit what instruction the newly added instruction is dependent
      *  upon.
      */
-    StoreSet depPred;
+    std::unique_ptr<MemDepPredictor> depPred;
 
     /** Sequence numbers of outstanding load barriers. */
     std::unordered_set<InstSeqNum> loadBarrierSNs;
@@ -291,6 +291,16 @@ class MemDepUnit
         /** Stat for number of conflicting stores that had to wait for a
          *  store. */
         statistics::Scalar conflictingStores;
+        /** Number of predictor lookups not superseded by barriers. */
+        statistics::Scalar predictorLookups;
+        /** Number of lookups that predicted an in-flight producer. */
+        statistics::Scalar predictorPredictions;
+        /** Number of memory-order violations used for training. */
+        statistics::Scalar predictorViolations;
+        /** Number of in-flight store candidates tested by the SCBF. */
+        statistics::Scalar predictorCandidateChecks;
+        /** Number of candidate pairs that passed every SCBF segment. */
+        statistics::Scalar predictorFilterPositivePairs;
     } stats;
 };
 

@@ -37,9 +37,9 @@
 
 #include "base/cache/associative_cache.hh"
 #include "base/cache/cache_entry.hh"
-#include "base/named.hh"
 #include "base/types.hh"
 #include "cpu/inst_seq.hh"
+#include "cpu/po3/mem_dep_predictor.hh"
 
 class BaseIndexingPolicy;
 
@@ -70,7 +70,7 @@ struct ltseqnum
  * stands for Store Set ID, SSIT stands for Store Set ID Table, and
  * LFST is Last Fetched Store Table.
  */
-class StoreSet : public Named
+class StoreSet : public MemDepPredictor
 {
   public:
     typedef Addr SSID;
@@ -98,7 +98,7 @@ class StoreSet : public Named
     };
 
     /** Default constructor.  init() must be called prior to use. */
-    StoreSet() : Named("StoreSets"), SSIT("SSIT") {};
+    StoreSet() : MemDepPredictor("StoreSets"), SSIT("SSIT") {};
 
     /** Creates store set predictor with given table sizes. */
     StoreSet(std::string_view name, uint64_t clear_period, size_t SSIT_entries,
@@ -106,7 +106,7 @@ class StoreSet : public Named
              BaseIndexingPolicy *indexingPolicy, int LFST_size);
 
     /** Default destructor. */
-    ~StoreSet();
+    ~StoreSet() override;
 
     /** Initializes the store set predictor with the given table sizes. */
     void init(uint64_t clear_period, size_t SSIT_entries, int SSIT_assoc,
@@ -115,7 +115,7 @@ class StoreSet : public Named
 
     /** Records a memory ordering violation between the younger load
      * and the older store. */
-    void violation(Addr store_PC, Addr load_PC);
+    void violation(Addr store_PC, Addr load_PC) override;
 
     /** Clears the store set predictor every so often so that all the
      * entries aren't used and stores are constantly predicted as
@@ -126,29 +126,31 @@ class StoreSet : public Named
     /** Inserts a load into the store set predictor.  This does nothing but
      * is included in case other predictors require a similar function.
      */
-    void insertLoad(Addr load_PC, InstSeqNum load_seq_num);
+    void insertLoad(Addr load_PC, InstSeqNum load_seq_num) override;
 
     /** Inserts a store into the store set predictor.  Updates the
      * LFST if the store has a valid SSID. */
-    void insertStore(Addr store_PC, InstSeqNum store_seq_num, ThreadID tid);
+    void insertStore(Addr store_PC, InstSeqNum store_seq_num,
+                     ThreadID tid) override;
 
     /** Checks if the instruction with the given PC is dependent upon
      * any store.  @return Returns the sequence number of the store
      * instruction this PC is dependent upon.  Returns 0 if none.
      */
-    InstSeqNum checkInst(Addr PC);
+    InstSeqNum checkInst(Addr PC) override;
 
     /** Records this PC/sequence number as issued. */
-    void issued(Addr issued_PC, InstSeqNum issued_seq_num, bool is_store);
+    void issued(Addr issued_PC, InstSeqNum issued_seq_num,
+                bool is_store) override;
 
     /** Squashes for a specific thread until the given sequence number. */
-    void squash(InstSeqNum squashed_num, ThreadID tid);
+    void squash(InstSeqNum squashed_num, ThreadID tid) override;
 
     /** Resets all tables. */
-    void clear();
+    void clear() override;
 
     /** Debug function to dump the contents of the store list. */
-    void dump();
+    void dump() override;
 
   private:
     /** Calculates a Store Set ID based on the PC. */

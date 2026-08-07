@@ -44,6 +44,8 @@
 #include "cpu/po3/dyn_inst_ptr.hh"
 #include "cpu/po3/inst_queue.hh"
 #include "cpu/po3/limits.hh"
+#include "cpu/po3/segmented_counting_bloom_filter.hh"
+#include "cpu/po3/store_set.hh"
 #include "debug/MemDepUnit.hh"
 #include "params/BasePO3CPU.hh"
 
@@ -53,20 +55,44 @@ namespace gem5
 namespace po3
 {
 
+namespace
+{
+
+std::unique_ptr<MemDepPredictor>
+makePredictor(const BasePO3CPUParams &params, const std::string &name)
+{
+    if (params.memory_dep_predictor == "store_set") {
+        return std::make_unique<StoreSet>(
+            name + ".storesets", params.store_set_clear_period,
+            params.SSITSize, params.SSITAssoc, params.SSITReplPolicy,
+            params.SSITIndexingPolicy, params.LFSTSize);
+    }
+    if (params.memory_dep_predictor == "scbf") {
+        return std::make_unique<SegmentedCountingBloomFilter>(
+            name + ".scbf", params.store_set_clear_period,
+            params.scbf_num_segments, params.scbf_entries_per_segment,
+            params.scbf_history_entries);
+    }
+
+    fatal("Unknown PO3 memory dependence predictor '%s'; expected "
+          "'store_set' or 'scbf'",
+          params.memory_dep_predictor);
+}
+
+} // anonymous namespace
+
 #ifdef GEM5_DEBUG
 int MemDepUnit::MemDepEntry::memdep_count = 0;
 int MemDepUnit::MemDepEntry::memdep_insert = 0;
 int MemDepUnit::MemDepEntry::memdep_erase = 0;
 #endif
 
-MemDepUnit::MemDepUnit() : iqPtr(NULL), stats(nullptr)
+MemDepUnit::MemDepUnit() : depPred(nullptr), iqPtr(NULL), stats(nullptr)
 {}
 
 MemDepUnit::MemDepUnit(const BasePO3CPUParams &params)
     : _name(params.name + ".memdepunit"),
-      depPred(_name + ".storesets", params.store_set_clear_period,
-              params.SSITSize, params.SSITAssoc, params.SSITReplPolicy,
-              params.SSITIndexingPolicy, params.LFSTSize),
+      depPred(makePredictor(params, _name)),
       iqPtr(NULL),
       stats(nullptr)
 {
@@ -106,9 +132,7 @@ MemDepUnit::init(const BasePO3CPUParams &params, ThreadID tid, CPU *cpu)
 
     id = tid;
 
-    depPred.init(params.store_set_clear_period, params.SSITSize,
-                 params.SSITAssoc, params.SSITReplPolicy,
-                 params.SSITIndexingPolicy, params.LFSTSize);
+    depPred = makePredictor(params, _name);
 
     std::string stats_group_name = csprintf("MemDepUnit__%i", tid);
     cpu->addStatGroup(stats_group_name.c_str(), &stats);
@@ -123,7 +147,17 @@ MemDepUnit::MemDepUnitStats::MemDepUnitStats(statistics::Group *parent)
       ADD_STAT(conflictingLoads, statistics::units::Count::get(),
                "Number of conflicting loads."),
       ADD_STAT(conflictingStores, statistics::units::Count::get(),
-               "Number of conflicting stores.")
+               "Number of conflicting stores."),
+      ADD_STAT(predictorLookups, statistics::units::Count::get(),
+               "Memory dependence predictor lookups."),
+      ADD_STAT(predictorPredictions, statistics::units::Count::get(),
+               "Memory dependence predictor positive lookups."),
+      ADD_STAT(predictorViolations, statistics::units::Count::get(),
+               "Memory-order violations used to train the predictor."),
+      ADD_STAT(predictorCandidateChecks, statistics::units::Count::get(),
+               "In-flight store candidates checked by the SCBF."),
+      ADD_STAT(predictorFilterPositivePairs, statistics::units::Count::get(),
+               "Candidate pairs that passed every SCBF segment.")
 {}
 
 bool
@@ -156,7 +190,7 @@ MemDepUnit::takeOverFrom()
     // Be sure to reset all state.
     loadBarrierSNs.clear();
     storeBarrierSNs.clear();
-    depPred.clear();
+    depPred->clear();
 }
 
 void
@@ -237,8 +271,13 @@ MemDepUnit::insert(const DynInstPtr &inst)
                                 std::begin(storeBarrierSNs),
                                 std::end(storeBarrierSNs));
     } else {
-        InstSeqNum dep = depPred.checkInst(inst->pcState().instAddr());
+        ++stats.predictorLookups;
+        InstSeqNum dep = depPred->checkInst(inst->pcState().instAddr());
+        stats.predictorCandidateChecks += depPred->lastCandidateChecks();
+        stats.predictorFilterPositivePairs +=
+            depPred->lastFilterPositivePairs();
         if (dep != 0) {
+            ++stats.predictorPredictions;
             producing_stores.push_back(dep);
         }
     }
@@ -308,8 +347,8 @@ MemDepUnit::insert(const DynInstPtr &inst)
         DPRINTF(MemDepUnit, "Inserting store/atomic PC %s [sn:%lli].\n",
                 inst->pcState(), inst->seqNum);
 
-        depPred.insertStore(inst->pcState().instAddr(), inst->seqNum,
-                            inst->threadNumber);
+        depPred->insertStore(inst->pcState().instAddr(), inst->seqNum,
+                             inst->threadNumber);
 
         ++stats.insertedStores;
     } else if (inst->isLoad()) {
@@ -330,8 +369,8 @@ MemDepUnit::insertNonSpec(const DynInstPtr &inst)
         DPRINTF(MemDepUnit, "Inserting store/atomic PC %s [sn:%lli].\n",
                 inst->pcState(), inst->seqNum);
 
-        depPred.insertStore(inst->pcState().instAddr(), inst->seqNum,
-                            inst->threadNumber);
+        depPred->insertStore(inst->pcState().instAddr(), inst->seqNum,
+                             inst->threadNumber);
 
         ++stats.insertedStores;
     } else if (inst->isLoad()) {
@@ -589,7 +628,7 @@ MemDepUnit::squash(const InstSeqNum &squashed_num, ThreadID tid)
     }
 
     // Tell the dependency predictor to squash as well.
-    depPred.squash(squashed_num, tid);
+    depPred->squash(squashed_num, tid);
 }
 
 void
@@ -602,8 +641,9 @@ MemDepUnit::violation(const DynInstPtr &store_inst,
             violating_load->pcState().instAddr(),
             store_inst->pcState().instAddr());
     // Tell the memory dependence unit of the violation.
-    depPred.violation(store_inst->pcState().instAddr(),
-                      violating_load->pcState().instAddr());
+    ++stats.predictorViolations;
+    depPred->violation(store_inst->pcState().instAddr(),
+                       violating_load->pcState().instAddr());
 }
 
 void
@@ -612,7 +652,7 @@ MemDepUnit::issue(const DynInstPtr &inst)
     DPRINTF(MemDepUnit, "Issuing instruction PC %#x [sn:%lli].\n",
             inst->pcState().instAddr(), inst->seqNum);
 
-    depPred.issued(inst->pcState().instAddr(), inst->seqNum, inst->isStore());
+    depPred->issued(inst->pcState().instAddr(), inst->seqNum, inst->isStore());
 }
 
 MemDepUnit::MemDepEntryPtr &
