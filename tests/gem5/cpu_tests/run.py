@@ -96,19 +96,24 @@ class MySimpleMemory(SimpleMemory):
     latency = "1ns"
 
 
+cpu_classes = {
+    "X86AtomicSimpleCPU": "X86AtomicSimpleCPU",
+    "X86TimingSimpleCPU": "X86TimingSimpleCPU",
+    "X86DerivO3CPU": "X86O3CPU",
+    "ArmAtomicSimpleCPU": "ArmAtomicSimpleCPU",
+    "ArmTimingSimpleCPU": "ArmTimingSimpleCPU",
+    "ArmMinorCPU": "ArmMinorCPU",
+    "ArmDerivO3CPU": "ArmO3CPU",
+    "ArmPO3CPU": "ArmPO3CPU",
+    "RiscvAtomicSimpleCPU": "RiscvAtomicSimpleCPU",
+    "RiscvTimingSimpleCPU": "RiscvTimingSimpleCPU",
+    "RiscvMinorCPU": "RiscvMinorCPU",
+    "RiscvDerivO3CPU": "RiscvO3CPU",
+}
 valid_cpu = {
-    "X86AtomicSimpleCPU": X86AtomicSimpleCPU,
-    "X86TimingSimpleCPU": X86TimingSimpleCPU,
-    "X86DerivO3CPU": X86O3CPU,
-    "ArmAtomicSimpleCPU": ArmAtomicSimpleCPU,
-    "ArmTimingSimpleCPU": ArmTimingSimpleCPU,
-    "ArmMinorCPU": ArmMinorCPU,
-    "ArmDerivO3CPU": ArmO3CPU,
-    "ArmPO3CPU": ArmPO3CPU,
-    "RiscvAtomicSimpleCPU": RiscvAtomicSimpleCPU,
-    "RiscvTimingSimpleCPU": RiscvTimingSimpleCPU,
-    "RiscvMinorCPU": RiscvMinorCPU,
-    "RiscvDerivO3CPU": RiscvO3CPU,
+    name: globals()[class_name]
+    for name, class_name in cpu_classes.items()
+    if class_name in globals()
 }
 
 valid_mem = {"SimpleMemory": MySimpleMemory, "DDR3_1600_8x8": DDR3_1600_8x8}

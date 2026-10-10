@@ -41,6 +41,8 @@ Test file containing simple workloads to run on CPU models.
 Each test takes ~10 seconds to run.
 """
 
+import re
+
 from testlib import *
 
 workloads = ("Bubblesort", "FloatMM")
@@ -96,3 +98,18 @@ for isa in valid_isas:
                 valid_isas=(constants.all_compiled_tag,),
                 fixtures=[workload_binary],
             )
+
+
+# The 32-bit ARM hello binary contains a predicated load that does not start
+# a translation when its predicate is false. PO3 must retire it without
+# waiting indefinitely in the explicit TLB stage.
+arm_hello = joinpath(
+    getcwd(), "..", "..", "test-progs", "hello", "bin", "arm", "linux", "hello"
+)
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_predicated_load",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=["--cpu=ArmPO3CPU", arm_hello],
+    valid_isas=(constants.arm_tag,),
+)
