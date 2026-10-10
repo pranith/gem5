@@ -45,9 +45,9 @@ def set_po3_pipeline_defaults(cpu_cls):
     cpu_cls.po3MemTLBLookupLatency = 1
     cpu_cls.po3MemCacheAccessLatency = 1
     cpu_cls.po3MemWritebackLatency = 1
-    cpu_cls.po3MemAddrGenWidth = 1
-    cpu_cls.po3MemTLBLookupWidth = 1
-    cpu_cls.po3MemCacheAccessWidth = 1
+    cpu_cls.po3MemAddrGenWidth = 3
+    cpu_cls.po3MemTLBLookupWidth = 3
+    cpu_cls.po3MemCacheAccessWidth = 3
 
     cpu_cls.po3FetchPipeline = True
     cpu_cls.po3FetchPredTLBLatency = 1
@@ -79,7 +79,7 @@ def set_po3_pipeline_defaults(cpu_cls):
     cpu_cls.po3WritebackLatency = 1
     cpu_cls.po3CommitPipeline = True
     cpu_cls.po3CommitLatency = 1
-    cpu_cls.po3CommitStageWidth = 1
+    cpu_cls.po3CommitStageWidth = 2
     cpu_cls.po3RedirectPipeline = True
     cpu_cls.po3RedirectLatency = 1
     cpu_cls.po3PCGenPipeline = True

@@ -192,6 +192,26 @@ FUPool::getUnit(OpClass capability)
     return fu_idx;
 }
 
+bool
+FUPool::unitProvides(int fu_idx, OpClass capability) const
+{
+    assert(fu_idx >= 0 && fu_idx < numFU);
+    return funcUnits[fu_idx]->provides(capability);
+}
+
+unsigned
+FUPool::unitCapabilityOrdinal(int fu_idx, OpClass capability) const
+{
+    assert(unitProvides(fu_idx, capability));
+    unsigned ordinal = 0;
+    for (int idx = 0; idx < fu_idx; ++idx) {
+        if (funcUnits[idx]->provides(capability)) {
+            ++ordinal;
+        }
+    }
+    return ordinal;
+}
+
 void
 FUPool::freeUnitNextCycle(int fu_idx)
 {

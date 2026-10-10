@@ -49,17 +49,25 @@ class PO3FUPool(SimObject):
     FUList = VectorParam.FUDesc("list of FU's for this pool")
 
 
+class PO3ReadPort(ReadPort):
+    count = 1
+
+
+class PO3RdWrPort(RdWrPort):
+    count = 2
+
+
 class DefaultPO3FUPool(PO3FUPool):
     FUList = [
         IntALU(),
         IntMultDiv(),
         FP_ALU(),
         FP_MultDiv(),
-        ReadPort(),
+        PO3ReadPort(),
         SIMD_Unit(),
         Matrix_Unit(),
         System_Unit(),
         PredALU(),
         WritePort(),
-        RdWrPort(),
+        PO3RdWrPort(),
     ]

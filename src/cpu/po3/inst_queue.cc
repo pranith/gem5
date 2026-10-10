@@ -971,6 +971,28 @@ InstructionQueue::scheduleReadyInsts()
             }
             if (idx > FUPool::NoFreeFU) {
                 op_latency = fu_pool->getOpLatency(op_class);
+                if (issuing_inst->isMemRef()) {
+                    const bool write_capable =
+                        fu_pool->unitProvides(idx, enums::MemWrite);
+                    const bool load_store_pipe = issuing_inst->isStore() ||
+                                                 issuing_inst->isAtomic() ||
+                                                 write_capable;
+                    if (!load_store_pipe) {
+                        issuing_inst->memPipe(MemPipe::Load);
+                    } else {
+                        // Some atomic operations use a read op class but
+                        // still write through the store queue.
+                        const unsigned pipe =
+                            write_capable ? fu_pool->unitCapabilityOrdinal(
+                                                idx, enums::MemWrite)
+                                          : 0;
+                        panic_if(pipe > 1,
+                                 "PO3 selected unexpected load/store pipe %u",
+                                 pipe);
+                        issuing_inst->memPipe(pipe == 0 ? MemPipe::LoadStore0
+                                                        : MemPipe::LoadStore1);
+                    }
+                }
             }
         }
 

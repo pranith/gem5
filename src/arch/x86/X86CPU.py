@@ -33,7 +33,11 @@ from m5.objects.FuncUnit import *
 from m5.objects.FUPool import *
 from m5.objects.IQUnit import IQUnit
 from m5.objects.PO3Config import set_po3_pipeline_defaults
-from m5.objects.PO3FUPool import PO3FUPool
+from m5.objects.PO3FUPool import (
+    PO3FUPool,
+    PO3RdWrPort,
+    PO3ReadPort,
+)
 from m5.objects.PO3IQUnit import PO3IQUnit
 from m5.objects.X86Decoder import X86Decoder
 from m5.objects.X86ISA import X86ISA
@@ -95,11 +99,11 @@ class DefaultX86PO3FUPool(PO3FUPool):
         X86IntMultDiv(),
         FP_ALU(),
         FP_MultDiv(),
-        ReadPort(),
+        PO3ReadPort(),
         SIMD_Unit(),
         PredALU(),
         WritePort(),
-        RdWrPort(),
+        PO3RdWrPort(),
         System_Unit(),
     ]
 
