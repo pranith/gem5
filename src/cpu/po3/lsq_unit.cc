@@ -607,16 +607,20 @@ LSQUnit::advancePO3MemPipeline()
         po3CacheAccessStage, po3MemCacheAccessWidth, "cache-access",
         [this](const DynInstPtr &inst) { issuePO3CacheAccess(inst); });
 
-    retirePO3MemStage(po3TLBLookupStage, po3MemTLBLookupWidth, "tlb-lookup",
-                      [this](const DynInstPtr &inst) {
-                          if (inst->translationCompleted()) {
-                              po3MemStageCycles[inst->seqNum] =
-                                  po3MemCacheAccessLatency;
-                              po3CacheAccessStage.push_back(inst);
-                          } else {
-                              requeuePO3MemInst(inst);
-                          }
-                      });
+    retirePO3MemStage(
+        po3TLBLookupStage, po3MemTLBLookupWidth, "tlb-lookup",
+        [this](const DynInstPtr &inst) {
+            // Predicated-off and faulting accesses do not
+            // start a translation, but must still reach the
+            // completion path in issuePO3CacheAccess().
+            if (inst->translationCompleted() || inst->getFault() != NoFault ||
+                !inst->readPredicate() || !inst->readMemAccPredicate()) {
+                po3MemStageCycles[inst->seqNum] = po3MemCacheAccessLatency;
+                po3CacheAccessStage.push_back(inst);
+            } else {
+                requeuePO3MemInst(inst);
+            }
+        });
 
     retirePO3MemStage(
         po3AddrGenStage, po3MemAddrGenWidth, "addr-gen",
@@ -627,7 +631,7 @@ LSQUnit::advancePO3MemPipeline()
             }
 
             if (inst->getFault() != NoFault || !inst->readPredicate() ||
-                inst->translationCompleted()) {
+                !inst->readMemAccPredicate() || inst->translationCompleted()) {
                 po3MemStageCycles[inst->seqNum] = po3MemTLBLookupLatency;
                 po3TLBLookupStage.push_back(inst);
             } else {
@@ -741,6 +745,7 @@ LSQUnit::issuePO3CacheAccess(const DynInstPtr &inst)
     if (!inst->readMemAccPredicate()) {
         if (inst->isLoad()) {
             inst->setExecuted();
+            inst->completeAcc(nullptr);
             iewStage->instToCommit(inst);
             iewStage->activityThisCycle();
 
@@ -772,6 +777,12 @@ LSQUnit::issuePO3CacheAccess(const DynInstPtr &inst)
             inst->setExecuted();
             iewStage->instToCommit(inst);
             iewStage->activityThisCycle();
+        } else if (inst->effAddrValid() && checkLoads) {
+            auto load_it = inst->lqIt;
+            ++load_it;
+            if (checkViolations(load_it, inst) != NoFault) {
+                iewStage->checkMemOrderViolation(inst);
+            }
         }
     } else {
         typename LoadQueue::iterator load_it = inst->lqIt;
