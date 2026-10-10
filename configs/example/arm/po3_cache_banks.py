@@ -18,6 +18,23 @@ class L1Cache(Cache):
 parser = argparse.ArgumentParser()
 parser.add_argument("binary", help="AArch64 microbenchmark binary")
 parser.add_argument("banks", type=int, help="Number of modeled D-cache banks")
+parser.add_argument(
+    "--merge-buffer",
+    action="store_true",
+    help="Enable the PO3 store merge buffer",
+)
+parser.add_argument(
+    "--merge-buffer-entries",
+    type=int,
+    default=32,
+    help="Number of merge-buffer entries",
+)
+parser.add_argument(
+    "--merge-buffer-retire-cycles",
+    type=int,
+    default=16,
+    help="Cycles before a merge-buffer entry becomes drainable",
+)
 parser.add_argument("--max-ticks", type=int, default=10_000_000_000)
 args = parser.parse_args()
 
@@ -30,12 +47,16 @@ system.mem_ranges = [AddrRange("512MiB")]
 
 system.cpu = ArmPO3CPU()
 system.cpu.cacheBanks = args.banks
-system.cpu.cacheLoadPorts = 8
-system.cpu.cacheStorePorts = 8
+system.cpu.cacheLoadPorts = 3
+system.cpu.cacheStorePorts = 1
 system.cpu.po3MemPipeline = True
-system.cpu.po3MemAddrGenWidth = 8
-system.cpu.po3MemTLBLookupWidth = 8
-system.cpu.po3MemCacheAccessWidth = 8
+system.cpu.po3MemAddrGenWidth = 3
+system.cpu.po3MemTLBLookupWidth = 3
+system.cpu.po3MemCacheAccessWidth = 3
+system.cpu.po3CommitStageWidth = 2
+system.cpu.useMergeBuffer = args.merge_buffer
+system.cpu.mergeBufferEntries = args.merge_buffer_entries
+system.cpu.mergeBufferRetireCycles = args.merge_buffer_retire_cycles
 system.cpu.fetchWidth = 8
 system.cpu.decodeWidth = 8
 system.cpu.renameWidth = 8
