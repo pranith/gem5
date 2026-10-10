@@ -767,6 +767,11 @@ LSQUnit::issuePO3CacheAccess(const DynInstPtr &inst)
         Fault fault = read(request, inst->lqIdx);
         if (fault != NoFault) {
             inst->getFault() = fault;
+        } else if ((inst->isDataPrefetch() || inst->isInstPrefetch()) &&
+                   request->isSent() && !inst->inHtmTransactionalState()) {
+            inst->setExecuted();
+            iewStage->instToCommit(inst);
+            iewStage->activityThisCycle();
         }
     } else {
         typename LoadQueue::iterator load_it = inst->lqIt;
@@ -1323,6 +1328,16 @@ LSQUnit::executeLoad(const DynInstPtr &inst)
         iewStage->instToCommit(inst);
         iewStage->activityThisCycle();
     } else {
+        // A prefetch has no architectural destination. Once its request has
+        // been sent, retirement need not wait for the cache response.
+        if ((inst->isDataPrefetch() || inst->isInstPrefetch()) &&
+            inst->savedRequest && inst->savedRequest->isSent() &&
+            !inst->inHtmTransactionalState()) {
+            inst->setExecuted();
+            iewStage->instToCommit(inst);
+            iewStage->activityThisCycle();
+            return NoFault;
+        }
         if (inst->effAddrValid()) {
             auto it = inst->lqIt;
             ++it;

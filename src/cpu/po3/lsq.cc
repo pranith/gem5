@@ -1297,9 +1297,11 @@ LSQRequest::LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad)
       _amo_op(nullptr)
 {
     flags.set(Flag::IsLoad, isLoad);
-    flags.set(Flag::WriteBackToRegister, _inst->isStoreConditional() ||
-                                             _inst->isAtomic() ||
-                                             _inst->isLoad());
+    flags.set(Flag::WriteBackToRegister,
+              _inst->isStoreConditional() || _inst->isAtomic() ||
+                  (_inst->isLoad() &&
+                   !((_inst->isDataPrefetch() || _inst->isInstPrefetch()) &&
+                     !_inst->inHtmTransactionalState())));
     flags.set(Flag::IsAtomic, _inst->isAtomic());
     install();
 }
@@ -1324,9 +1326,11 @@ LSQRequest::LSQRequest(LSQUnit *port, const DynInstPtr &inst, bool isLoad,
       _hasStaleTranslation(stale_translation)
 {
     flags.set(Flag::IsLoad, isLoad);
-    flags.set(Flag::WriteBackToRegister, _inst->isStoreConditional() ||
-                                             _inst->isAtomic() ||
-                                             _inst->isLoad());
+    flags.set(Flag::WriteBackToRegister,
+              _inst->isStoreConditional() || _inst->isAtomic() ||
+                  (_inst->isLoad() &&
+                   !((_inst->isDataPrefetch() || _inst->isInstPrefetch()) &&
+                     !_inst->inHtmTransactionalState())));
     flags.set(Flag::IsAtomic, _inst->isAtomic());
     install();
 }
