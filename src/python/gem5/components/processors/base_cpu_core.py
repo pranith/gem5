@@ -99,9 +99,12 @@ class BaseCPUCore(AbstractCore):
         # type for the current ISA target (a bit ugly but it works).
 
         try:
-            from m5.objects import BaseO3CPU
+            from m5.objects import (
+                BaseO3CPU,
+                BasePO3CPU,
+            )
 
-            return isinstance(self.get_simobject(), BaseO3CPU)
+            return isinstance(self.get_simobject(), (BaseO3CPU, BasePO3CPU))
         except ImportError:
             # If, for whatever reason, the BaseO3CPU is not importable, then
             # the current core cannot be an an O3 CPU. We therefore return

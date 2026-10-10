@@ -35,6 +35,7 @@ class CPUTypes(Enum):
     ATOMIC = "atomic"
     KVM = "kvm"
     O3 = "o3"
+    PO3 = "po3"
     TIMING = "timing"
     MINOR = "minor"
 
@@ -82,6 +83,7 @@ def get_mem_mode(input: CPUTypes) -> MemMode:
     cpu_mem_mode_map = {
         CPUTypes.TIMING: MemMode.TIMING,
         CPUTypes.O3: MemMode.TIMING,
+        CPUTypes.PO3: MemMode.TIMING,
         CPUTypes.MINOR: MemMode.TIMING,
         CPUTypes.KVM: MemMode.ATOMIC_NONCACHING,
         CPUTypes.ATOMIC: MemMode.ATOMIC,
