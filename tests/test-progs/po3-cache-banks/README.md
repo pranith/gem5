@@ -40,6 +40,17 @@ Merge-buffer statistics are under `system.cpu.lsq0.mb*`.
 load/store pipe, while `mbDualPipeWriteCycles` counts cycles in which both
 input ports were used.
 
+To exercise release dependencies in the merge buffer, build `release_order.c`
+with the same compiler flags and run:
+
+```sh
+build/ARM/gem5.opt configs/example/arm/po3_cache_banks.py \
+    release_order 4 --merge-buffer --optimize-store-release
+```
+
+The run should exit normally. `system.cpu.lsq0.mbReleaseWaitCycles` counts
+cycles that release entries waited for older drains.
+
 `atomic_merge_buffer` places a regular store in the merge buffer before an
 LSE atomic add to the same cache line. The atomic must return the buffered
 store's value and update memory before the test exits:

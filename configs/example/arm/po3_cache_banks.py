@@ -35,6 +35,11 @@ parser.add_argument(
     default=16,
     help="Cycles before a merge-buffer entry becomes drainable",
 )
+parser.add_argument(
+    "--optimize-store-release",
+    action="store_true",
+    help="Track older merge-buffer drains before releasing stores",
+)
 parser.add_argument("--max-ticks", type=int, default=10_000_000_000)
 args = parser.parse_args()
 
@@ -55,6 +60,7 @@ system.cpu.po3MemTLBLookupWidth = 3
 system.cpu.po3MemCacheAccessWidth = 3
 system.cpu.po3CommitStageWidth = 2
 system.cpu.useMergeBuffer = args.merge_buffer
+system.cpu.optimizeStoreRelease = args.optimize_store_release
 system.cpu.mergeBufferEntries = args.merge_buffer_entries
 system.cpu.mergeBufferRetireCycles = args.merge_buffer_retire_cycles
 system.cpu.fetchWidth = 8
