@@ -27,7 +27,9 @@ from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
+from m5.objects.PO3Config import set_po3_pipeline_defaults
 from m5.objects.SparcDecoder import SparcDecoder
 from m5.objects.SparcInterrupts import SparcInterrupts
 from m5.objects.SparcISA import SparcISA
@@ -55,6 +57,13 @@ class SparcTimingSimpleCPU(BaseTimingSimpleCPU, SparcCPU):
 
 class SparcO3CPU(BaseO3CPU, SparcCPU):
     mmu = SparcMMU()
+
+
+class SparcPO3CPU(BasePO3CPU, SparcCPU):
+    mmu = SparcMMU()
+
+
+set_po3_pipeline_defaults(SparcPO3CPU)
 
 
 class SparcMinorCPU(BaseMinorCPU, SparcCPU):

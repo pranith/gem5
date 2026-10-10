@@ -27,10 +27,14 @@ from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
 from m5.objects.FuncUnit import *
 from m5.objects.FUPool import *
 from m5.objects.IQUnit import IQUnit
+from m5.objects.PO3Config import set_po3_pipeline_defaults
+from m5.objects.PO3FUPool import PO3FUPool
+from m5.objects.PO3IQUnit import PO3IQUnit
 from m5.objects.X86Decoder import X86Decoder
 from m5.objects.X86ISA import X86ISA
 from m5.objects.X86LocalApic import X86LocalApic
@@ -85,6 +89,21 @@ class DefaultX86FUPool(FUPool):
     ]
 
 
+class DefaultX86PO3FUPool(PO3FUPool):
+    FUList = [
+        IntALU(),
+        X86IntMultDiv(),
+        FP_ALU(),
+        FP_MultDiv(),
+        ReadPort(),
+        SIMD_Unit(),
+        PredALU(),
+        WritePort(),
+        RdWrPort(),
+        System_Unit(),
+    ]
+
+
 class X86O3CPU(BaseO3CPU, X86CPU):
     mmu = X86MMU()
     needsTSO = True
@@ -102,6 +121,16 @@ class X86O3CPU(BaseO3CPU, X86CPU):
     # one (or a small number) cycle each since each of these computes one bit
     # of the quotient.
     instQueues = IQUnit(fuPool=DefaultX86FUPool())
+
+
+class X86PO3CPU(BasePO3CPU, X86CPU):
+    mmu = X86MMU()
+    needsTSO = True
+    numPhysCCRegs = Self.numPhysIntRegs * 5
+    instQueues = PO3IQUnit(fuPool=DefaultX86PO3FUPool())
+
+
+set_po3_pipeline_defaults(X86PO3CPU)
 
 
 class X86MinorCPU(BaseMinorCPU, X86CPU):
