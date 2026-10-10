@@ -52,6 +52,7 @@ valid_isas = {
         "X86AtomicSimpleCPU",
         "X86TimingSimpleCPU",
         "X86DerivO3CPU",
+        "X86PO3CPU",
     ),
     constants.arm_tag: (
         "ArmAtomicSimpleCPU",
@@ -65,6 +66,7 @@ valid_isas = {
         "RiscvTimingSimpleCPU",
         "RiscvMinorCPU",
         "RiscvDerivO3CPU",
+        "RiscvPO3CPU",
     ),
 }
 
@@ -112,4 +114,38 @@ gem5_verify_config(
     config=joinpath(getcwd(), "run.py"),
     config_args=["--cpu=ArmPO3CPU", arm_hello],
     valid_isas=(constants.arm_tag,),
+)
+
+for cpu, hello_binary in (
+    ("X86PO3CPU", "x86"),
+    ("RiscvPO3CPU", "riscv"),
+):
+    binary = joinpath(
+        getcwd(),
+        "..",
+        "..",
+        "test-progs",
+        "hello",
+        "bin",
+        hello_binary,
+        "linux",
+        "hello",
+    )
+    gem5_verify_config(
+        name=f"cpu_test_{cpu}_hello",
+        verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+        config=joinpath(getcwd(), "run.py"),
+        config_args=[f"--cpu={cpu}", binary],
+        valid_isas=(constants.all_compiled_tag,),
+    )
+
+x86_hello = joinpath(
+    getcwd(), "..", "..", "test-progs", "hello", "bin", "x86", "linux", "hello"
+)
+gem5_verify_config(
+    name="cpu_test_X86PO3CPU_merge_buffer",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=["--cpu=X86PO3CPU", "--merge-buffer", x86_hello],
+    valid_isas=(constants.all_compiled_tag,),
 )

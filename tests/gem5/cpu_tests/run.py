@@ -100,6 +100,7 @@ cpu_classes = {
     "X86AtomicSimpleCPU": "X86AtomicSimpleCPU",
     "X86TimingSimpleCPU": "X86TimingSimpleCPU",
     "X86DerivO3CPU": "X86O3CPU",
+    "X86PO3CPU": "X86PO3CPU",
     "ArmAtomicSimpleCPU": "ArmAtomicSimpleCPU",
     "ArmTimingSimpleCPU": "ArmTimingSimpleCPU",
     "ArmMinorCPU": "ArmMinorCPU",
@@ -109,6 +110,7 @@ cpu_classes = {
     "RiscvTimingSimpleCPU": "RiscvTimingSimpleCPU",
     "RiscvMinorCPU": "RiscvMinorCPU",
     "RiscvDerivO3CPU": "RiscvO3CPU",
+    "RiscvPO3CPU": "RiscvPO3CPU",
 }
 valid_cpu = {
     name: globals()[class_name]
@@ -121,6 +123,7 @@ valid_mem = {"SimpleMemory": MySimpleMemory, "DDR3_1600_8x8": DDR3_1600_8x8}
 parser = argparse.ArgumentParser()
 parser.add_argument("binary", type=str)
 parser.add_argument("--cpu")
+parser.add_argument("--merge-buffer", action="store_true")
 parser.add_argument("--mem", choices=valid_mem.keys(), default="SimpleMemory")
 
 args = parser.parse_args()
@@ -143,6 +146,8 @@ if args.cpu not in (
 system.mem_ranges = [AddrRange("512MiB")]
 
 system.cpu = valid_cpu[args.cpu]()
+if args.merge_buffer:
+    system.cpu.useMergeBuffer = True
 
 if args.cpu in (
     "X86AtomicSimpleCPU",
@@ -166,7 +171,12 @@ else:
     system.l2cache.connectMemSideBus(system.membus)
 
 system.cpu.createInterruptController()
-if args.cpu in ("X86AtomicSimpleCPU", "X86TimingSimpleCPU", "X86DerivO3CPU"):
+if args.cpu in (
+    "X86AtomicSimpleCPU",
+    "X86TimingSimpleCPU",
+    "X86DerivO3CPU",
+    "X86PO3CPU",
+):
     system.cpu.interrupts[0].pio = system.membus.mem_side_ports
     system.cpu.interrupts[0].int_master = system.membus.cpu_side_ports
     system.cpu.interrupts[0].int_slave = system.membus.mem_side_ports

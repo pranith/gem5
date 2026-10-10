@@ -22,8 +22,8 @@ combines committed stores by cache line and drains through the modeled banks.
 Memory-order versioning and speculative barrier issue are not enabled by
 this model.
 
-The ARM CPU tests exercise PO3 with Bubblesort and FloatMM. For a local
-banking smoke test, build the benchmark in
+The ARM, x86, and RISC-V CPU tests exercise PO3 with Bubblesort and FloatMM.
+For a local banking smoke test, build the benchmark in
 `tests/test-progs/po3-cache-banks` and run it with
 `configs/example/arm/po3_cache_banks.py` as described in that benchmark's
 README.
