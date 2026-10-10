@@ -1,0 +1,1066 @@
+/*
+ * Copyright (c) 2012-2014,2017-2018,2020-2021,2025 Arm Limited
+ * All rights reserved
+ *
+ * The license below extends only to copyright in the software and shall
+ * not be construed as granting a license to any other intellectual
+ * property including but not limited to intellectual property relating
+ * to a hardware implementation of the functionality of the software
+ * licensed hereunder.  You may use the software subject to the license
+ * terms below provided that you ensure that this notice is replicated
+ * unmodified and in its entirety in all distributions of the software,
+ * modified or unmodified, in source code or in binary form.
+ *
+ * Copyright (c) 2004-2006 The Regents of The University of Michigan
+ * Copyright (c) 2013 Advanced Micro Devices, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met: redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer;
+ * redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution;
+ * neither the name of the copyright holders nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#ifndef __CPU_PO3_LSQ_UNIT_HH__
+#define __CPU_PO3_LSQ_UNIT_HH__
+
+#include <cstring>
+#include <deque>
+#include <functional>
+#include <list>
+#include <map>
+#include <memory>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "arch/generic/debugfaults.hh"
+#include "arch/generic/vec_reg.hh"
+#include "base/circular_queue.hh"
+#include "cpu/base.hh"
+#include "cpu/inst_seq.hh"
+#include "cpu/po3/comm.hh"
+#include "cpu/po3/dyn_inst_ptr.hh"
+#include "cpu/po3/lsq.hh"
+#include "cpu/timebuf.hh"
+#include "debug/HtmCpu.hh"
+#include "debug/LSQUnit.hh"
+#include "mem/packet.hh"
+#include "mem/port.hh"
+
+namespace gem5
+{
+
+struct BasePO3CPUParams;
+
+namespace po3
+{
+
+class CPU;
+class DynInst;
+class IEW;
+
+class LSQEntry
+{
+  public:
+    static constexpr auto MaxDataBytes = MaxVecRegLenInBytes;
+
+  private:
+    /** The instruction. */
+    DynInstPtr _inst;
+    /** The request. */
+    LSQRequest *_request = nullptr;
+    /** The size of the operation. */
+    uint32_t _size = 0;
+    /** Valid entry. */
+    bool _valid = false;
+
+  public:
+    ~LSQEntry();
+
+    void clear();
+
+    void set(const DynInstPtr &new_inst);
+
+    LSQRequest *
+    request()
+    {
+        return _request;
+    }
+    void
+    setRequest(LSQRequest *r)
+    {
+        _request = r;
+    }
+    bool
+    hasRequest()
+    {
+        return _request != nullptr;
+    }
+    /** Member accessors. */
+    /** @{ */
+    bool
+    valid() const
+    {
+        return _valid;
+    }
+    uint32_t &
+    size()
+    {
+        return _size;
+    }
+    const uint32_t &
+    size() const
+    {
+        return _size;
+    }
+    const DynInstPtr &
+    instruction() const
+    {
+        return _inst;
+    }
+    /** @} */
+};
+
+class SQEntry : public LSQEntry
+{
+  private:
+    /** The store data. */
+    char _data[MaxDataBytes];
+    /** Whether or not the store can writeback. */
+    bool _canWB = false;
+    /** Whether or not the store is committed. */
+    bool _committed = false;
+    /** Whether or not the store is completed. */
+    bool _completed = false;
+    /** Does this request write all zeros and thus doesn't
+     * have any data attached to it. Used for cache block zero
+     * style instructs (ARM DC ZVA; ALPHA WH64)
+     */
+    bool _isAllZeros = false;
+
+  public:
+    static constexpr size_t DataSize = sizeof(_data);
+    /** Constructs an empty store queue entry. */
+    SQEntry();
+
+    void set(const DynInstPtr &inst);
+
+    void clear();
+
+    /** Member accessors. */
+    /** @{ */
+    bool &
+    canWB()
+    {
+        return _canWB;
+    }
+    const bool &
+    canWB() const
+    {
+        return _canWB;
+    }
+    bool &
+    completed()
+    {
+        return _completed;
+    }
+    const bool &
+    completed() const
+    {
+        return _completed;
+    }
+    bool &
+    committed()
+    {
+        return _committed;
+    }
+    const bool &
+    committed() const
+    {
+        return _committed;
+    }
+    bool &
+    isAllZeros()
+    {
+        return _isAllZeros;
+    }
+    const bool &
+    isAllZeros() const
+    {
+        return _isAllZeros;
+    }
+    char *
+    data()
+    {
+        return _data;
+    }
+    const char *
+    data() const
+    {
+        return _data;
+    }
+    /** @} */
+};
+
+using LQEntry = LSQEntry;
+using LoadQueue = CircularQueue<LQEntry>;
+using StoreQueue = CircularQueue<SQEntry>;
+using LQIterator = typename LoadQueue::iterator;
+using SQIterator = typename StoreQueue::iterator;
+
+/**
+ * Class that implements the actual LQ and SQ for each specific
+ * thread.  Both are circular queues; load entries are freed upon
+ * committing, while store entries are freed once they writeback. The
+ * LSQUnit tracks if there are memory ordering violations, and also
+ * detects partial load to store forwarding cases (a store only has
+ * part of a load's data) that requires the load to wait until the
+ * store writes back. In the former case it holds onto the instruction
+ * until the dependence unit looks at it, and in the latter it stalls
+ * the LSQ until the store writes back. At that point the load is
+ * replayed.
+ */
+class LSQUnit
+{
+  public:
+    static constexpr auto MaxDataBytes = MaxVecRegLenInBytes;
+
+  public:
+    /** Coverage of one address range with another */
+    enum class AddrRangeCoverage
+    {
+        PartialAddrRangeCoverage, /* Two ranges partly overlap */
+        FullAddrRangeCoverage,    /* One range fully covers another */
+        NoAddrRangeCoverage       /* Two ranges are disjoint */
+    };
+
+    class MergeBuffer
+    {
+      public:
+        enum class EntryState
+        {
+            MERGING,
+            RETIRED,
+            DRAINING,
+            FORCE_RETIRED
+        };
+
+        struct MergeBufferEntry
+        {
+            Addr blockAddr;
+            uint64_t version = 0;
+            std::vector<bool> byteValids;
+            std::vector<uint8_t> blockData;
+            EntryState state;
+            RequestPtr baseReq;
+            Cycles retireCycle;
+            Cycles allocCycle;
+            unsigned unretireCount;
+            bool valid;
+            bool isAtomic = false;
+            LSQRequest *atomicReq = nullptr;
+            bool isRelease = false;
+            std::vector<bool> waitBits;
+            /** Packet retained while a banked drain is retried or staged. */
+            PacketPtr drainPkt = nullptr;
+
+            MergeBufferEntry(size_t size)
+                : byteValids(size, false),
+                  blockData(size, 0),
+                  state(EntryState::MERGING),
+                  retireCycle(0),
+                  allocCycle(0),
+                  unretireCount(0),
+                  valid(false)
+            {}
+        };
+
+      private:
+        size_t lineSize;
+        size_t numEntries;
+        Cycles retireWindow;
+        unsigned maxUnretire;
+
+        std::list<MergeBufferEntry> entries;
+
+        /** Version count tracking for versioning support (stub; always empty).
+         */
+        std::deque<std::pair<uint64_t, size_t>> versionCounts;
+
+        LSQUnit *lsqPtr;
+        bool resetRetireOnMerge;
+        Cycles resetRetireWindow;
+
+      public:
+        MergeBuffer() {}
+
+        void
+        init(LSQUnit *lsq_ptr, size_t num_entries, size_t line_size,
+             Cycles retire_window, bool reset_on_merge, Cycles reset_window,
+             unsigned max_unretire)
+        {
+            lsqPtr = lsq_ptr;
+            numEntries = num_entries;
+            lineSize = line_size;
+            retireWindow = retire_window;
+            resetRetireOnMerge = reset_on_merge;
+            resetRetireWindow = reset_window;
+            maxUnretire = max_unretire;
+        }
+
+        MergeBufferEntry *addStore(Cycles now, Addr addr, uint8_t *data,
+                                   size_t size,
+                                   const std::vector<bool> &byte_enable,
+                                   typename StoreQueue::iterator store_it,
+                                   bool is_all_zero);
+        MergeBufferEntry *addAtomic(Cycles now, LSQRequest *request,
+                                    typename StoreQueue::iterator store_it,
+                                    uint64_t version);
+        void updateRetiredEntries(Cycles now);
+        bool drainOne(LSQUnit *lsq_ptr);
+        void handleDrainResp(MergeBufferEntry *entry, LSQUnit *lsq_ptr);
+        void forceRetireAll();
+        void forceRetireVersionsBefore(uint64_t version);
+        /** Snapshot the entries a release store must wait to drain. */
+        std::vector<bool>
+        validVector() const
+        {
+            std::vector<bool> valid;
+            valid.reserve(entries.size());
+            for (const auto &entry : entries) {
+                valid.push_back(entry.valid);
+            }
+            return valid;
+        }
+        std::optional<uint64_t> youngestVersion() const;
+        std::optional<uint64_t> oldestVersion() const;
+        void dumpWaitBits() const;
+        size_t indexOf(const MergeBufferEntry *entry) const;
+        void reset();
+        bool canAcceptSplitStore(LSQRequest *request, uint64_t version,
+                                 bool &mb_full) const;
+        bool canForward(Addr paddr, size_t size) const;
+        bool forwardData(Addr paddr, uint8_t *dst, size_t size) const;
+        AddrRangeCoverage forwardCoverage(Addr paddr, size_t size) const;
+        bool
+        isEmpty() const
+        {
+            return entries.size() == 0;
+        }
+        bool
+        isFull() const
+        {
+            return entries.size() == numEntries;
+        }
+
+        std::string
+        name() const
+        {
+            return lsqPtr->name() + ".mb";
+        }
+
+      private:
+        void
+        updateEntry(MergeBufferEntry &entry, uint8_t *data, size_t offset,
+                    size_t size, const std::vector<bool> &byte_enable,
+                    size_t data_offset, bool is_all_zero)
+        {
+            for (size_t i = 0; i < size; i++) {
+                if (byte_enable[data_offset + i]) {
+                    uint8_t byte = is_all_zero ? 0 : data[data_offset + i];
+                    entry.blockData[offset + i] = byte;
+                    entry.byteValids[offset + i] = true;
+                }
+            }
+        }
+    };
+
+  public:
+    /** Constructs an LSQ unit. init() must be called prior to use. */
+    LSQUnit(uint32_t lqEntries, uint32_t sqEntries);
+
+    /** We cannot copy LSQUnit because it has stats for which copy
+     * contructor is deleted explicitly. However, STL vector requires
+     * a valid copy constructor for the base type at compile time.
+     */
+    LSQUnit(const LSQUnit &l);
+
+    /** Initializes the LSQ unit with the specified number of entries. */
+    void init(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params,
+              LSQ *lsq_ptr, unsigned id);
+
+    /** Returns the name of the LSQ unit. */
+    std::string name() const;
+
+    /** Sets the pointer to the dcache port. */
+    void setDcachePort(RequestPort *dcache_port);
+
+    /** Perform sanity checks after a drain. */
+    void drainSanityCheck() const;
+
+    /** Takes over from another CPU's thread. */
+    void takeOverFrom();
+
+    /** Inserts an instruction. */
+    void insert(const DynInstPtr &inst);
+    /** Inserts a load instruction. */
+    void insertLoad(const DynInstPtr &load_inst);
+    /** Inserts a store instruction. */
+    void insertStore(const DynInstPtr &store_inst);
+
+    /** Check for ordering violations in the LSQ. For a store squash if we
+     * ever find a conflicting load. For a load, only squash if we
+     * an external snoop invalidate has been seen for that load address
+     * @param load_idx index to start checking at
+     * @param inst the instruction to check
+     */
+    Fault checkViolations(typename LoadQueue::iterator &loadIt,
+                          const DynInstPtr &inst);
+
+    /** Check if an incoming invalidate hits in the lsq on a load
+     * that might have issued out of order wrt another load beacuse
+     * of the intermediate invalidate.
+     */
+    void checkSnoop(PacketPtr pkt);
+
+    /** Executes a load instruction. */
+    Fault executeLoad(const DynInstPtr &inst);
+
+    Fault
+    executeLoad(int lq_idx)
+    {
+        panic("Not implemented");
+        return NoFault;
+    }
+    /** Executes a store instruction. */
+    Fault executeStore(const DynInstPtr &inst);
+
+    /** Advance explicit PO3 memory execution sub-stages. */
+    void tick();
+
+    /**
+     * Advance partial-write RMW timing and reserve any write bank whose
+     * X+2 write phase is ready.
+     */
+    void reserveRMWWriteBank();
+
+    /** True when an instruction is resident in a PO3 memory sub-stage. */
+    bool isInPO3MemPipeline(const DynInstPtr &inst) const;
+
+    /** Commits the head load. */
+    void commitLoad();
+    /** Commits loads older than a specific sequence number. */
+    void commitLoads(InstSeqNum &youngest_inst);
+
+    /** Commits stores older than a specific sequence number. */
+    void commitStores(InstSeqNum &youngest_inst);
+
+    /** Writes back stores. */
+    void writebackStores();
+
+    /** Completes the data access that has been returned from the
+     * memory system. */
+    void completeDataAccess(PacketPtr pkt);
+
+    /** Squashes all instructions younger than a specific sequence number. */
+    void squash(const InstSeqNum &squashed_num);
+
+    /** Returns if there is a memory ordering violation. Value is reset upon
+     * call to getMemDepViolator().
+     */
+    bool
+    violation() const
+    {
+        return static_cast<bool>(memDepViolator);
+    }
+
+    /** Returns the memory ordering violator. */
+    DynInstPtr getMemDepViolator();
+
+    /** Returns the number of free LQ entries. */
+    unsigned numFreeLoadEntries();
+
+    /** Returns the number of free SQ entries. */
+    unsigned numFreeStoreEntries();
+
+    /** Returns the number of loads in the LQ. */
+    int
+    numLoads()
+    {
+        return loadQueue.size();
+    }
+
+    /** Returns the number of stores in the SQ. */
+    int
+    numStores()
+    {
+        return storeQueue.size();
+    }
+
+    /** Returns the current occupancy of the passed
+     * queue (store queue or load queue) */
+    template <typename Queue>
+    double
+    queueOccupancy(const Queue &queue) const
+    {
+        return static_cast<double>(queue.size()) /
+               static_cast<double>(queue.capacity());
+    }
+
+    // hardware transactional memory
+    int
+    numHtmStarts() const
+    {
+        return htmStarts;
+    }
+    int
+    numHtmStops() const
+    {
+        return htmStops;
+    }
+    void
+    resetHtmStartsStops()
+    {
+        htmStarts = htmStops = 0;
+    }
+    uint64_t getLatestHtmUid() const;
+    void
+    setLastRetiredHtmUid(uint64_t htm_uid)
+    {
+        assert(htm_uid >= lastRetiredHtmUid);
+        lastRetiredHtmUid = htm_uid;
+    }
+
+    // Stale translation checks
+    void startStaleTranslationFlush();
+    bool checkStaleTranslations() const;
+
+    /** Returns if either the LQ or SQ is full. */
+    bool
+    isFull()
+    {
+        return lqFull() || sqFull();
+    }
+
+    /** Returns if both the LQ and SQ are empty. */
+    bool
+    isEmpty() const
+    {
+        return lqEmpty() && sqEmpty();
+    }
+
+    /** Returns if the LQ is full. */
+    bool
+    lqFull()
+    {
+        return loadQueue.full();
+    }
+
+    /** Returns if the SQ is full. */
+    bool
+    sqFull()
+    {
+        return storeQueue.full();
+    }
+
+    /** Returns if the LQ is empty. */
+    bool
+    lqEmpty() const
+    {
+        return loadQueue.size() == 0;
+    }
+
+    /** Returns if the SQ is empty. */
+    bool
+    sqEmpty() const
+    {
+        return storeQueue.size() == 0;
+    }
+
+    /** Returns if the SQ is empty. */
+    bool
+    mbEmpty() const
+    {
+        return mergeBuffer.isEmpty();
+    }
+
+    /** Whether this thread has no outstanding memory work. */
+    bool isDrained() const;
+
+    /** Youngest/lowest merge buffer version currently allocated. */
+    std::optional<uint64_t> youngestMBVersion() const;
+
+    /**
+     * Returns true if a load with the given version must wait for merge
+     * buffer entries with lower versions to drain.
+     */
+    bool loadBlockedByMBVersion(uint64_t version) const;
+
+    /** Returns the number of instructions in the LSQ. */
+    unsigned
+    getCount()
+    {
+        return loadQueue.size() + storeQueue.size();
+    }
+
+    /** Returns if there are any stores to writeback. */
+    bool
+    hasStoresToWB()
+    {
+        return !mbEmpty() || (storesToWB > 0);
+    }
+
+    /** Advance merge buffer retirement independent of store writeback. */
+    void updateMergeBufferRetire();
+
+    /** Returns the number of stores to writeback. */
+    int
+    numStoresToWB()
+    {
+        return storesToWB;
+    }
+
+    /** Returns if the LSQ unit will writeback on this cycle. */
+    bool
+    willWB()
+    {
+        return storeWBIt.dereferenceable() && storeWBIt->valid() &&
+               storeWBIt->canWB() && !storeWBIt->completed() &&
+               !isStoreBlocked;
+    }
+
+    /** Marks loads younger than barrier_sn that hit external snoops for
+     * re-execution. Returns the number of loads marked. */
+    unsigned markLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+
+    /** Marks acquire loads younger than barrier_sn that hit external snoops
+     * for re-execution. Returns the number of loads marked. */
+    unsigned
+    markAcquireLoadsHitExternalSnoopAfter(const InstSeqNum &barrier_sn);
+
+    /** Marks loads with version > version that hit external snoops for
+     * re-execution. Returns the number of loads marked. */
+    unsigned markLoadsHitExternalSnoop(uint64_t version);
+
+    /** Handles doing the retry. */
+    void recvRetry();
+
+    /** Forces merge buffer drain. */
+    void
+    forceMBDrain()
+    {
+        mergeBuffer.forceRetireAll();
+    }
+
+    /** Handles merge buffer drain completion. */
+    void handleMBDrain(MergeBuffer::MergeBufferEntry *entry);
+
+    unsigned int cacheLineSize();
+
+  private:
+    /** Reset the LSQ state */
+    void resetState();
+
+    /** Writes back the instruction, sending it to IEW. */
+    void writeback(const DynInstPtr &inst, PacketPtr pkt);
+
+    /** Enqueue a memory instruction into PO3 address generation. */
+    void enqueuePO3MemInst(const DynInstPtr &inst);
+
+    /** Retire ready entries from a PO3 memory sub-stage. */
+    void
+    retirePO3MemStage(std::deque<DynInstPtr> &stage, unsigned width,
+                      const char *stage_name,
+                      const std::function<void(const DynInstPtr &)> &retire);
+
+    /** Advance one PO3 memory pipeline cycle. */
+    void advancePO3MemPipeline();
+
+    /** Try to send a translated PO3 memory request to cache. */
+    void issuePO3CacheAccess(const DynInstPtr &inst);
+
+    /** Mark a PO3 pipeline entry as waiting another cycle. */
+    void requeuePO3MemInst(const DynInstPtr &inst);
+
+    /** Schedule PO3 load writeback after explicit writeback latency. */
+
+    /** Try to finish a previously blocked write back attempt */
+    void writebackBlockedStore();
+
+    /** Completes the store at the specified index. */
+    void completeStore(typename StoreQueue::iterator store_idx);
+
+    /** Handles completing the send of a store to memory. */
+    void storePostSend();
+
+  public:
+    /** Attempts to send a packet to the cache.
+     * Check if there are ports available. Return true if
+     * there are, false if there are not.
+     */
+    bool trySendPacket(bool isLoad, PacketPtr data_pkt);
+
+    /** Debugging function to dump instructions in the LSQ. */
+    void dumpInsts() const;
+
+    /** Schedule event for the cpu. */
+    void schedule(Event &ev, Tick when);
+
+    BaseMMU *getMMUPtr();
+
+  private:
+    /** Pointer to the CPU. */
+    CPU *cpu;
+
+    /** Pointer to the IEW stage. */
+    IEW *iewStage;
+
+    /** Pointer to the LSQ. */
+    LSQ *lsq;
+
+    /** Pointer to the dcache port.  Used only for sending. */
+    RequestPort *dcachePort;
+
+    /** Writeback event, specifically for when stores forward data to loads. */
+    class WritebackEvent : public Event
+    {
+      public:
+        /** Constructs a writeback event. */
+        WritebackEvent(const DynInstPtr &_inst, PacketPtr pkt,
+                       LSQUnit *lsq_ptr, bool delete_pkt = true);
+
+        /** Processes the writeback event. */
+        void process();
+
+        /** Returns the description of this event. */
+        const char *description() const;
+
+      private:
+        /** Instruction whose results are being written back. */
+        DynInstPtr inst;
+
+        /** The packet that would have been sent to memory. */
+        PacketPtr pkt;
+
+        /** The pointer to the LSQ unit that issued the store. */
+        LSQUnit *lsqPtr;
+
+        /** Whether this event owns and should delete the packet. */
+        bool deletePkt;
+    };
+
+  public:
+    /** Sender state used for merge buffer drain packets. */
+    struct MergeBufferDrainSenderState : public Packet::SenderState
+    {
+        MergeBuffer::MergeBufferEntry *entry;
+        LSQUnit *lsqUnit;
+        MergeBufferDrainSenderState(MergeBuffer::MergeBufferEntry *e,
+                                    LSQUnit *unit)
+            : entry(e), lsqUnit(unit)
+        {}
+    };
+
+    /** Sender state for merge buffer prefetches. */
+    struct MergeBufferPrefetchSenderState : public Packet::SenderState
+    {
+        LSQUnit *lsqUnit;
+        MergeBufferPrefetchSenderState(LSQUnit *unit) : lsqUnit(unit) {}
+    };
+
+  public:
+    /**
+     * Handles writing back and completing the load or store that has
+     * returned from memory.
+     *
+     * @param pkt Response packet from the memory sub-system
+     */
+    bool recvTimingResp(PacketPtr pkt);
+
+  private:
+    /** The LSQUnit thread id. */
+    ThreadID lsqID;
+
+  public:
+    /** The store queue. */
+    StoreQueue storeQueue;
+
+    /** The load queue. */
+    LoadQueue loadQueue;
+
+    /** The merge buffer. */
+    MergeBuffer mergeBuffer;
+
+    /** Max store queue deallocations per cycle. */
+    unsigned storeDeallocateWidth;
+    unsigned storeDeallocsThisCycle;
+    Cycles lastStoreDeallocCycle;
+    /** Store-pipe-to-merge-buffer input ports occupied this cycle. */
+    bool mbStorePipe0Used;
+    bool mbStorePipe1Used;
+
+  private:
+    /** The number of places to shift addresses in the LSQ before checking
+     * for dependency violations
+     */
+    unsigned depCheckShift;
+
+    /** Should loads be checked for dependency issues */
+    bool checkLoads;
+
+    /** Use a merge buffer that stores move to from the SQ */
+    bool mergeBufferEnabled;
+    /** Prefetch on merge buffer allocation to accelerate draining. */
+    bool mergeBufferPrefetchEnabled;
+    /** Limit outstanding merge buffer prefetches. */
+    unsigned mergeBufferPfInFlight;
+    /** Optimize store-release by tracking release entries in MB. */
+    bool optimizeStoreRelease = false;
+
+    /** The number of store instructions in the SQ waiting to writeback. */
+    int storesToWB;
+
+    // hardware transactional memory
+    // nesting depth
+    int htmStarts;
+    int htmStops;
+    // sanity checks and debugging
+    uint64_t lastRetiredHtmUid;
+
+    /** The index of the first instruction that may be ready to be
+     * written back, and has not yet been written back.
+     */
+    typename StoreQueue::iterator storeWBIt;
+
+    /** Address Mask for a cache block (e.g. ~(cache_block_size-1)) */
+    Addr cacheBlockMask;
+
+    /** Wire to read information from the issue stage time queue. */
+    typename TimeBuffer<IssueStruct>::wire fromIssue;
+
+    /** Whether or not the LSQ is stalled. */
+    bool stalled;
+    /** The store that causes the stall due to partial store to load
+     * forwarding.
+     */
+    InstSeqNum stallingStoreIsn;
+    /** The MB entry that causes the stall due to partial store to load
+     * forwarding.
+     */
+    Addr stallingMBAddr;
+    /** The index of the above store. */
+    ssize_t stallingLoadIdx;
+
+    /** The packet that needs to be retried. */
+    PacketPtr retryPkt;
+
+    /** Whehter or not a store is blocked due to the memory system. */
+    bool isStoreBlocked;
+
+    /** Whether or not a store is in flight. */
+    bool storeInFlight;
+
+    struct PartialWriteRMWState
+    {
+        /** Cycles remaining before the write phase may reserve its bank. */
+        Cycles cyclesUntilWrite;
+        /** Whether the write port/bank is reserved in the current cycle. */
+        bool writeReserved = false;
+        /** Merge-buffer cache write port used by this RMW. */
+        CachePort writePort = CachePort::MergeBufferWrite;
+    };
+
+    /**
+     * Partial writes perform a bank read in cycle X, merge in X+1, and
+     * reserve the bank write and send the packet in X+2.
+     */
+    std::unordered_map<PacketPtr, PartialWriteRMWState> partialWriteRMWs;
+
+    /** The oldest load that caused a memory ordering violation. */
+    DynInstPtr memDepViolator;
+
+    /** Flag for memory model. */
+    bool needsTSO;
+
+    /** Whether to use explicit PO3 load/store execute sub-stages. */
+    bool po3MemPipeline;
+
+    /** Apply Neoverse V2 store-to-load forwarding restrictions. */
+    bool po3V2StoreForwarding;
+
+    /** PO3 memory sub-stage latencies. */
+    Cycles po3MemAddrGenLatency;
+    Cycles po3MemTLBLookupLatency;
+    Cycles po3MemCacheAccessLatency;
+
+    /** PO3 memory sub-stage issue widths. */
+    unsigned po3MemAddrGenWidth;
+    unsigned po3MemTLBLookupWidth;
+    unsigned po3MemCacheAccessWidth;
+
+    /** Per-entry countdowns and queues for the PO3 memory pipeline. */
+    std::unordered_map<InstSeqNum, Cycles> po3MemStageCycles;
+    std::deque<DynInstPtr> po3AddrGenStage;
+    std::deque<DynInstPtr> po3TLBLookupStage;
+    std::deque<DynInstPtr> po3CacheAccessStage;
+
+    /** Track instructions resident in the PO3 memory pipeline. */
+    std::unordered_set<InstSeqNum> po3MemPipelineInsts;
+
+  protected:
+    // Will also need how many read/write ports the Dcache has.  Or keep track
+    // of that in stage that is one level up, and only call executeLoad/Store
+    // the appropriate number of times.
+    struct LSQUnitStats : public statistics::Group
+    {
+        LSQUnitStats(statistics::Group *parent);
+
+        /** Total number of loads forwaded from LSQ stores. */
+        statistics::Scalar forwLoads;
+
+        /** Total number of squashed loads. */
+        statistics::Scalar squashedLoads;
+
+        /** Total number of responses from the memory system that are
+         * ignored due to the instruction already being squashed. */
+        statistics::Scalar ignoredResponses;
+
+        /** Tota number of memory ordering violations. */
+        statistics::Scalar memOrderViolation;
+
+        /** Number of possible consistency violations detected. */
+        statistics::Scalar possibleConsistencyViolation;
+
+        /** Total number of squashed stores. */
+        statistics::Scalar squashedStores;
+
+        /** Number of loads that were rescheduled. */
+        statistics::Scalar rescheduledLoads;
+
+        /** Number of loads rescheduled due to partial store-queue forwarding.
+         */
+        statistics::Scalar sqPartialFwdRescheduledLoads;
+
+        /** Number of loads rescheduled due to partial merge-buffer forwarding.
+         */
+        statistics::Scalar mbPartialFwdRescheduledLoads;
+        /** Forwarding attempts rejected by V2 alignment restrictions. */
+        statistics::Scalar v2ForwardingRejected;
+
+        /** Number of times the LSQ is blocked due to the cache. */
+        statistics::Scalar blockedByCache;
+
+        /** Distribution of cycle latency between the first time a load
+         * is issued and its completion */
+        statistics::Distribution loadToUse;
+
+        /** Total number of loads and stores written to the load store queue */
+        statistics::Scalar addedLoadsAndStores;
+
+        /** LQ Occupancy */
+        statistics::Average lqAvgOccupancy;
+        /** SQ Occupancy */
+        statistics::Average sqAvgOccupancy;
+        /** Merge buffer allocations of new entries */
+        statistics::Scalar mbAllocations;
+        /** Merge buffer merges into existing entries */
+        statistics::Scalar mbMerges;
+        /** Merge buffer entries retired */
+        statistics::Scalar mbRetired;
+        /** Merge buffer drains issued */
+        statistics::Scalar mbDrains;
+        /** Merge buffer drains using its cache write port. */
+        statistics::Scalar mbCacheWritePortUses;
+        /** Stores written into the merge buffer by load/store pipe 0. */
+        statistics::Scalar mbLoadStorePipe0Writes;
+        /** Stores written into the merge buffer by load/store pipe 1. */
+        statistics::Scalar mbLoadStorePipe1Writes;
+        /** Cycles in which both load/store pipes wrote into the merge buffer.
+         */
+        statistics::Scalar mbDualPipeWriteCycles;
+        /** Merge buffer unretire count */
+        statistics::Scalar mbUnretire;
+        /** Merge buffer forwards to loads */
+        statistics::Scalar mbForwards;
+        /** Stores blocked from dealloc because merge buffer is full. */
+        statistics::Scalar mbFullStoreDeallocStalls;
+        /** Older-version MB entries force retired for same block address. */
+        statistics::Scalar mbForceRetiresOlderVersion;
+        /** Average merge buffer occupancy (valid entries / total). */
+        statistics::Average mbAvgOccupancy;
+        /** Total cycles entries reside in the merge buffer. */
+        statistics::Scalar mbResidencyCycles;
+        /** Number of cycles store WB/dealloc stalled by a barrier at the head.
+         */
+        statistics::Scalar barrierSqStallCycles;
+        /** Sum of SQ occupancy during barrier-induced stall cycles. */
+        statistics::Scalar barrierSqStallOccupancy;
+        /** Cycles release MB entries waited on outstanding bytes. */
+        statistics::Scalar mbReleaseWaitCycles;
+        /** Cycles loads waited on older MB versions. */
+        statistics::Scalar mbVersionLoadStallCycles;
+        /** Instructions rescheduled/replayed due to barrier handling in LSQ.
+         */
+        statistics::Scalar barrierReschedulesLSQ;
+    } stats;
+
+  public:
+    /** Whether to retire merge buffer entries immediately when fully valid. */
+    bool mbRetireWhenFullValid = false;
+
+    /** Executes the load at the given index. */
+    Fault read(LSQRequest *request, ssize_t load_idx);
+
+    /** Executes the store at the given index. */
+    Fault write(LSQRequest *requst, uint8_t *data, ssize_t store_idx);
+
+    /** Returns the index of the head load instruction. */
+    int
+    getLoadHead()
+    {
+        return loadQueue.head();
+    }
+
+    /** Returns the sequence number of the head load instruction. */
+    InstSeqNum getLoadHeadSeqNum();
+
+    /** Returns the index of the head store instruction. */
+    int
+    getStoreHead()
+    {
+        return storeQueue.head();
+    }
+    /** Returns the sequence number of the head store instruction. */
+    InstSeqNum getStoreHeadSeqNum();
+
+    /** Returns whether or not the LSQ unit is stalled. */
+    bool
+    isStalled()
+    {
+        return stalled;
+    }
+};
+
+} // namespace po3
+} // namespace gem5
+
+#endif // __CPU_PO3_LSQ_UNIT_HH__

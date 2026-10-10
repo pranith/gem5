@@ -27,7 +27,9 @@ from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.objects.BaseMinorCPU import BaseMinorCPU
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.BaseO3CPU import BaseO3CPU
+from m5.objects.BasePO3CPU import BasePO3CPU
 from m5.objects.BaseTimingSimpleCPU import BaseTimingSimpleCPU
+from m5.objects.PO3Config import set_po3_pipeline_defaults
 from m5.objects.PowerDecoder import PowerDecoder
 from m5.objects.PowerInterrupts import PowerInterrupts
 from m5.objects.PowerISA import PowerISA
@@ -55,6 +57,13 @@ class PowerTimingSimpleCPU(BaseTimingSimpleCPU, PowerCPU):
 
 class PowerO3CPU(BaseO3CPU, PowerCPU):
     mmu = PowerMMU()
+
+
+class PowerPO3CPU(BasePO3CPU, PowerCPU):
+    mmu = PowerMMU()
+
+
+set_po3_pipeline_defaults(PowerPO3CPU)
 
 
 class PowerMinorCPU(BaseMinorCPU, PowerCPU):

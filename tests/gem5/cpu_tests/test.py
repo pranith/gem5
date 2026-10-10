@@ -41,6 +41,8 @@ Test file containing simple workloads to run on CPU models.
 Each test takes ~10 seconds to run.
 """
 
+import re
+
 from testlib import *
 
 workloads = ("Bubblesort", "FloatMM")
@@ -50,18 +52,21 @@ valid_isas = {
         "X86AtomicSimpleCPU",
         "X86TimingSimpleCPU",
         "X86DerivO3CPU",
+        "X86PO3CPU",
     ),
     constants.arm_tag: (
         "ArmAtomicSimpleCPU",
         "ArmTimingSimpleCPU",
         "ArmMinorCPU",
         "ArmDerivO3CPU",
+        "ArmPO3CPU",
     ),
     constants.riscv_tag: (
         "RiscvAtomicSimpleCPU",
         "RiscvTimingSimpleCPU",
         "RiscvMinorCPU",
         "RiscvDerivO3CPU",
+        "RiscvPO3CPU",
     ),
 }
 
@@ -95,3 +100,107 @@ for isa in valid_isas:
                 valid_isas=(constants.all_compiled_tag,),
                 fixtures=[workload_binary],
             )
+
+
+# The 32-bit ARM hello binary contains a predicated load that does not start
+# a translation when its predicate is false. PO3 must retire it without
+# waiting indefinitely in the explicit TLB stage.
+arm_hello = joinpath(
+    getcwd(), "..", "..", "test-progs", "hello", "bin", "arm", "linux", "hello"
+)
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_predicated_load",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=["--cpu=ArmPO3CPU", arm_hello],
+    valid_isas=(constants.arm_tag,),
+)
+
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_decoupled_fetch_drain",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=[
+        "--cpu=ArmPO3CPU",
+        "--decoupled-front-end",
+        "--drain-at-ticks=200000",
+        arm_hello,
+    ],
+    valid_isas=(constants.arm_tag,),
+)
+
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_pipelined_execute_drain",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=[
+        "--cpu=ArmPO3CPU",
+        "--po3-reg-read-latency=2",
+        "--po3-execute-latency=2",
+        "--drain-at-ticks=200000",
+        arm_hello,
+    ],
+    valid_isas=(constants.arm_tag,),
+)
+
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_delayed_writeback",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=[
+        "--cpu=ArmPO3CPU",
+        "--po3-mem-pipeline-off",
+        arm_hello,
+    ],
+    valid_isas=(constants.arm_tag,),
+)
+
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_merge_buffer_drain",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=[
+        "--cpu=ArmPO3CPU",
+        "--merge-buffer",
+        # At this tick the hello workload has committed stores whose merge
+        # buffer entries have not yet completed their cache writes.
+        "--drain-at-ticks=200000",
+        "--recv-resp-buffer-size=16",
+        arm_hello,
+    ],
+    valid_isas=(constants.arm_tag,),
+)
+
+for cpu, hello_binary in (
+    ("X86PO3CPU", "x86"),
+    ("RiscvPO3CPU", "riscv"),
+):
+    binary = joinpath(
+        getcwd(),
+        "..",
+        "..",
+        "test-progs",
+        "hello",
+        "bin",
+        hello_binary,
+        "linux",
+        "hello",
+    )
+    gem5_verify_config(
+        name=f"cpu_test_{cpu}_hello",
+        verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+        config=joinpath(getcwd(), "run.py"),
+        config_args=[f"--cpu={cpu}", binary],
+        valid_isas=(constants.all_compiled_tag,),
+    )
+
+x86_hello = joinpath(
+    getcwd(), "..", "..", "test-progs", "hello", "bin", "x86", "linux", "hello"
+)
+gem5_verify_config(
+    name="cpu_test_X86PO3CPU_merge_buffer",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=["--cpu=X86PO3CPU", "--merge-buffer", x86_hello],
+    valid_isas=(constants.all_compiled_tag,),
+)
