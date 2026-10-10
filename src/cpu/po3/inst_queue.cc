@@ -1141,10 +1141,32 @@ InstructionQueue::commit(const InstSeqNum &inst, ThreadID tid)
 }
 
 int
+InstructionQueue::wakeDependents(PhysRegIdPtr dest_reg)
+{
+    if (dest_reg->isAlwaysReady()) {
+        return 0;
+    }
+
+    int dependents = 0;
+    DynInstPtr dep_inst = dependGraph.pop(dest_reg->flatIndex());
+    while (dep_inst) {
+        DPRINTF(IQ, "Waking dependent instruction [sn:%llu] PC %s.\n",
+                dep_inst->seqNum, dep_inst->pcState());
+        dep_inst->markSrcRegReady();
+        addIfReady(dep_inst);
+        dep_inst = dependGraph.pop(dest_reg->flatIndex());
+        ++dependents;
+    }
+
+    assert(dependGraph.empty(dest_reg->flatIndex()));
+    dependGraph.clearInst(dest_reg->flatIndex());
+    regScoreboard[dest_reg->flatIndex()] = true;
+    return dependents;
+}
+
+int
 InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
 {
-    int dependents = 0;
-
     // The instruction queue here takes care of both floating and int ops
     if (completed_inst->isFloating()) {
         iqIOStats.fpInstQueueWakeupAccesses++;
@@ -1153,8 +1175,6 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
     } else {
         iqIOStats.intInstQueueWakeupAccesses++;
     }
-
-    completed_inst->lastWakeDependents = curTick();
 
     DPRINTF(IQ, "Waking dependents of completed instruction.\n");
 
@@ -1178,12 +1198,17 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
         memDepUnit[tid].completeInst(completed_inst);
     }
 
+    int dependents = 0;
     for (int dest_reg_idx = 0; dest_reg_idx < completed_inst->numDestRegs();
-         dest_reg_idx++) {
+         ++dest_reg_idx) {
         PhysRegIdPtr dest_reg = completed_inst->renamedDestIdx(dest_reg_idx);
 
-        // Special case of uniq or control registers.  They are not
-        // handled by the IQ and thus have no dependency graph entry.
+        // Misc register updates become visible at commit.
+        if (dest_reg->is(MiscRegClass)) {
+            continue;
+        }
+
+        // Fixed-mapping registers do not use the dependency graph.
         if (dest_reg->isAlwaysReady()) {
             DPRINTF(IQ, "Reg %d [%s] is part of a fix mapping, skipping\n",
                     dest_reg->index(), dest_reg->className());
@@ -1202,39 +1227,10 @@ InstructionQueue::wakeDependents(const DynInstPtr &completed_inst)
             continue;
         }
 
-        DPRINTF(IQ, "Waking any dependents on register %i (%s).\n",
-                dest_reg->index(), dest_reg->className());
-
-        // Go through the dependency chain, marking the registers as
-        // ready within the waiting instructions.
-        DynInstPtr dep_inst = dependGraph.pop(dest_reg->flatIndex());
-
-        while (dep_inst) {
-            DPRINTF(IQ,
-                    "Waking up a dependent instruction, [sn:%llu] "
-                    "PC %s.\n",
-                    dep_inst->seqNum, dep_inst->pcState());
-
-            // Might want to give more information to the instruction
-            // so that it knows which of its source registers is
-            // ready.  However that would mean that the dependency
-            // graph entries would need to hold the src_reg_idx.
-            dep_inst->markSrcRegReady();
-
-            addIfReady(dep_inst);
-
-            dep_inst = dependGraph.pop(dest_reg->flatIndex());
-
-            ++dependents;
-        }
-
-        // Reset the head node now that all of its dependents have
-        // been woken up.
-        assert(dependGraph.empty(dest_reg->flatIndex()));
-        dependGraph.clearInst(dest_reg->flatIndex());
-
-        // Mark the scoreboard as having that register ready.
-        regScoreboard[dest_reg->flatIndex()] = true;
+        dependents += wakeDependents(dest_reg);
+    }
+    if (dependents) {
+        completed_inst->lastWakeDependents = curTick();
     }
     return dependents;
 }
@@ -1462,11 +1458,13 @@ InstructionQueue::doSquash(ThreadID tid)
                 // nonSpecInsts already when they are ready, and so we
                 // cannot always expect to find them
                 if (ns_inst_it == nonSpecInsts.end()) {
-                    // loads that became ready but stalled on a
-                    // blocked cache are alreayd removed from
-                    // nonSpecInsts, and have not faulted
+                    // Non-speculative instructions may already have been
+                    // removed from nonSpecInsts after commit releases
+                    // them for execution. Memory references may also
+                    // have been removed after becoming ready.
                     assert(squashed_inst->getFault() != NoFault ||
-                           squashed_inst->isMemRef());
+                           squashed_inst->isMemRef() ||
+                           squashed_inst->isAtCommit());
                 } else {
 
                     (*ns_inst_it).second = NULL;

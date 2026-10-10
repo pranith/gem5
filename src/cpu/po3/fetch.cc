@@ -492,6 +492,7 @@ Fetch::takeOverFrom()
 {
     assert(cpu->getInstPort().isConnected());
     resetStage();
+    switchToActive();
 }
 
 void
