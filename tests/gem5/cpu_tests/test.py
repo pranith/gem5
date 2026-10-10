@@ -56,6 +56,7 @@ valid_isas = {
         "ArmTimingSimpleCPU",
         "ArmMinorCPU",
         "ArmDerivO3CPU",
+        "ArmPO3CPU",
     ),
     constants.riscv_tag: (
         "RiscvAtomicSimpleCPU",

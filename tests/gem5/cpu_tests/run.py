@@ -104,6 +104,7 @@ valid_cpu = {
     "ArmTimingSimpleCPU": ArmTimingSimpleCPU,
     "ArmMinorCPU": ArmMinorCPU,
     "ArmDerivO3CPU": ArmO3CPU,
+    "ArmPO3CPU": ArmPO3CPU,
     "RiscvAtomicSimpleCPU": RiscvAtomicSimpleCPU,
     "RiscvTimingSimpleCPU": RiscvTimingSimpleCPU,
     "RiscvMinorCPU": RiscvMinorCPU,
