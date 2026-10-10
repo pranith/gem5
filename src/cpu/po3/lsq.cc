@@ -41,6 +41,7 @@
 
 #include "cpu/po3/lsq.hh"
 
+#include <algorithm>
 #include <cstdint>
 #include <list>
 #include <memory>
@@ -111,7 +112,10 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU *_cpu)
                                        statistics::units::Count>::get(),
                "Average retry rate per received response"),
       ADD_STAT(numSendRetryResp, statistics::units::Count::get(),
-               "Number of retry responses sent")
+               "Number of retry responses sent"),
+      ADD_STAT(loadStoreBankConflicts, statistics::units::Count::get(),
+               "Number of D-cache accesses rejected due to a read/write "
+               "bank conflict")
 {
     recvRespAvgBW.precision(2);
     recvRespAvgBW = numRecvRespBytes / _cpu->baseStats.numCycles;
@@ -134,6 +138,9 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
       usedStorePorts(0),
       cacheLoadPorts(params.cacheLoadPorts),
       usedLoadPorts(0),
+      cacheBanks(params.cacheBanks),
+      loadBanksUsed(cacheBanks, false),
+      storeBanksUsed(cacheBanks, false),
       waitingForStaleTranslation(false),
       staleTranslationWaitTxnId(0),
       lsqPolicy(params.smtLSQPolicy),
@@ -155,6 +162,7 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
       retryRespEvent([this] { sendRetryResp(); }, name())
 {
     assert(numThreads > 0 && numThreads <= MaxThreads);
+    fatal_if(cacheBanks == 0, "The PO3 D-cache must have at least one bank");
 
     //**********************************************
     //************ Handle SMT Parameters ***********
@@ -237,7 +245,10 @@ LSQ::isDrained() const
 void
 LSQ::takeOverFrom()
 {
+    usedLoadPorts = 0;
     usedStorePorts = 0;
+    std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
+    std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
     _cacheBlocked = false;
 
     for (ThreadID tid = 0; tid < numThreads; tid++) {
@@ -248,17 +259,26 @@ LSQ::takeOverFrom()
 void
 LSQ::tick()
 {
-    for (ThreadID tid : *activeThreads) {
-        thread[tid]->tick();
-    }
-
-    // Re-issue loads which got blocked on the per-cycle load ports limit.
+    // Re-issue loads which exhausted the previous cycle's load ports.
     if (usedLoadPorts == cacheLoadPorts && !_cacheBlocked) {
         iewStage->cacheUnblocked();
     }
 
     usedLoadPorts = 0;
     usedStorePorts = 0;
+    std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
+    std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
+
+    // Reserve the write phase of ready partial-write RMWs before any thread
+    // issues demand accesses. This makes the bank observably write-busy in
+    // the RMW's X+2 cycle.
+    for (ThreadID tid : *activeThreads) {
+        thread[tid]->reserveRMWWriteBank();
+    }
+
+    for (ThreadID tid : *activeThreads) {
+        thread[tid]->tick();
+    }
 }
 
 bool
@@ -285,15 +305,41 @@ LSQ::cachePortAvailable(bool is_load) const
     return ret;
 }
 
-void
-LSQ::cachePortBusy(bool is_load)
+unsigned
+LSQ::cacheBank(Addr addr) const
 {
-    assert(cachePortAvailable(is_load));
+    return (addr / cpu->cacheLineSize()) % cacheBanks;
+}
+
+bool
+LSQ::cacheBankAvailable(bool is_load, Addr addr) const
+{
+    if (!cachePortAvailable(is_load)) {
+        return false;
+    }
+
+    const unsigned bank = cacheBank(addr);
+    return is_load ? !storeBanksUsed[bank] : !loadBanksUsed[bank];
+}
+
+void
+LSQ::cachePortBusy(bool is_load, Addr addr)
+{
+    assert(cacheBankAvailable(is_load, addr));
+    const unsigned bank = cacheBank(addr);
     if (is_load) {
         usedLoadPorts++;
+        loadBanksUsed[bank] = true;
     } else {
         usedStorePorts++;
+        storeBanksUsed[bank] = true;
     }
+}
+
+void
+LSQ::cacheBankConflict()
+{
+    ++dcachePort.dcachePortStats.loadStoreBankConflicts;
 }
 
 void

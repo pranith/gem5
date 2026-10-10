@@ -312,6 +312,12 @@ class LSQUnit
     /** Advance explicit PO3 memory execution sub-stages. */
     void tick();
 
+    /**
+     * Advance partial-write RMW timing and reserve any write bank whose
+     * X+2 write phase is ready.
+     */
+    void reserveRMWWriteBank();
+
     /** True when an instruction is resident in a PO3 memory sub-stage. */
     bool isInPO3MemPipeline(const DynInstPtr &inst) const;
 
@@ -640,6 +646,20 @@ class LSQUnit
 
     /** Whether or not a store is in flight. */
     bool storeInFlight;
+
+    struct PartialWriteRMWState
+    {
+        /** Cycles remaining before the write phase may reserve its bank. */
+        Cycles cyclesUntilWrite;
+        /** Whether the write port/bank is reserved in the current cycle. */
+        bool writeReserved = false;
+    };
+
+    /**
+     * Partial writes perform a bank read in cycle X, merge in X+1, and
+     * reserve the bank write and send the packet in X+2.
+     */
+    std::unordered_map<PacketPtr, PartialWriteRMWState> partialWriteRMWs;
 
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
