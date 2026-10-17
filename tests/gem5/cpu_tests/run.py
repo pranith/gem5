@@ -124,6 +124,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("binary", type=str)
 parser.add_argument("--cpu")
 parser.add_argument("--merge-buffer", action="store_true")
+parser.add_argument("--drain-at-ticks", type=int)
+parser.add_argument("--recv-resp-buffer-size", type=int)
 parser.add_argument("--mem", choices=valid_mem.keys(), default="SimpleMemory")
 
 args = parser.parse_args()
@@ -148,6 +150,9 @@ system.mem_ranges = [AddrRange("512MiB")]
 system.cpu = valid_cpu[args.cpu]()
 if args.merge_buffer:
     system.cpu.useMergeBuffer = True
+if args.recv_resp_buffer_size is not None:
+    system.cpu.recvRespThrottling = True
+    system.cpu.recvRespBufferSize = args.recv_resp_buffer_size
 
 if args.cpu in (
     "X86AtomicSimpleCPU",
@@ -193,6 +198,12 @@ system.cpu.createThreads()
 
 root = Root(full_system=False, system=system)
 m5.instantiate()
+
+if args.drain_at_ticks is not None:
+    exit_event = m5.simulate(args.drain_at_ticks)
+    if exit_event.getCause() != "simulate() limit reached":
+        exit(1)
+    m5.drain()
 
 exit_event = m5.simulate()
 

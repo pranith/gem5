@@ -116,6 +116,22 @@ gem5_verify_config(
     valid_isas=(constants.arm_tag,),
 )
 
+gem5_verify_config(
+    name="cpu_test_ArmPO3CPU_merge_buffer_drain",
+    verifiers=(verifier.MatchRegex(re.compile(r"Hello world!")),),
+    config=joinpath(getcwd(), "run.py"),
+    config_args=[
+        "--cpu=ArmPO3CPU",
+        "--merge-buffer",
+        # At this tick the hello workload has committed stores whose merge
+        # buffer entries have not yet completed their cache writes.
+        "--drain-at-ticks=200000",
+        "--recv-resp-buffer-size=16",
+        arm_hello,
+    ],
+    valid_isas=(constants.arm_tag,),
+)
+
 for cpu, hello_binary in (
     ("X86PO3CPU", "x86"),
     ("RiscvPO3CPU", "riscv"),
