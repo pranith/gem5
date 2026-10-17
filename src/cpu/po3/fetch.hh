@@ -39,8 +39,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_FETCH_HH__
-#define __CPU_O3_FETCH_HH__
+#ifndef __CPU_PO3_FETCH_HH__
+#define __CPU_PO3_FETCH_HH__
 
 #include <deque>
 
@@ -277,7 +277,8 @@ class Fetch
     /** Tells fetch to wake up from a quiesce instruction. */
     void wakeFromQuiesce();
 
-    /** For priority-based fetch policies, need to keep update priorityList */
+    /** Keep the fetch priority list in sync with active threads. */
+    void activateThread(ThreadID tid);
     void deactivateThread(ThreadID tid);
 
   private:
@@ -660,4 +661,4 @@ class Fetch
 } // namespace po3
 } // namespace gem5
 
-#endif //__CPU_O3_FETCH_HH__
+#endif //__CPU_PO3_FETCH_HH__

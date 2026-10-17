@@ -167,6 +167,8 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         --mergeBufferPfInFlight;
         delete pf_state;
         delete pkt;
+        cpu->wakeCPU();
+        cpu->activityThisCycle();
         return true;
     } else if (auto *mb_state = dynamic_cast<MergeBufferDrainSenderState *>(
                    pkt->senderState)) {
@@ -196,6 +198,8 @@ LSQUnit::recvTimingResp(PacketPtr pkt)
         mergeBuffer.handleDrainResp(mb_state->entry, this);
         delete mb_state;
         delete pkt;
+        cpu->wakeCPU();
+        cpu->activityThisCycle();
         return true;
     } else {
         LSQRequest *request = dynamic_cast<LSQRequest *>(pkt->senderState);
@@ -512,6 +516,7 @@ LSQUnit::setDcachePort(RequestPort *dcache_port)
 void
 LSQUnit::drainSanityCheck() const
 {
+    assert(isDrained());
     for (int i = 0; i < loadQueue.capacity(); ++i) {
         assert(!loadQueue[i].valid());
     }
@@ -525,6 +530,17 @@ LSQUnit::drainSanityCheck() const
     assert(po3CacheAccessStage.empty());
     assert(partialWriteRMWs.empty());
     assert(!mergeBufferEnabled || mergeBuffer.isEmpty());
+}
+
+bool
+LSQUnit::isDrained() const
+{
+    return loadQueue.empty() && storeQueue.empty() && storesToWB == 0 &&
+           !retryPkt && !isStoreBlocked && !storeInFlight &&
+           mergeBuffer.isEmpty() && mergeBufferPfInFlight == 0 &&
+           partialWriteRMWs.empty() && po3MemPipelineInsts.empty() &&
+           po3MemStageCycles.empty() && po3AddrGenStage.empty() &&
+           po3TLBLookupStage.empty() && po3CacheAccessStage.empty();
 }
 
 void
@@ -2175,7 +2191,7 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
         do {
             storeQueue.front().clear();
             storeQueue.pop_front();
-        } while (storeQueue.front().completed() && !storeQueue.empty());
+        } while (!storeQueue.empty() && storeQueue.front().completed());
 
         iewStage->updateLSQNextCycle = true;
     }

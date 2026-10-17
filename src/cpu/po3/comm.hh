@@ -40,8 +40,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_COMM_HH__
-#define __CPU_O3_COMM_HH__
+#ifndef __CPU_PO3_COMM_HH__
+#define __CPU_PO3_COMM_HH__
 
 #include <vector>
 
@@ -260,4 +260,4 @@ removeCommThreadInsts(ThreadID tid, CommStruct &comm_struct)
 } // namespace po3
 } // namespace gem5
 
-#endif //__CPU_O3_COMM_HH__
+#endif //__CPU_PO3_COMM_HH__

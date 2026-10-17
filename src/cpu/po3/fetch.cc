@@ -45,8 +45,6 @@
 #include <algorithm>
 #include <cstring>
 #include <list>
-#include <map>
-#include <queue>
 
 #include "arch/generic/tlb.hh"
 #include "base/types.hh"
@@ -303,7 +301,6 @@ Fetch::startupStage()
 {
     assert(bac != nullptr);
     assert(ftq != nullptr);
-    assert(priorityList.empty());
     resetStage();
 
     // Fetch needs to start fetching instructions at the very beginning,
@@ -534,6 +531,15 @@ Fetch::switchToInactive()
         cpu->deactivateStage(CPU::FetchIdx);
 
         _status = Inactive;
+    }
+}
+
+void
+Fetch::activateThread(ThreadID tid)
+{
+    if (std::find(priorityList.begin(), priorityList.end(), tid) ==
+        priorityList.end()) {
+        priorityList.push_back(tid);
     }
 }
 
@@ -1814,9 +1820,11 @@ Fetch::roundRobin()
 
         assert(high_pri <= numThreads);
 
-        if (fetchStatus[high_pri] == Running ||
-            fetchStatus[high_pri] == IcacheAccessComplete ||
-            fetchStatus[high_pri] == Idle) {
+        if (std::find(activeThreads->begin(), activeThreads->end(),
+                      high_pri) != activeThreads->end() &&
+            (fetchStatus[high_pri] == Running ||
+             fetchStatus[high_pri] == IcacheAccessComplete ||
+             fetchStatus[high_pri] == Idle)) {
 
             priorityList.erase(pri_iter);
             priorityList.push_back(high_pri);
@@ -1833,67 +1841,56 @@ Fetch::roundRobin()
 ThreadID
 Fetch::iqCount()
 {
-    // sorted from lowest->highest
-    std::priority_queue<unsigned, std::vector<unsigned>,
-                        std::greater<unsigned>>
-        PQ;
-    std::map<unsigned, ThreadID> threadMap;
-
-    for (ThreadID tid : *activeThreads) {
-        unsigned iqCount = fromIEW->iewInfo[tid].iqCount;
-
-        // we can potentially get tid collisions if two threads
-        // have the same iqCount, but this should be rare.
-        PQ.push(iqCount);
-        threadMap[iqCount] = tid;
-    }
-
-    while (!PQ.empty()) {
-        ThreadID high_pri = threadMap[PQ.top()];
-
-        if (fetchStatus[high_pri] == Running ||
-            fetchStatus[high_pri] == IcacheAccessComplete ||
-            fetchStatus[high_pri] == Idle) {
-            return high_pri;
-        } else {
-            PQ.pop();
+    auto best = priorityList.end();
+    for (auto it = priorityList.begin(); it != priorityList.end(); ++it) {
+        ThreadID tid = *it;
+        if (std::find(activeThreads->begin(), activeThreads->end(), tid) ==
+                activeThreads->end() ||
+            (fetchStatus[tid] != Running &&
+             fetchStatus[tid] != IcacheAccessComplete &&
+             fetchStatus[tid] != Idle)) {
+            continue;
+        }
+        if (best == priorityList.end() ||
+            fromIEW->iewInfo[tid].iqCount < fromIEW->iewInfo[*best].iqCount) {
+            best = it;
         }
     }
-
-    return InvalidThreadID;
+    if (best == priorityList.end()) {
+        return InvalidThreadID;
+    }
+    ThreadID tid = *best;
+    priorityList.erase(best);
+    priorityList.push_back(tid);
+    return tid;
 }
 
 ThreadID
 Fetch::lsqCount()
 {
-    // sorted from lowest->highest
-    std::priority_queue<unsigned, std::vector<unsigned>,
-                        std::greater<unsigned>>
-        PQ;
-    std::map<unsigned, ThreadID> threadMap;
-
-    for (ThreadID tid : *activeThreads) {
-        unsigned ldstqCount = fromIEW->iewInfo[tid].ldstqCount;
-
-        // we can potentially get tid collisions if two threads
-        // have the same iqCount, but this should be rare.
-        PQ.push(ldstqCount);
-        threadMap[ldstqCount] = tid;
-    }
-
-    while (!PQ.empty()) {
-        ThreadID high_pri = threadMap[PQ.top()];
-
-        if (fetchStatus[high_pri] == Running ||
-            fetchStatus[high_pri] == IcacheAccessComplete ||
-            fetchStatus[high_pri] == Idle) {
-            return high_pri;
-        } else {
-            PQ.pop();
+    auto best = priorityList.end();
+    for (auto it = priorityList.begin(); it != priorityList.end(); ++it) {
+        ThreadID tid = *it;
+        if (std::find(activeThreads->begin(), activeThreads->end(), tid) ==
+                activeThreads->end() ||
+            (fetchStatus[tid] != Running &&
+             fetchStatus[tid] != IcacheAccessComplete &&
+             fetchStatus[tid] != Idle)) {
+            continue;
+        }
+        if (best == priorityList.end() ||
+            fromIEW->iewInfo[tid].ldstqCount <
+                fromIEW->iewInfo[*best].ldstqCount) {
+            best = it;
         }
     }
-
-    return InvalidThreadID;
+    if (best == priorityList.end()) {
+        return InvalidThreadID;
+    }
+    ThreadID tid = *best;
+    priorityList.erase(best);
+    priorityList.push_back(tid);
+    return tid;
 }
 
 ThreadID

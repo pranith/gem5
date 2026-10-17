@@ -38,8 +38,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_ROB_HH__
-#define __CPU_O3_ROB_HH__
+#ifndef __CPU_PO3_ROB_HH__
+#define __CPU_PO3_ROB_HH__
 
 #include <string>
 #include <utility>
@@ -367,4 +367,4 @@ class ROB
 } // namespace po3
 } // namespace gem5
 
-#endif //__CPU_O3_ROB_HH__
+#endif //__CPU_PO3_ROB_HH__

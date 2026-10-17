@@ -38,8 +38,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_COMMIT_HH__
-#define __CPU_O3_COMMIT_HH__
+#ifndef __CPU_PO3_COMMIT_HH__
+#define __CPU_PO3_COMMIT_HH__
 
 #include <deque>
 #include <queue>
@@ -544,4 +544,4 @@ class Commit
 } // namespace po3
 } // namespace gem5
 
-#endif // __CPU_O3_COMMIT_HH__
+#endif // __CPU_PO3_COMMIT_HH__

@@ -38,8 +38,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_MEM_DEP_UNIT_HH__
-#define __CPU_O3_MEM_DEP_UNIT_HH__
+#ifndef __CPU_PO3_MEM_DEP_UNIT_HH__
+#define __CPU_PO3_MEM_DEP_UNIT_HH__
 
 #include <list>
 #include <memory>
@@ -297,4 +297,4 @@ class MemDepUnit
 } // namespace po3
 } // namespace gem5
 
-#endif // __CPU_O3_MEM_DEP_UNIT_HH__
+#endif // __CPU_PO3_MEM_DEP_UNIT_HH__

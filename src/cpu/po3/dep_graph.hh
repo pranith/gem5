@@ -38,8 +38,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_DEP_GRAPH_HH__
-#define __CPU_O3_DEP_GRAPH_HH__
+#ifndef __CPU_PO3_DEP_GRAPH_HH__
+#define __CPU_PO3_DEP_GRAPH_HH__
 
 #include "cpu/po3/comm.hh"
 
@@ -304,4 +304,4 @@ DependencyGraph<DynInstPtr>::dump()
 } // namespace po3
 } // namespace gem5
 
-#endif // __CPU_O3_DEP_GRAPH_HH__
+#endif // __CPU_PO3_DEP_GRAPH_HH__

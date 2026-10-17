@@ -396,6 +396,11 @@ CPU::tick()
 
     activityRec.advance();
 
+    if (_status != SwitchedOut && activeThreads.empty() &&
+        !iew.hasStoresToWB()) {
+        _status = Idle;
+    }
+
     if (removeInstsThisCycle) {
         cleanUpRemovedInsts();
     }
@@ -467,6 +472,7 @@ CPU::activateThread(ThreadID tid)
         DPRINTF(PO3CPU, "[tid:%i] Adding to active threads list\n", tid);
 
         activeThreads.push_back(tid);
+        fetch.activateThread(tid);
     }
 }
 
@@ -568,11 +574,17 @@ CPU::suspendContext(ThreadID tid)
 
     deactivateThread(tid);
 
-    // If this was the last thread then unschedule the tick event.
+    // Keep running until committed stores from the last thread have drained.
     if (activeThreads.size() == 0) {
-        unscheduleTickEvent();
-        lastRunningCycle = curCycle();
-        _status = Idle;
+        if (iew.hasStoresToWB()) {
+            _status = Running;
+            activityRec.activity();
+            scheduleTickEvent(Cycles(1));
+        } else {
+            unscheduleTickEvent();
+            lastRunningCycle = curCycle();
+            _status = Idle;
+        }
     }
 
     DPRINTF(Quiesce, "Suspending Context\n");
@@ -590,13 +602,17 @@ CPU::haltContext(ThreadID tid)
     deactivateThread(tid);
     removeThread(tid);
 
-    // If this was the last thread then unschedule the tick event.
+    // Keep running until committed stores from the last thread have drained.
     if (activeThreads.size() == 0) {
-        if (tickEvent.scheduled()) {
+        if (iew.hasStoresToWB()) {
+            _status = Running;
+            activityRec.activity();
+            scheduleTickEvent(Cycles(1));
+        } else {
             unscheduleTickEvent();
+            lastRunningCycle = curCycle();
+            _status = Idle;
         }
-        lastRunningCycle = curCycle();
-        _status = Idle;
     }
     updateCycleCounters(BaseCPU::CPU_STATE_SLEEP);
 }

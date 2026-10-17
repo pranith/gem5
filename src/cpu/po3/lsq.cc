@@ -174,6 +174,7 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
       recvRespMaxCachelines(params.recvRespMaxCachelines),
       recvRespBufferSize(params.recvRespBufferSize),
       recvRespBytes(0),
+      recvRespPendBytes(0),
       recvRespCachelines(0),
       recvRespLastCachelineAddr(0),
       recvRespLastActiveCycle(0),
@@ -184,6 +185,10 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BasePO3CPUParams &params)
     fatal_if(cacheLoadPorts != 3 || cacheStorePorts != 1,
              "PO3 requires three pipe-mapped D-cache read ports and one "
              "merge-buffer D-cache write port");
+    fatal_if(recvRespThrottling &&
+                 (recvRespMaxCachelines == 0 || recvRespBufferSize == 0),
+             "PO3 response throttling requires positive cacheline and "
+             "buffer limits");
 
     //**********************************************
     //************ Handle SMT Parameters ***********
@@ -260,6 +265,19 @@ LSQ::isDrained() const
         drained = false;
     }
 
+    if (retryRespEvent.scheduled()) {
+        DPRINTF(Drain, "Not drained, a response retry is pending.\n");
+        drained = false;
+    }
+
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
+        if (!thread[tid]->isDrained()) {
+            DPRINTF(Drain, "Not drained, thread %u has pending LSQ work.\n",
+                    tid);
+            drained = false;
+        }
+    }
+
     return drained;
 }
 
@@ -275,6 +293,12 @@ LSQ::takeOverFrom()
     std::fill(loadBanksUsed.begin(), loadBanksUsed.end(), false);
     std::fill(storeBanksUsed.begin(), storeBanksUsed.end(), false);
     _cacheBlocked = false;
+
+    recvRespBytes = 0;
+    recvRespPendBytes = 0;
+    recvRespCachelines = 0;
+    recvRespLastCachelineAddr = 0;
+    recvRespLastActiveCycle = Cycles(0);
 
     for (ThreadID tid = 0; tid < numThreads; tid++) {
         thread[tid]->takeOverFrom();
@@ -320,7 +344,7 @@ LSQ::tick()
     // Reserve the write phase of ready partial-write RMWs before any thread
     // issues demand accesses. This makes the bank observably write-busy in
     // the RMW's X+2 cycle.
-    for (ThreadID tid : *activeThreads) {
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
         thread[tid]->reserveRMWWriteBank();
     }
 
@@ -474,7 +498,9 @@ LSQ::commitStores(InstSeqNum &youngest_inst, ThreadID tid)
 void
 LSQ::writebackStores()
 {
-    for (ThreadID tid : *activeThreads) {
+    // Committed stores can outlive a thread's active status. In particular,
+    // merge-buffer entries must keep draining after that thread stops.
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
         if (numStoresToWB(tid) > 0) {
             DPRINTF(Writeback,
                     "[tid:%i] Writing back stores. %i stores "
@@ -610,7 +636,7 @@ LSQ::recvReqRetry()
     iewStage->cacheUnblocked();
     cacheBlocked(false);
 
-    for (ThreadID tid : *activeThreads) {
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
         thread[tid]->recvRetry();
     }
 }
@@ -627,6 +653,8 @@ void
 LSQ::sendRetryResp()
 {
     dcachePort.sendRetryResp();
+    cpu->wakeCPU();
+    cpu->activityThisCycle();
 }
 
 bool
@@ -907,7 +935,7 @@ LSQ::isStalled(ThreadID tid)
 bool
 LSQ::hasStoresToWB()
 {
-    for (ThreadID tid : *activeThreads) {
+    for (ThreadID tid = 0; tid < numThreads; tid++) {
         if (hasStoresToWB(tid)) {
             return true;
         }

@@ -39,8 +39,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_RENAME_MAP_HH__
-#define __CPU_O3_RENAME_MAP_HH__
+#ifndef __CPU_PO3_RENAME_MAP_HH__
+#define __CPU_PO3_RENAME_MAP_HH__
 
 #include <algorithm>
 #include <array>
@@ -331,4 +331,4 @@ class UnifiedRenameMap
 } // namespace po3
 } // namespace gem5
 
-#endif //__CPU_O3_RENAME_MAP_HH__
+#endif //__CPU_PO3_RENAME_MAP_HH__

@@ -39,8 +39,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CPU_O3_THREAD_CONTEXT_HH__
-#define __CPU_O3_THREAD_CONTEXT_HH__
+#ifndef __CPU_PO3_THREAD_CONTEXT_HH__
+#define __CPU_PO3_THREAD_CONTEXT_HH__
 
 #include "cpu/po3/cpu.hh"
 #include "cpu/thread_context.hh"
