@@ -190,7 +190,8 @@ let {{
 
             if self.flavor in ("release", "relex"):
                 self.instFlags.extend(["IsWriteBarrier",
-                                       "IsReadBarrier"])
+                                       "IsReadBarrier",
+                                       "IsRelease"])
                 self.memFlags.append("Request::RELEASE")
 
             # Disambiguate the class name for different flavors of stores
@@ -271,7 +272,8 @@ let {{
 
             if self.flavor in ("release", "relex"):
                 self.instFlags.extend(["IsWriteBarrier",
-                                       "IsReadBarrier"])
+                                       "IsReadBarrier",
+                                       "IsRelease"])
                 self.memFlags.append("Request::RELEASE")
 
             # Disambiguate the class name for different flavors of stores

@@ -80,7 +80,8 @@ let {{
 
             if self.flavor in ("release", "relex", "relexp"):
                 self.instFlags.extend(["IsWriteBarrier",
-                                       "IsReadBarrier"])
+                                       "IsReadBarrier",
+                                       "IsRelease"])
                 self.memFlags.append("Request::RELEASE")
 
             if self.flavor in ("relex", "exclusive", "exp", "relexp"):

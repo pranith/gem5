@@ -96,18 +96,26 @@ class MySimpleMemory(SimpleMemory):
     latency = "1ns"
 
 
+cpu_classes = {
+    "X86AtomicSimpleCPU": "X86AtomicSimpleCPU",
+    "X86TimingSimpleCPU": "X86TimingSimpleCPU",
+    "X86DerivO3CPU": "X86O3CPU",
+    "X86PO3CPU": "X86PO3CPU",
+    "ArmAtomicSimpleCPU": "ArmAtomicSimpleCPU",
+    "ArmTimingSimpleCPU": "ArmTimingSimpleCPU",
+    "ArmMinorCPU": "ArmMinorCPU",
+    "ArmDerivO3CPU": "ArmO3CPU",
+    "ArmPO3CPU": "ArmPO3CPU",
+    "RiscvAtomicSimpleCPU": "RiscvAtomicSimpleCPU",
+    "RiscvTimingSimpleCPU": "RiscvTimingSimpleCPU",
+    "RiscvMinorCPU": "RiscvMinorCPU",
+    "RiscvDerivO3CPU": "RiscvO3CPU",
+    "RiscvPO3CPU": "RiscvPO3CPU",
+}
 valid_cpu = {
-    "X86AtomicSimpleCPU": X86AtomicSimpleCPU,
-    "X86TimingSimpleCPU": X86TimingSimpleCPU,
-    "X86DerivO3CPU": X86O3CPU,
-    "ArmAtomicSimpleCPU": ArmAtomicSimpleCPU,
-    "ArmTimingSimpleCPU": ArmTimingSimpleCPU,
-    "ArmMinorCPU": ArmMinorCPU,
-    "ArmDerivO3CPU": ArmO3CPU,
-    "RiscvAtomicSimpleCPU": RiscvAtomicSimpleCPU,
-    "RiscvTimingSimpleCPU": RiscvTimingSimpleCPU,
-    "RiscvMinorCPU": RiscvMinorCPU,
-    "RiscvDerivO3CPU": RiscvO3CPU,
+    name: globals()[class_name]
+    for name, class_name in cpu_classes.items()
+    if class_name in globals()
 }
 
 valid_mem = {"SimpleMemory": MySimpleMemory, "DDR3_1600_8x8": DDR3_1600_8x8}
@@ -115,6 +123,13 @@ valid_mem = {"SimpleMemory": MySimpleMemory, "DDR3_1600_8x8": DDR3_1600_8x8}
 parser = argparse.ArgumentParser()
 parser.add_argument("binary", type=str)
 parser.add_argument("--cpu")
+parser.add_argument("--merge-buffer", action="store_true")
+parser.add_argument("--drain-at-ticks", type=int)
+parser.add_argument("--recv-resp-buffer-size", type=int)
+parser.add_argument("--decoupled-front-end", action="store_true")
+parser.add_argument("--po3-reg-read-latency", type=int)
+parser.add_argument("--po3-execute-latency", type=int)
+parser.add_argument("--po3-mem-pipeline-off", action="store_true")
 parser.add_argument("--mem", choices=valid_mem.keys(), default="SimpleMemory")
 
 args = parser.parse_args()
@@ -137,6 +152,21 @@ if args.cpu not in (
 system.mem_ranges = [AddrRange("512MiB")]
 
 system.cpu = valid_cpu[args.cpu]()
+if args.decoupled_front_end:
+    system.cpu.decoupledFrontEnd = True
+    system.cpu.fetchTargetWidth = system.cpu.fetchBufferSize
+    system.cpu.branchPred = BranchPredictor(conditionalBranchPred=LocalBP())
+if args.po3_reg_read_latency is not None:
+    system.cpu.po3RegReadLatency = args.po3_reg_read_latency
+if args.po3_execute_latency is not None:
+    system.cpu.po3ExecuteLatency = args.po3_execute_latency
+if args.po3_mem_pipeline_off:
+    system.cpu.po3MemPipeline = False
+if args.merge_buffer:
+    system.cpu.useMergeBuffer = True
+if args.recv_resp_buffer_size is not None:
+    system.cpu.recvRespThrottling = True
+    system.cpu.recvRespBufferSize = args.recv_resp_buffer_size
 
 if args.cpu in (
     "X86AtomicSimpleCPU",
@@ -160,7 +190,12 @@ else:
     system.l2cache.connectMemSideBus(system.membus)
 
 system.cpu.createInterruptController()
-if args.cpu in ("X86AtomicSimpleCPU", "X86TimingSimpleCPU", "X86DerivO3CPU"):
+if args.cpu in (
+    "X86AtomicSimpleCPU",
+    "X86TimingSimpleCPU",
+    "X86DerivO3CPU",
+    "X86PO3CPU",
+):
     system.cpu.interrupts[0].pio = system.membus.mem_side_ports
     system.cpu.interrupts[0].int_master = system.membus.cpu_side_ports
     system.cpu.interrupts[0].int_slave = system.membus.mem_side_ports
@@ -177,6 +212,12 @@ system.cpu.createThreads()
 
 root = Root(full_system=False, system=system)
 m5.instantiate()
+
+if args.drain_at_ticks is not None:
+    exit_event = m5.simulate(args.drain_at_ticks)
+    if exit_event.getCause() != "simulate() limit reached":
+        exit(1)
+    m5.drain()
 
 exit_event = m5.simulate()
 

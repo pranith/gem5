@@ -1448,10 +1448,13 @@ InstructionQueue::doSquash(ThreadID tid)
             DPRINTF(IQ, "[tid:%i] Instruction [sn:%llu] PC %s squashed.\n",
                     tid, squashed_inst->seqNum, squashed_inst->pcState());
 
-            bool is_acq_rel = squashed_inst->isFullMemBarrier() &&
-                         (squashed_inst->isLoad() ||
-                          (squashed_inst->isStore() &&
-                             !squashed_inst->isStoreConditional()));
+            // Non-speculative acquires were not added to the register
+            // dependency graph by insertNonSpec().
+            bool is_acq_rel = !squashed_inst->isNonSpeculative() &&
+                              squashed_inst->isFullMemBarrier() &&
+                              (squashed_inst->isLoad() ||
+                               (squashed_inst->isStore() &&
+                                !squashed_inst->isStoreConditional()));
 
             // Remove the instruction from the dependency list.
             if (is_acq_rel ||

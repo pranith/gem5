@@ -91,12 +91,19 @@ let {{
             if self.micro:
                 self.instFlags.append("IsMicroop")
 
-            if self.flavor in ("release", "acquire_release", "acquire"):
-                self.instFlags.extend(["IsReadBarrier", "IsWriteBarrier"])
             if self.flavor in ("release", "acquire_release"):
-                self.instFlags.append("IsWriteBarrier")
+                self.instFlags.append("IsRelease")
+                self.memFlags.append("Request::RELEASE")
             if self.flavor in ("acquire_release", "acquire"):
-                self.instFlags.append("IsReadBarrier")
+                self.instFlags.append("IsAcquire")
+                self.memFlags.append("Request::ACQUIRE")
+
+            # Acquire blocks younger loads and stores. Release waits for
+            # older accesses before the atomic write.
+            if self.flavor == "release":
+                self.instFlags.append("IsWriteBarrier")
+            elif self.flavor in ("acquire", "acquire_release"):
+                self.instFlags.extend(["IsReadBarrier", "IsWriteBarrier"])
             if ret_op:
                 self.memFlags.append('Request::ATOMIC_RETURN_OP')
             else:

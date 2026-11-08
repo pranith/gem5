@@ -82,6 +82,9 @@ class StaticInstFlags(Enum):
         "IsSerializeAfter",
         "IsWriteBarrier",  # Is a write barrier
         "IsReadBarrier",  # Is a read barrier
+        "IsAcquire",  # Is an Acquire barrier
+        "IsAcquirePC",  # Is an Acquire PC barrier
+        "IsRelease",  # Is a Release barrier
         "IsNonSpeculative",  # Should not be executed speculatively
         "IsQuiesce",  # Is a quiesce instruction
         "IsUnverifiable",  # Can't be verified by a checker

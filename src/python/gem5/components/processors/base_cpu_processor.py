@@ -47,6 +47,7 @@ from m5.objects import (
     BaseMinorCPU,
     BaseNonCachingSimpleCPU,
     BaseO3CPU,
+    BasePO3CPU,
     BaseTimingSimpleCPU,
     Root,
 )
@@ -107,7 +108,7 @@ class BaseCPUProcessor(AbstractProcessor):
             board.set_mem_mode(MemMode.ATOMIC_NONCACHING)
         elif isinstance(
             self.cores[0].get_simobject(),
-            (BaseTimingSimpleCPU, BaseO3CPU, BaseMinorCPU),
+            (BaseTimingSimpleCPU, BaseO3CPU, BasePO3CPU, BaseMinorCPU),
         ):
             board.set_mem_mode(MemMode.TIMING)
         elif isinstance(

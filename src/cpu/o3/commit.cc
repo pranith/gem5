@@ -1133,7 +1133,10 @@ Commit::commitHead(const DynInstPtr &head_inst, unsigned inst_num)
                 "at the head of the ROB, PC %s.\n",
                 tid, head_inst->seqNum, head_inst->pcState());
 
-        if (inst_num > 0 || iewStage->hasStoresToWB(tid)) {
+        // An RCpc acquire need not wait for older stores to drain.
+        const bool wait_for_stores = !head_inst->staticInst->isAcquirePC() &&
+                                     iewStage->hasStoresToWB(tid);
+        if (inst_num > 0 || wait_for_stores) {
             DPRINTF(Commit,
                     "[tid:%i] [sn:%llu] "
                     "Waiting for all stores to writeback.\n",
